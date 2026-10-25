@@ -5,7 +5,8 @@ next change straightforward.
 
 ## Selected direction — 25 October 2026
 
-The maintainer selected a clean replacement, starting in `anaxigraph-v2/`. This supersedes the
+The maintainer selected a clean replacement in the standalone checkout `~/repos/anaxigraph-v2`.
+Its Git history was extracted from the initial nested prototype on 25 October. This supersedes the
 24 October recommendation to freeze all existing capabilities before comparing implementation
 routes. Existing features are candidates, not mandatory migration obligations. Build the useful
 minimum first and add features selectively. Fresh Eyes and pattern discovery remain core ideas.
@@ -116,13 +117,14 @@ or add any of these only after a concrete user need justifies it; the old featur
 ## Packaging destination
 
 Keep the existing PyPI project name `anaxigraph`. Develop V2 here as `1.0.0a1` in its own uv
-environment. The root project remains 0.9.1 and the existing release workflow remains attached to
-it. No V2 release or production replacement happens merely by adding this folder.
+environment and standalone GitHub repository. The legacy checkout and release workflow remain
+separate at `hcekne/anaxigraph`. Moving the checkout does not publish a package or replace a service.
 
-When the selected product is ready, move the qualified V2 package to the release root, update its
-README/metadata/plugin commands, qualify migration and installed-package behavior, and publish
-`anaxigraph==1.0.0` through the existing trusted publisher. Earlier package versions need not be
-removed. Optional public prereleases can precede that transition. See the
+When the selected product is ready, update README/metadata/plugin commands, qualify migration and
+installed-package behavior, and configure PyPI trusted publishing for this source repository before
+publishing `anaxigraph==1.0.0`. Preserve the existing PyPI project and earlier releases; do not assume
+its existing repository-bound publisher automatically authorizes a different GitHub repository.
+Optional public prereleases can precede the final transition. See the
 [Python version specification](https://packaging.python.org/en/latest/specifications/version-specifiers/).
 
 ## Evidence before adding complexity

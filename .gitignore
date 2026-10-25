@@ -6,3 +6,12 @@ __pycache__/
 build/
 dist/
 .anaxigraph-v2/
+.env
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.db
+*.db-shm
+*.db-wal
+node_modules/

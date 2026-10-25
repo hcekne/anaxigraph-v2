@@ -3,6 +3,9 @@
 **25 October 2026.** The separate V2 project runs through uv, CLI, MCP and a small dashboard.
 The development version is `anaxigraph 1.0.0a1`; this is not a published 1.0 release.
 
+The project now lives independently at `~/repos/anaxigraph-v2`. The structural measurements below
+were taken before separation on the combined legacy/V2 checkout; they remain historical evidence.
+
 The [architecture](architecture.md) records the maintainer's clean-slate decision and selective
 scope. This milestone has **3,517 physical production lines in 23 code files**, including normal
 comments/whitespace, embedded SQL, prompts and validation. Tests add 1,507 lines in five files.
@@ -65,7 +68,7 @@ version/import origin, scanned a fixture and loaded all 133 catalogue cards. Run
 README and license were compared with source. Exact artifact hashes and counts are in
 [the machine-readable evidence](milestone-1-evidence.json).
 
-The new [V2 workflow](https://github.com/hcekne/anaxigraph/actions/workflows/v2.yml) runs Python
+The standalone [CI workflow](https://github.com/hcekne/anaxigraph-v2/actions/workflows/ci.yml) runs Python
 3.11/3.12 tests, lint, build and an installed-wheel journey. Its live GitHub run is the authority
 for CI status; local checks alone do not establish that new automation works.
 

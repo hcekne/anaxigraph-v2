@@ -7,12 +7,15 @@ This is the clean replacement core targeting **anaxigraph 1.0**. The first miles
 `1.0.0a1` alpha, separate from the existing 0.9.1 package. Features are added selectively; this
 folder does not import the old runtime or automatically replace an installed service.
 
+Standalone repository: [hcekne/anaxigraph-v2](https://github.com/hcekne/anaxigraph-v2).
+The local checkout is `~/repos/anaxigraph-v2`.
+
 ## Run with uv
 
 From this repository:
 
 ```bash
-cd anaxigraph-v2
+cd ~/repos/anaxigraph-v2
 uv sync --locked
 uv run anaxigraph scan --repo /absolute/path/to/your/repo
 uv run anaxigraph serve --repo /absolute/path/to/your/repo

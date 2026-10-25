@@ -106,5 +106,17 @@
     "legacy_scope": "Separateprojectconfig avoids mixing two anaxigraph import roots; explicitwholerepo override remains supported",
     "coverage_repair": "Existing all4coveragecommands now targetsrc/anaxigraph instead of rootportabledata directory; normal80%floorunchanged",
     "coverage_reproduction": "Same realtest: oldtarget0files/0lines, explicitpath2480executedlines; fullcorrectedCI is authoritative"
+  },
+  "relocation": {
+    "date": "2026-10-25",
+    "checkout": "~/repos/anaxigraph-v2",
+    "repository": "https://github.com/hcekne/anaxigraph-v2",
+    "history": "Three V2-scoped commits extracted from the legacy repository; original source history retained there.",
+    "environment": "Rebuilt uv environment; runtime imports resolve under the standalone checkout.",
+    "tests_passed": 106,
+    "http_startup": "Verified actual uv-launched HTTP dashboard, status root, and JavaScript asset from the new path.",
+    "mcp_startup": "Verified actual uv-launched stdio session,10tools and scan/status for the standalone root;25Pythonmodules.",
+    "services": "No V2 service was previously running or configured; temporary verification processes stopped; unrelated MaxOS service unchanged.",
+    "historical_evidence": "The performance and artifact hashes above describe the pre-relocation milestone; they are retained rather than rewritten as new-path measurements."
   }
 }
