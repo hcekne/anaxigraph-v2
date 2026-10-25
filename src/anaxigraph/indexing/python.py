@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -101,6 +102,12 @@ def parse_module(
             f"{path}: {type(exc).__name__}: {exc}",
         )
     module = Module(path, tree, name, origin, {name, ".".join(parts)})
+    # A dependency's comments, whitespace and source locations do not change its
+    # semantics. Preserve behavior-sensitive invalidation without fanning out model
+    # calls for byte-only edits. Docstrings and function bodies remain meaningful.
+    data["semantic_fingerprint"] = hashlib.sha256(
+        ast.dump(tree, annotate_fields=True, include_attributes=False).encode()
+    ).hexdigest()
     _Definitions(module).visit(tree)
     data["function_count"] = sum(node.kind == "function" for node in module.nodes)
     data["class_count"] = sum(node.kind in {"class", "interface"} for node in module.nodes)

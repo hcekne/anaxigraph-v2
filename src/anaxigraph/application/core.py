@@ -1,8 +1,7 @@
-"""The single application owner shared by CLI, MCP and the dashboard."""
+"""One application facade coordinating graph, change, review and record operations."""
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from collections import Counter
@@ -11,37 +10,15 @@ from pathlib import Path
 from typing import Any
 
 from anaxigraph import __version__
-from anaxigraph.analysis import build_request, validate_result
 from anaxigraph.analysis.changes import change_review
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
+from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
+from anaxigraph.application import records, reviews
+from anaxigraph.application.context import _bounds, context_fingerprints
 from anaxigraph.contracts import Graph
-from anaxigraph.indexing import capture_snapshot, capture_sources, index
+from anaxigraph.indexing import IndexSession
 from anaxigraph.storage import Store
-
-
-def context_fingerprints(graph: Graph) -> dict[str, str]:
-    owners = {node.id: node.path for node in graph.nodes}
-    dependencies = {node.path: {node.path} for node in graph.nodes if node.kind == "module"}
-    for edge in graph.edges:
-        source, target = owners.get(edge.source), owners.get(edge.target)
-        if (
-            source in dependencies
-            and target in graph.snapshot.files
-            and edge.resolution == "resolved"
-        ):
-            dependencies[source].add(target)
-    return {
-        path: hashlib.sha256(
-            json.dumps({p: graph.snapshot.files[p] for p in paths}, sort_keys=True).encode()
-        ).hexdigest()
-        for path, paths in dependencies.items()
-    }
-
-
-def _bounds(limit: int, maximum: int = 100) -> int:
-    if type(limit) is not int or not 1 <= limit <= maximum:
-        raise ValueError(f"limit must be between 1 and {maximum}")
-    return limit
+from anaxigraph.workflows.engine import WorkflowRunner
 
 
 class Application:
@@ -52,10 +29,11 @@ class Application:
         if not self.root.is_dir():
             raise ValueError("Repository root must be a directory")
         self.store = Store(database or self.root / ".anaxigraph-v2" / "knowledge.sqlite")
+        self.indexer = IndexSession(self.root)
         self._graph_cache: tuple[tuple[int, ...], Graph] | None = None
 
     def _current(self) -> Graph:
-        token = self.store.cache_token()
+        token = self.store.knowledge_token(str(self.root))
         if self._graph_cache is not None and self._graph_cache[0] == token:
             return self._graph_cache[1]
         graph = self.store.load_graph(str(self.root))
@@ -66,33 +44,45 @@ class Application:
         for node in graph.nodes:
             data = dict(node.data)
             annotation = data.get("annotation")
-            if annotation and annotation.get("context_fingerprint") != contexts.get(node.path):
+            if annotation and (
+                annotation.get("context_fingerprint") != contexts.get(node.path)
+                or annotation.get("annotation_contract") != ANNOTATION_CONTRACT_VERSION
+            ):
                 data["annotation_status"] = "stale"
             nodes.append(replace(node, data=data))
         current = replace(graph, nodes=tuple(nodes))
-        if self.store.cache_token() == token:
+        if self.store.knowledge_token(str(self.root)) == token:
             self._graph_cache = (token, current)
         return current
 
     def _require_live(self, graph: Graph) -> None:
         # Never accept an old job merely because an edit has not been scanned yet.
-        if capture_snapshot(self.root).id != graph.snapshot.id:
+        if self.indexer.snapshot().id != graph.snapshot.id:
             raise ValueError(
                 "Checkout changed after mapping; scan again before saving or validating"
             )
 
     def scan(self) -> dict[str, Any]:
         started = time.monotonic()
-        graph = index(self.root)
+        graph = self.indexer.scan()
         # Avoid publishing a captured graph after a concurrent edit.
         self._require_live(graph)
-        self.store.save_graph(graph)
+        if (
+            not self.indexer.unchanged
+            or self.store.stats(str(self.root))["snapshot_id"] != graph.snapshot.id
+        ):
+            self.store.save_graph(graph)
+        imported = self.import_record()
+        exported = self.export_record()
         return {
             **self.status(),
             "elapsed_seconds": round(time.monotonic() - started, 4),
             "mapped_locally": True,
-            "record_exported": False,
+            "record_exported": exported["record_exported"],
+            "portable_import": imported,
+            "portable_bytes": exported["bytes"],
             "committed_pushed": False,
+            "indexing": self.indexer.last_scan,
         }
 
     def status(self) -> dict[str, Any]:
@@ -108,6 +98,7 @@ class Application:
                 "relationships": 0,
                 "annotations": {"current": 0, "stale": 0, "missing": 0},
                 "storage": storage,
+                "portable": self.portable_status(),
             }
         graph = self._current()
         modules = [n for n in graph.nodes if n.kind == "module"]
@@ -126,6 +117,8 @@ class Application:
             "annotations": {key: coverage[key] for key in ("current", "stale", "missing")},
             "diagnostics": list(graph.diagnostics)[:30],
             "storage": storage,
+            "baseline_id": stats.get("pinned_snapshot_id"),
+            "portable": self.portable_status(),
             "coverage": "Python/PYI syntax and scoped references; dynamic targets may be unresolved",
         }
 
@@ -171,7 +164,7 @@ class Application:
             row = next(
                 (
                     row
-                    for row in self.store.reviews(str(self.root))
+                    for row in self.store.reviews(str(self.root), include_requests=False)
                     if row["kind"] != "request" and row["id"] == entity_id[7:]
                 ),
                 None,
@@ -211,10 +204,13 @@ class Application:
                 entity["data"]["annotation_status"] = owner.data.get("annotation_status", "missing")
         return result
 
-    def prepare_change(self, task: str, limit: int = 12) -> dict[str, Any]:
+    def prepare_change(
+        self, task: str, limit: int = 12, baseline_id: str | None = None
+    ) -> dict[str, Any]:
         if not isinstance(task, str) or not task.strip() or len(task) > 4000:
             raise ValueError("task must be nonempty text of at most 4,000 characters")
         graph = self._current()
+        self._require_live(graph)
         matches = self.store.search(str(self.root), task, _bounds(limit, 30))
         statuses = {
             n.path: n.data.get("annotation_status", "missing")
@@ -223,7 +219,12 @@ class Application:
         }
         for match in matches:
             match["annotation_status"] = statuses.get(match["path"], "missing")
-        return prepare(graph, matches, task)
+        pinned = self.store.pin_baseline(str(self.root), baseline_id)
+        return prepare(graph, matches, task) | {
+            "baseline_id": pinned,
+            "baseline_basis": "pinned-change-baseline",
+            "baseline_note": "Preserved across scans. Supply a baseline_id to begin a new comparison.",
+        }
 
     def assess_plan(self, task: str, files: list[str]) -> dict[str, Any]:
         if not isinstance(files, list) or not files or len(files) > 30:
@@ -254,139 +255,94 @@ class Application:
             "scope": "Placement and lexical reuse evidence; behavioral plan correctness is unresolved.",
         }
 
-    def validate_change(self, receipts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    def validate_change(
+        self, receipts: list[dict[str, Any]] | None = None, baseline_id: str | None = None
+    ) -> dict[str, Any]:
         graph = self._current()
+        if baseline_id is not None and (not isinstance(baseline_id, str) or not baseline_id):
+            raise ValueError("Baseline ID must be a nonempty snapshot identity")
         self._require_live(graph)
-        previous_id = self.store.stats(str(self.root)).get("previous_snapshot_id")
-        previous = self.store.load_graph(str(self.root), previous_id) if previous_id else None
-        return change_review(graph, previous, receipts)
-
-    def analysis_request(self, kind: str, scope: list[str] | None = None) -> dict[str, Any]:
-        graph = self._current()
-        self._require_live(graph)
-        sources = None
-        if kind == "annotate":
-            modules = [n for n in graph.nodes if n.kind == "module"]
-            selected = scope or [modules[0].id] if modules else []
-            selected_paths = [n.path for n in modules if n.id in selected or n.path in selected]
-            sources = capture_sources(self.root, selected_paths, graph.snapshot.files)
-        request = build_request(graph, kind, scope, sources)
-        self.store.save_review(
-            str(self.root), graph.snapshot.id, request["request_id"], "request", request
+        stats = self.store.stats(str(self.root))
+        selected = (
+            baseline_id or stats.get("pinned_snapshot_id") or stats.get("previous_snapshot_id")
         )
-        if kind == "fresh-eyes":
-            # Do not hand the blind designer a scope envelope containing module IDs.
-            return {
-                key: request[key] for key in ("request_id", "kind", "packet", "response_schema")
-            }
-        return {key: value for key, value in request.items() if key != "function_ids"}
+        previous = self.store.load_graph(str(self.root), selected) if selected else None
+        if selected and previous is None:
+            raise ValueError("Baseline must identify a retained snapshot of this checkout")
+        return change_review(graph, previous, receipts) | {
+            "baseline_id": selected,
+            "baseline_basis": "explicit"
+            if baseline_id
+            else ("pinned-change-baseline" if stats.get("pinned_snapshot_id") else "previous-scan"),
+            "comparison": "explicit baseline"
+            if baseline_id
+            else (
+                "pinned change baseline"
+                if stats.get("pinned_snapshot_id")
+                else ("previous scan" if selected else "no saved baseline")
+            ),
+        }
+
+    def analysis_request(
+        self, kind: str, scope: list[str] | None = None, **options: Any
+    ) -> dict[str, Any]:
+        return reviews.analysis_request(self, kind, scope, **options)
 
     def submit_analysis(self, request_id: str, result: dict[str, Any]) -> dict[str, Any]:
-        saved = next(
-            (
-                row
-                for row in self.store.reviews(str(self.root), "request")
-                if row["id"] == request_id
-            ),
-            None,
-        )
-        if saved is None:
-            raise ValueError("Unknown or expired request; request the analysis again")
-        request = saved["result"]
-        graph = self._current()
-        if request["snapshot_id"] != graph.snapshot.id:
-            raise ValueError("Request belongs to a stale snapshot; request it again")
-        self._require_live(graph)
-        validate_result(request, result, graph)
-        if request["kind"] == "annotate":
-            contexts = context_fingerprints(graph)
-            for annotation in result["annotations"]:
-                node = next(n for n in graph.nodes if n.id == annotation["node_id"])
-                value = dict(annotation) | {
-                    "producer": result["producer"],
-                    "basis": "agent-reported-interpretation",
-                    "source_snapshot": graph.snapshot.id,
-                    "context_fingerprint": contexts[node.path],
-                    "request_id": request_id,
-                }
-                prior = next(
-                    n["data"].get("annotation")
-                    for n in request["packet"]["modules"]
-                    if n["id"] == node.id
-                )
-                expected_digest = hashlib.sha256(
-                    json.dumps(
-                        prior, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                    ).encode()
-                ).hexdigest()
-                self.store.annotate(
-                    str(self.root),
-                    graph.snapshot.id,
-                    node.id,
-                    value,
-                    expected_digest=expected_digest,
-                )
-        else:
-            if build_request(graph, request["kind"], request["scope"])["request_id"] != request_id:
-                raise ValueError("Analysis inputs changed; prepare a new review request")
-            self.store.save_review(
-                str(self.root),
-                graph.snapshot.id,
-                request_id,
-                request["kind"],
-                {"basis": "agent-reported-proposal", "scope": request["scope"], "result": result},
-            )
-        return {
-            "request_id": request_id,
-            "kind": request["kind"],
-            "saved": True,
-            "snapshot_id": graph.snapshot.id,
-            "validation": "Shape, declared coverage and evidence references checked; semantic quality remains reviewable.",
-        }
+        return reviews.submit_analysis(self, request_id, result)
 
-    def reviews(self, kind: str | None = None) -> dict[str, Any]:
-        saved = [
-            row for row in self.store.reviews(str(self.root), kind) if row["kind"] != "request"
-        ]
-        if not saved:
-            return {"items": [], "total": 0}
-        graph = self._current()
-        rows = [self._review_state(row, graph) for row in saved]
-        # Results are explicit expansions; keep default lists concise.
-        return {
-            "items": [
-                {key: value for key, value in row.items() if key != "result"}
-                | {
-                    "producer": row["result"].get("result", {}).get("producer"),
-                    "summary": "Three alternatives"
-                    if row["kind"] == "fresh-eyes"
-                    else "Complete declared catalogue matrix",
-                }
-                for row in rows
-            ],
-            "total": len(rows),
-        }
+    def reviews(self, kind: str | None = None, limit: int = 12, offset: int = 0) -> dict[str, Any]:
+        return reviews.reviews(self, kind, limit, offset)
 
-    @staticmethod
-    def _review_state(row: dict[str, Any], graph: Graph) -> dict[str, Any]:
-        if row["status"] != "current":
-            return row
-        scope = row["result"].get("scope")
-        if scope is None:
-            return row | {
-                "status": "unknown",
-                "freshness_reason": "Analysis input identity not recorded",
-            }
-        try:
-            current_id = build_request(graph, row["kind"], scope)["request_id"]
-        except ValueError:
-            current_id = None
-        return (
-            row
-            if current_id == row["id"]
-            else row
-            | {
-                "status": "stale",
-                "freshness_reason": "Source, semantic, catalogue or prompt inputs changed",
-            }
-        )
+    def _review_state(self, row: dict[str, Any], graph: Graph) -> dict[str, Any]:
+        return reviews._review_state(self, row, graph)
+
+    def _rebuild_request(self, graph: Graph, kind: str, body: dict[str, Any]) -> dict[str, Any]:
+        return reviews._rebuild_request(self, graph, kind, body)
+
+    def analysis_product_request(self, review_ids: list[str]) -> dict[str, Any]:
+        return reviews.analysis_product_request(self, review_ids)
+
+    def analysis_saved(self, request_id: str, pipeline: dict[str, Any] | None = None) -> bool:
+        return reviews.analysis_saved(self, request_id, pipeline)
+
+    def analysis_reconcile(
+        self, kind: str, review_ids: list[str], scope: list[str] | None = None
+    ) -> dict[str, Any]:
+        return reviews.analysis_reconcile(self, kind, review_ids, scope)
+
+    def portable_status(self) -> dict[str, Any]:
+        return records.portable_status(self)
+
+    def _portable_token(self) -> tuple:
+        return records._portable_token(self)
+
+    def export_record(self) -> dict[str, Any]:
+        return records.export_record(self)
+
+    def import_record(self) -> dict[str, Any]:
+        return records.import_record(self)
+
+    @property
+    def _workflows(self) -> WorkflowRunner:
+        if not hasattr(self, "_workflow_runner"):
+            self._workflow_runner = WorkflowRunner(self)
+        return self._workflow_runner
+
+    def workflow_start(
+        self,
+        kind: str,
+        config: dict | None = None,
+        scope: list[str] | None = None,
+        wait: bool = False,
+    ) -> dict[str, Any]:
+        return self._workflows.start(kind, config, scope, background=not wait)
+
+    def workflow_status(self, run_id: str | None = None) -> dict[str, Any]:
+        return self._workflows.status(run_id)
+
+    def workflow_resume(self, run_id: str, wait: bool = False) -> dict[str, Any]:
+        return self._workflows.resume(run_id, background=not wait)
+
+    def workflow_configure(self, config: dict | None = None) -> dict[str, Any]:
+        return self._workflows.configuration(config)

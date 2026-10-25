@@ -15,8 +15,8 @@ uv run pytest
 uv run ruff check src tests
 ```
 
-Keep the six component boundaries in `docs/architecture.md`: shared records, indexing, storage,
-analysis, application and interfaces. CLI, HTTP and MCP delegate to one application. Source parsing
+Keep the component boundaries in `docs/architecture.md`: shared records, indexing, storage,
+analysis, workflow execution, application and interfaces. CLI, HTTP and MCP delegate to one application. Source parsing
 does not execute target code; observations, interpretations, supplied check reports and proposals
 retain different meanings. Store current understanding canonically with bounded retained state.
 

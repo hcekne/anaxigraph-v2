@@ -48,7 +48,16 @@ def test_internal_dependencies_follow_component_contracts(path):
         "indexing": {"contracts", "indexing"},
         "storage": {"contracts", "storage"},
         "analysis": {"contracts", "analysis"},
-        "application": {"metadata", "contracts", "indexing", "storage", "analysis"},
+        "workflows": {"analysis", "workflows"},
+        "application": {
+            "metadata",
+            "contracts",
+            "indexing",
+            "storage",
+            "analysis",
+            "workflows",
+            "application",
+        },
         "interfaces": {"metadata", "application", "interfaces"},
     }
     assert component in allowed, f"Declare a deliberate dependency contract for {current}"

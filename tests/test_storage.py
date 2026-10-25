@@ -171,18 +171,20 @@ def test_checkout_isolation_and_bounded_semantic_search(tmp_path: Path) -> None:
 
 
 def test_requests_survive_completed_review_retention(tmp_path: Path) -> None:
-    store = Store(tmp_path / "knowledge.sqlite")
+    store = Store(tmp_path / "knowledge.sqlite", request_limit=64)
     store.save_graph(graph(tmp_path))
     for number in range(70):
         store.save_review(str(tmp_path), "one", str(number), "request", {"packet": number})
     for number in range(25):
         store.save_review(str(tmp_path), "one", str(number), "patterns", {"findings": []})
-    assert len(store.reviews(str(tmp_path), "request")) == 64
-    assert len(store.reviews(str(tmp_path), "patterns")) == 20
-    assert store.stats(str(tmp_path))["reviews"] == 84
+    assert len(store.reviews(str(tmp_path), "request")) == 70
+    assert len(store.reviews(str(tmp_path), "patterns")) == 25
+    assert store.stats(str(tmp_path))["reviews"] == 95
     assert store.reviews(str(tmp_path), "patterns")[0]["id"] == "24"
     store.save_graph(graph(tmp_path, "two"))
     assert store.reviews(str(tmp_path), "request")[0]["status"] == "stale"
+    store.save_review(str(tmp_path), "two", "current", "request", {"packet": "current"})
+    assert len(store.reviews(str(tmp_path), "request")) == 65
 
 
 def test_oversized_records_preserve_valid_state(tmp_path: Path) -> None:
@@ -193,12 +195,14 @@ def test_oversized_records_preserve_valid_state(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="limit"):
         store.annotate(str(tmp_path), "one", "module:a.py", {"overview": "x" * 70_000})
     with pytest.raises(ValueError, match="limit"):
-        store.save_review(str(tmp_path), "one", "large", "request", {"packet": "x" * 300_000})
+        Store(store.path, max_record_bytes=262_144).save_review(
+            str(tmp_path), "one", "large", "request", {"packet": "x" * 300_000}
+        )
     assert store.path.read_bytes() == before
 
 
 def test_sqlite_capacity_failure_rolls_back_map_and_cleans_journal(tmp_path: Path) -> None:
-    store = Store(tmp_path / "knowledge.sqlite", max_bytes=98_304)
+    store = Store(tmp_path / "knowledge.sqlite", max_bytes=131_072)
     original = graph(tmp_path)
     store.save_graph(original)
     large = graph(tmp_path, "too-large")
@@ -342,3 +346,130 @@ def test_graph_materialization_holds_one_consistent_read_transaction(
     monkeypatch.setattr(store, "_annotation_rows", concurrent_publication)
     assert store.load_graph(str(tmp_path)) == original
     assert blocked == [True]
+
+
+def test_annotation_updates_only_its_search_document(tmp_path, monkeypatch):
+    store = Store(tmp_path / "knowledge.sqlite")
+    store.save_graph(graph(tmp_path))
+
+    def forbidden(*args):
+        pytest.fail("An annotation write must not rebuild the entire search index")
+
+    monkeypatch.setattr(store, "_refresh_search", forbidden)
+    monkeypatch.setattr(store, "_node_rows", forbidden)
+    store.annotate(str(tmp_path), "one", "module:a.py", {"overview": "Invoice export."})
+    assert [row["id"] for row in store.search(str(tmp_path), "Invoice")] == ["module:a.py"]
+    assert len(store.search(str(tmp_path), "storage")) == 1
+
+
+def test_all_current_batch_reviews_survive_and_only_matching_scope_is_replaced(tmp_path):
+    store = Store(tmp_path / "knowledge.sqlite")
+    store.save_graph(graph(tmp_path))
+    for number in range(150):
+        store.save_review(
+            str(tmp_path),
+            "one",
+            str(number),
+            "patterns",
+            {"scope": [f"module:{number}.py"], "result": {"evaluations": []}},
+        )
+    assert len(store.reviews(str(tmp_path), "patterns")) == 150
+    store.save_review(
+        str(tmp_path),
+        "one",
+        "replacement",
+        "patterns",
+        {"scope": ["module:42.py"], "result": {"evaluations": [{"rating": None}]}},
+    )
+    assert len(store.reviews(str(tmp_path), "patterns")) == 150
+    assert store.get_review(str(tmp_path), "42", "patterns") is None
+    assert store.get_review(str(tmp_path), "replacement", "patterns") is not None
+    for number in range(5):
+        store.save_graph(graph(tmp_path, f"later-{number}", f"changed-{number}"))
+    saved = store.get_review(str(tmp_path), "replacement", "patterns")
+    assert saved is not None and saved["status"] == "stale"
+
+
+def test_v3_migration_preserves_saved_analyses_and_removes_snapshot_cascade(tmp_path):
+    import json
+    from dataclasses import asdict
+
+    path = tmp_path / "knowledge.sqlite"
+    # Build an actual version3 store shape rather than a no-op migration path.
+    from anaxigraph.storage.schema import SCHEMA
+
+    old = (
+        SCHEMA.replace(
+            "updated_at INTEGER NOT NULL, scope_key TEXT NOT NULL DEFAULT '',",
+            "updated_at INTEGER NOT NULL,",
+        )
+        .replace(
+            "PRIMARY KEY(root, id, kind)\n",
+            "PRIMARY KEY(root, id, kind),\n"
+            "    FOREIGN KEY(root, snapshot_id) REFERENCES snapshots(root, id) ON DELETE CASCADE\n",
+        )
+        .replace("CREATE INDEX IF NOT EXISTS review_scope ON reviews(root,kind,scope_key);", "")
+    )
+    with sqlite3.connect(path) as db:
+        db.executescript(old + "\nPRAGMA user_version=3;")
+        db.execute(
+            "INSERT INTO snapshots(root,id,metadata) VALUES (?,?,?)",
+            (str(tmp_path), "one", json.dumps(asdict(graph(tmp_path).snapshot))),
+        )
+        db.execute(
+            "INSERT INTO reviews VALUES (?,?,?,?,?,?,?)",
+            (str(tmp_path), "saved", "patterns", "one", '{"findings":[]}', "original", 1),
+        )
+    store = Store(path)
+    assert store.get_review(str(tmp_path), "saved", "patterns")["result"] == {"findings": []}
+    backups = list(tmp_path.glob("knowledge.sqlite.pre-v*.sqlite"))
+    assert len(backups) == 1
+    with sqlite3.connect(backups[0]) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert (
+            db.execute("SELECT result FROM reviews WHERE id='saved'").fetchone()[0]
+            == '{"findings":[]}'
+        )
+    assert not list(tmp_path.glob("*.tmp"))
+    before_backup = backups[0].read_bytes()
+    Store(path)
+    assert backups[0].read_bytes() == before_backup
+    store.save_graph(graph(tmp_path))
+    for number in range(4):
+        store.save_graph(graph(tmp_path, str(number), f"source-{number}"))
+    assert store.get_review(str(tmp_path), "saved", "patterns")["status"] == "stale"
+
+
+def test_review_compression_retries_without_growth_and_does_not_invalidate_graph_cache(tmp_path):
+    store = Store(tmp_path / "knowledge.sqlite")
+    store.save_graph(graph(tmp_path))
+    token = store.knowledge_token(str(tmp_path))
+    graph_bytes = store.path.stat().st_size
+    request = {"packet": "catalogue data " * 30_000}
+    store.save_review(str(tmp_path), "one", "request", "request", request)
+    before = store.path.read_bytes()
+    assert store.knowledge_token(str(tmp_path)) == token
+    assert store.get_review(str(tmp_path), "request", "request")["result"] == request
+    store.save_review(str(tmp_path), "one", "request", "request", request)
+    assert store.path.read_bytes() == before
+    assert len(before) - graph_bytes < 8192
+    store.annotate(str(tmp_path), "one", "module:a.py", {"overview": "New meaning."})
+    assert store.knowledge_token(str(tmp_path)) != token
+
+
+def test_completed_review_query_skips_request_payloads_and_tracks_only_proposals(tmp_path):
+    store = Store(tmp_path / "knowledge.sqlite")
+    store.save_graph(graph(tmp_path))
+    initial = store.review_token(str(tmp_path))
+    store.save_review(str(tmp_path), "one", "pending", "request", {"packet": "source"})
+    assert store.review_token(str(tmp_path)) == initial
+    store.save_review(str(tmp_path), "one", "finished", "patterns", {"findings": []})
+    assert store.review_token(str(tmp_path)) != initial
+    # A corrupt request is deliberately unreadable: completed-only queries must
+    # filter it in SQL, not deserialize every packet and filter afterward.
+    with sqlite3.connect(store.path) as db:
+        db.execute("UPDATE reviews SET result=? WHERE kind='request'", (b"not-zlib",))
+    rows = store.reviews(str(tmp_path), include_requests=False)
+    assert len(rows) == 1 and rows[0]["id"] == "finished"
+    with pytest.raises(ValueError, match="compressed JSON"):
+        store.get_review(str(tmp_path), "pending", "request")

@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import tokenize
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,8 +32,40 @@ EXCLUDED_DIRS = {
 }
 EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".db", ".db-shm", ".db-wal"}
 MAX_INPUT_BYTES = 2_000_000
-MAX_SOURCE_PACKET_BYTES = 100_000
+MAX_SOURCE_PACKET_BYTES = MAX_INPUT_BYTES
 INDEX_VERSION = "python-ast-v1"
+
+
+@dataclass
+class SourceCache:
+    """Bounded process-local captures, never trusted from another checkout.
+
+    Every request still enumerates eligible paths and checks regular-file metadata
+    including ctime and inode. Only byte reading, decoding and hashing are reused.
+    Moving a symlink into an ancestor cannot hit a cached regular-file entry.
+    """
+
+    maximum_bytes: int = 32_000_000
+    entries: dict[str, tuple[tuple[int, ...], str | None, str | None, tuple[str, ...]]] = field(
+        default_factory=dict
+    )
+    bytes_read: int = 0
+    files_read: int = 0
+    files_reused: int = 0
+
+    def begin(self) -> None:
+        self.bytes_read = self.files_read = self.files_reused = 0
+
+
+def _signature(root: Path, relative: str) -> tuple[int, ...] | None:
+    path = _regular_input(root, relative)
+    if path is None:
+        return None
+    try:
+        stat = path.stat()
+        return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+    except OSError:
+        return None
 
 
 def _git(root: Path, *args: str) -> bytes | None:
@@ -139,22 +172,30 @@ def _read_input(
         return None
 
 
-def capture_sources(root: Path, paths: list[str], fingerprints: dict[str, str]) -> dict[str, str]:
+def capture_sources(
+    root: Path,
+    paths: list[str],
+    fingerprints: dict[str, str],
+    *,
+    maximum: int = MAX_SOURCE_PACKET_BYTES,
+) -> dict[str, str]:
     """Read exact mapped source for agent packets without following symlinks or executing code.
 
-    The source packet budget is smaller than structural indexing's input budget. Decode Python
+    The request builder applies its configurable aggregate packet budget. Decode Python
     coding cookies from the same bounded bytes whose fingerprint was checked; never replace an
     invalid sequence silently or return partial source.
     """
     root = root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("Repository root must be a directory")
+    if type(maximum) is not int or not 1 <= maximum <= MAX_INPUT_BYTES:
+        raise ValueError(f"Source input budget must be between 1 and {MAX_INPUT_BYTES} bytes")
     sources = {}
     for relative in paths:
         if relative not in fingerprints:
             raise ValueError("Source path must belong to the analyzed snapshot")
         diagnostics: list[str] = []
-        raw = _read_input(root, relative, diagnostics, MAX_SOURCE_PACKET_BYTES)
+        raw = _read_input(root, relative, diagnostics, maximum)
         if raw is None:
             raise ValueError(f"Source could not be captured: {relative}; {diagnostics}")
         if hashlib.sha256(raw).hexdigest() != fingerprints[relative]:
@@ -168,21 +209,50 @@ def capture_sources(root: Path, paths: list[str], fingerprints: dict[str, str]) 
 
 
 def _capture_inputs(
-    root: Path, candidates: list[str], excluded: tuple[str, ...], diagnostics: list[str]
+    root: Path,
+    candidates: list[str],
+    excluded: tuple[str, ...],
+    diagnostics: list[str],
+    cache: SourceCache | None = None,
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Fingerprint captured bytes and decode supported Python inputs from those exact bytes."""
     files: dict[str, str] = {}
     contents: dict[str, str] = {}
     binary_count = 0
+    next_entries = {}
+    cache_bytes = 0
+    if cache is not None:
+        cache.begin()
     for relative in candidates:
         if _excluded(relative, excluded):
             continue
+        signature = _signature(root, relative) if cache is not None else None
+        saved = cache.entries.get(relative) if cache is not None else None
+        if saved is not None and signature == saved[0]:
+            _, fingerprint, source, errors = saved
+            if fingerprint is None:
+                binary_count += 1
+            else:
+                files[relative] = fingerprint
+                if source is not None:
+                    contents[relative] = source
+            diagnostics.extend(errors)
+            next_entries[relative] = saved
+            cache_bytes += len(source.encode()) if source is not None else 0
+            cache.files_reused += 1
+            continue
+        before_errors = len(diagnostics)
         content = _read_input(root, relative, diagnostics)
         if content is None:
             continue
+        if cache is not None:
+            cache.bytes_read += len(content)
+            cache.files_read += 1
         suffix = Path(relative).suffix
         if b"\0" in content[:8192] and suffix not in {".py", ".pyi"}:
             binary_count += 1
+            if cache is not None and signature is not None:
+                next_entries[relative] = (signature, None, None, ())
             continue
         files[relative] = hashlib.sha256(content).hexdigest()
         try:
@@ -191,6 +261,29 @@ def _capture_inputs(
                 contents[relative] = content.decode(encoding)
         except (UnicodeError, SyntaxError) as exc:
             diagnostics.append(f"{relative}: input could not be read ({type(exc).__name__}).")
+        if cache is not None and signature is not None:
+            if _signature(root, relative) != signature:
+                raise ValueError(f"{relative}: source changed during capture; rescan.")
+            source = contents.get(relative)
+            size = len(source.encode()) if source is not None else 0
+            if cache_bytes + size <= cache.maximum_bytes:
+                next_entries[relative] = (
+                    signature,
+                    files[relative],
+                    source,
+                    tuple(diagnostics[before_errors:]),
+                )
+                cache_bytes += size
+    if cache is not None:
+        # New entries can precede reused entries in sorted inventory order. Bound
+        # the final set too, rather than letting those later cache hits exceed it.
+        retained, used = {}, 0
+        for relative, entry in next_entries.items():
+            size = len(entry[2].encode()) if entry[2] is not None else 0
+            if used + size <= cache.maximum_bytes:
+                retained[relative] = entry
+                used += size
+        cache.entries = retained
     if binary_count:
         diagnostics.append(f"{binary_count} binary files excluded from analyzed coverage.")
     unsupported = sum(
@@ -203,13 +296,15 @@ def _capture_inputs(
     return files, contents
 
 
-def discover(root: Path, excluded: tuple[str, ...]) -> tuple[Snapshot, dict[str, str], list[str]]:
+def discover(
+    root: Path, excluded: tuple[str, ...], cache: SourceCache | None = None
+) -> tuple[Snapshot, dict[str, str], list[str]]:
     root = root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("Repository root must be a directory")
     diagnostics: list[str] = []
     candidates, revision, dirty = _inventory(root, excluded, diagnostics)
-    files, contents = _capture_inputs(root, candidates, excluded, diagnostics)
+    files, contents = _capture_inputs(root, candidates, excluded, diagnostics, cache)
     identity = {
         "root": str(root),
         "revision": revision,

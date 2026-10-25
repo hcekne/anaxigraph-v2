@@ -18,6 +18,7 @@ class Input(BaseModel):
 class TaskInput(Input):
     task: str = Field(min_length=1, max_length=8000)
     limit: int = Field(default=12, ge=1, le=50)
+    baseline_id: str | None = Field(default=None, max_length=200)
 
 
 class PlanInput(Input):
@@ -27,6 +28,7 @@ class PlanInput(Input):
 
 class ValidationInput(Input):
     receipts: list[dict[str, Any]] | None = Field(default=None, max_length=100)
+    baseline_id: str | None = Field(default=None, max_length=200)
 
 
 class AnalysisInput(Input):
@@ -37,6 +39,16 @@ class AnalysisInput(Input):
 class SubmissionInput(Input):
     request_id: str = Field(min_length=1, max_length=200)
     result: dict[str, Any]
+
+
+class WorkflowInput(Input):
+    kind: str = Field(pattern="^(mapping|annotate|patterns|fresh-eyes)$")
+    config: dict[str, Any] | None = None
+    scope: list[str] | None = None
+
+
+class ConfigurationInput(Input):
+    config: dict[str, Any]
 
 
 def create_app(application: Any) -> FastAPI:
@@ -72,7 +84,13 @@ def create_app(application: Any) -> FastAPI:
         return application.inspect(entity_id, limit)
 
     @server.get("/api/reviews")
-    def reviews(kind: str | None = None) -> dict:
+    def reviews(
+        kind: str | None = None,
+        limit: int = Query(default=12, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict:
+        if limit != 12 or offset:
+            return application.reviews(kind, limit, offset)
         return application.reviews(kind)
 
     @server.post("/api/scan")
@@ -81,6 +99,8 @@ def create_app(application: Any) -> FastAPI:
 
     @server.post("/api/prepare")
     def prepare(body: TaskInput) -> dict:
+        if body.baseline_id:
+            return application.prepare_change(body.task, body.limit, body.baseline_id)
         return application.prepare_change(body.task, body.limit)
 
     @server.post("/api/assess")
@@ -89,6 +109,8 @@ def create_app(application: Any) -> FastAPI:
 
     @server.post("/api/validate")
     def validate(body: ValidationInput) -> dict:
+        if body.baseline_id:
+            return application.validate_change(body.receipts, body.baseline_id)
         return application.validate_change(body.receipts)
 
     @server.post("/api/analysis/request")
@@ -98,5 +120,37 @@ def create_app(application: Any) -> FastAPI:
     @server.post("/api/analysis/submit")
     def submit(body: SubmissionInput) -> dict:
         return application.submit_analysis(body.request_id, body.result)
+
+    @server.get("/api/workflows")
+    def workflows(run_id: str | None = None) -> dict:
+        return application.workflow_status(run_id)
+
+    @server.get("/api/workflows/config")
+    def workflow_config() -> dict:
+        return application.workflow_configure()
+
+    @server.post("/api/workflows/config")
+    def save_workflow_config(body: ConfigurationInput) -> dict:
+        return application.workflow_configure(body.config)
+
+    @server.post("/api/workflows/start")
+    def workflow_start(body: WorkflowInput) -> dict:
+        return application.workflow_start(body.kind, body.config, body.scope)
+
+    @server.post("/api/workflows/{run_id}/resume")
+    def workflow_resume(run_id: str) -> dict:
+        return application.workflow_resume(run_id)
+
+    @server.get("/api/record")
+    def record_status() -> dict:
+        return application.portable_status()
+
+    @server.post("/api/record/export")
+    def export_record() -> dict:
+        return application.export_record()
+
+    @server.post("/api/record/import")
+    def import_record() -> dict:
+        return application.import_record()
 
     return server

@@ -34,6 +34,12 @@ def parser() -> argparse.ArgumentParser:
         ("request", "Prepare an annotation, Patterns or blind Fresh Eyes task"),
         ("submit", "Validate and save an agent's analysis result"),
         ("reviews", "Read saved architectural reviews"),
+        ("run", "Run a complete mapping, Patterns or Fresh Eyes workflow"),
+        ("runs", "Show durable batch progress and failed batches"),
+        ("resume", "Retry unfinished workflow batches; keep completed results"),
+        ("workflow-config", "Read or save model choices and worker settings"),
+        ("export", "Write the current portable record into anaxigraph/"),
+        ("import", "Reuse compatible analyses from anaxigraph/"),
         ("serve", "Open the local dashboard API"),
         ("mcp", "Serve the shared application over MCP stdio"),
     ):
@@ -53,8 +59,10 @@ def parser() -> argparse.ArgumentParser:
                 command.add_argument("--files", nargs="+", required=True)
             else:
                 command.add_argument("--limit", type=int, default=12)
+                command.add_argument("--baseline-id", help="Explicitly pin a new change baseline")
         elif name == "validate":
             command.add_argument("--receipts", type=Path, help="JSON array of check receipts")
+            command.add_argument("--baseline-id", help="Compare against this retained snapshot")
         elif name == "request":
             command.add_argument("kind", choices=("annotate", "patterns", "fresh-eyes"))
             command.add_argument("--scope", nargs="+")
@@ -65,6 +73,20 @@ def parser() -> argparse.ArgumentParser:
             )
         elif name == "reviews":
             command.add_argument("--kind")
+            command.add_argument("--limit", type=int, default=12)
+            command.add_argument("--offset", type=int, default=0)
+        elif name == "run":
+            command.add_argument("kind", choices=("mapping", "patterns", "fresh-eyes"))
+            command.add_argument("--scope", nargs="+")
+            command.add_argument("--config", type=Path, help="Workflow settings JSON")
+        elif name == "runs":
+            command.add_argument("--run-id")
+        elif name == "resume":
+            command.add_argument("run_id")
+        elif name == "workflow-config":
+            command.add_argument(
+                "--file", type=Path, help="Save model and parallelism settings JSON"
+            )
         elif name == "serve":
             command.add_argument("--host", default="127.0.0.1")
             command.add_argument("--port", type=int, default=8766)
@@ -87,18 +109,36 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "inspect":
         return application.inspect(args.entity_id, args.limit)
     if args.command == "prepare":
+        if args.baseline_id:
+            return application.prepare_change(args.task, args.limit, args.baseline_id)
         return application.prepare_change(args.task, args.limit)
     if args.command == "assess":
         return application.assess_plan(args.task, args.files)
     if args.command == "validate":
         receipts = _read_json(args.receipts, list) if args.receipts else None
+        if args.baseline_id:
+            return application.validate_change(receipts, args.baseline_id)
         return application.validate_change(receipts)
     if args.command == "request":
         return application.analysis_request(args.kind, args.scope)
     if args.command == "submit":
         return application.submit_analysis(args.request_id, _read_json(args.result, dict))
     if args.command == "reviews":
+        if args.limit != 12 or args.offset:
+            return application.reviews(args.kind, args.limit, args.offset)
         return application.reviews(args.kind)
+    if args.command == "run":
+        config = _read_json(args.config, dict) if args.config else None
+        return application.workflow_start(args.kind, config, args.scope, True)
+    if args.command == "runs":
+        return application.workflow_status(args.run_id)
+    if args.command == "resume":
+        return application.workflow_resume(args.run_id, True)
+    if args.command == "workflow-config":
+        config = _read_json(args.file, dict) if args.file else None
+        return application.workflow_configure(config)
+    if args.command in {"export", "import"}:
+        return getattr(application, f"{args.command}_record")()
     raise ValueError(f"Unsupported application command: {args.command}")
 
 

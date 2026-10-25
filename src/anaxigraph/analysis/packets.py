@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict
 from importlib.resources import files
 from typing import Any
@@ -15,7 +16,8 @@ from typing import Any
 from anaxigraph.contracts import Graph, Node
 
 KINDS = {"annotate", "patterns", "fresh-eyes"}
-MAX_PACKET_BYTES = 256_000
+DEFAULT_PACKET_BYTES = 2_000_000
+DEFAULT_RESULT_BYTES = 8_000_000
 
 
 def catalogue() -> list[dict[str, Any]]:
@@ -33,13 +35,100 @@ def _scope(graph: Graph, requested: list[str] | None, kind: str) -> list[Node]:
     matched = {value for value in requested if any(value in (n.id, n.path) for n in chosen)}
     if len(matched) != len(set(requested)):
         raise ValueError("Scope must name mapped module IDs or repository-relative source paths")
-    if kind in {"annotate", "patterns"} and len(chosen) > 4:
-        raise ValueError("Select at most four modules per independent review batch")
     return chosen
 
 
 def _annotation_current(node: Node) -> bool:
     return bool(node.data.get("annotation")) and node.data.get("annotation_status") == "current"
+
+
+def plan_scopes(
+    graph: Graph,
+    kind: str,
+    scope: list[str] | None = None,
+    *,
+    batch_size: int | None = None,
+    include_current: bool = False,
+) -> list[list[str]]:
+    """Plan complete independently retryable coverage, without reading source.
+
+    The default annotation batch is one module, the pattern batch is one module
+    against the entire catalogue, and a blind subsystem contains sixteen modules.
+    These are scheduling defaults, not limits on the repository or saved analysis.
+    """
+    if kind not in KINDS:
+        raise ValueError("Analysis kind must be annotate, patterns, or fresh-eyes")
+    size = batch_size if batch_size is not None else (16 if kind == "fresh-eyes" else 1)
+    if type(size) is not int or size < 1:
+        raise ValueError("batch_size must be a positive integer")
+    selected = _scope(graph, scope or [n.id for n in graph.nodes if n.kind == "module"], kind)
+    if kind == "annotate" and not include_current:
+        selected = [node for node in selected if not _annotation_current(node)]
+    return [[node.id for node in selected[i : i + size]] for i in range(0, len(selected), size)]
+
+
+def _check_behaviors(graph: Graph, behaviors: list[str]) -> None:
+    identities = {node.id for node in graph.nodes}
+    identities.update(node.path for node in graph.nodes if node.kind == "module")
+    # Exact spelling matters: "Store" identifies the mapped class, while the
+    # ordinary verb "store" need not. Identifier boundaries avoid rejecting
+    # "storage" merely because the code contains a symbol named "store".
+    generic = {
+        "add",
+        "apply",
+        "build",
+        "check",
+        "clear",
+        "close",
+        "create",
+        "delete",
+        "find",
+        "get",
+        "index",
+        "inspect",
+        "list",
+        "load",
+        "open",
+        "parse",
+        "prepare",
+        "read",
+        "remove",
+        "run",
+        "save",
+        "search",
+        "send",
+        "set",
+        "start",
+        "stop",
+        "store",
+        "submit",
+        "update",
+        "validate",
+        "write",
+    }
+    code_names = set()
+    for node in graph.nodes:
+        if node.kind == "external":
+            continue
+        if node.name not in generic:
+            identities.add(node.name)
+        else:
+            code_names.add(node.name)
+    # Compile one matcher per packet instead of one regex per symbol per
+    # requirement. That distinction matters when thousands of symbols are mapped.
+    alternatives = "|".join(re.escape(token) for token in sorted(identities) if token)
+    literal = re.compile(r"(?<!\w)(?:" + alternatives + r")(?!\w)")
+    names = "(?:" + "|".join(re.escape(name) for name in sorted(code_names)) + ")"
+    code = re.compile(r"(?:`|\b\w+\.)" + names + r"(?:`|\b)|\b" + names + r"\s*\(")
+    for behavior in behaviors:
+        if literal.search(behavior) or (code_names and code.search(behavior)):
+            raise ValueError(
+                "Functional statement contains source identity; rewrite it as behavior before Fresh Eyes"
+            )
+
+
+def _check_behavior(graph: Graph, behavior: str) -> None:
+    _check_behaviors(graph, [behavior])
 
 
 def _annotation_packet(
@@ -89,10 +178,18 @@ def _annotation_packet(
     return packet, schema
 
 
-def _pattern_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _pattern_packet(
+    graph: Graph, chosen: list[Node], pattern_ids: list[str] | None = None
+) -> tuple[dict[str, Any], dict[str, Any]]:
     selected_paths = {node.path for node in chosen}
     selected_ids = {node.id for node in graph.nodes if node.path in selected_paths}
     owners = {node.id: node.path for node in graph.nodes}
+    cards = catalogue()
+    if pattern_ids is not None:
+        wanted = set(pattern_ids)
+        if not wanted or len(wanted) != len(pattern_ids) or wanted - {c["id"] for c in cards}:
+            raise ValueError("pattern_ids must name distinct catalogue cards")
+        cards = [card for card in cards if card["id"] in wanted]
     packet = {
         "instruction": (
             "Independently advocate for EACH catalogue pattern against EACH supplied module. "
@@ -106,7 +203,7 @@ def _pattern_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], d
             "proposed_change and evidence for its benefit beyond current behavior. Check existing "
             "language/framework guarantees before proposing equivalent behavior. No card or module may be skipped."
         ),
-        "catalogue": catalogue(),
+        "catalogue": cards,
         "modules": [asdict(node) for node in chosen],
         "symbols": [
             asdict(node)
@@ -182,13 +279,7 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
             )
     if not requirements:
         raise ValueError("No functional requirements available; annotate capabilities first")
-    implementation_tokens = {node.id for node in graph.nodes}
-    implementation_tokens.update(node.path for node in graph.nodes if node.kind == "module")
-    for requirement in requirements:
-        if any(token and token in requirement["behavior"] for token in implementation_tokens):
-            raise ValueError(
-                "Functional statement contains source identity; rewrite it as behavior before Fresh Eyes"
-            )
+    _check_behaviors(graph, [requirement["behavior"] for requirement in requirements])
     packet = {
         "instruction": (
             "You are an independent product designer. You receive BEHAVIOR ONLY. Do not inspect "
@@ -196,7 +287,14 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
             "ways to deliver ALL requirements. Compare responsibility, state and failure ownership; "
             "justify added complexity and explain a minimal option. Preserve the original behavior. "
             "Each design must list every requirement ID and supply its own high-level Mermaid diagram. "
-            "Do not collapse the alternatives into a winner or claim tested implementation."
+            "Do not collapse the alternatives into a winner or claim tested implementation. "
+            "Also return functional_summary (one sentence) and functional_requirements "
+            "(at most eight behavior-only sentences). These must describe the purpose and "
+            "observable guarantees, not any proposed design or implementation. They form "
+            "the behavior brief for an independent product-level design, never a summary "
+            "of the current code structure. Return functional_coverage as an aligned list "
+            "of requirement-ID lists: each functional brief sentence names the requirements "
+            "it preserves, and their union must cover EVERY supplied requirement."
         ),
         "requirements": requirements,
         "blindness": "No source, source paths, symbols, observed dependency topology or prior reviews.",
@@ -213,12 +311,23 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
             }
         ],
         "producer": "agent/model identity",
+        "functional_summary": "one sentence describing observable purpose",
+        "functional_requirements": ["at most eight concise observable requirements"],
+        "functional_coverage": [["requirement IDs preserved by the aligned brief sentence"]],
     }
     return packet, schema
 
 
 def build_request(
-    graph: Graph, kind: str, scope: list[str] | None = None, sources: dict[str, str] | None = None
+    graph: Graph,
+    kind: str,
+    scope: list[str] | None = None,
+    sources: dict[str, str] | None = None,
+    *,
+    max_packet_bytes: int = DEFAULT_PACKET_BYTES,
+    max_result_bytes: int = DEFAULT_RESULT_BYTES,
+    pattern_ids: list[str] | None = None,
+    level: str = "subsystem",
 ) -> dict[str, Any]:
     if kind not in KINDS:
         raise ValueError("Analysis kind must be annotate, patterns, or fresh-eyes")
@@ -232,17 +341,33 @@ def build_request(
     if kind == "annotate":
         packet, schema = _annotation_packet(graph, chosen, symbols, sources)
     elif kind == "patterns":
-        packet, schema = _pattern_packet(graph, chosen)
+        packet, schema = _pattern_packet(graph, chosen, pattern_ids)
     else:
         packet, schema = _fresh_packet(graph, chosen)
+    options = {
+        "max_packet_bytes": max_packet_bytes,
+        "max_result_bytes": max_result_bytes,
+        "pattern_ids": pattern_ids,
+        "level": level,
+    }
+    if kind == "fresh-eyes":
+        packet["level"] = level
+    return _request(graph, kind, sorted(ids), packet, schema, symbols, chosen, options)
+
+
+def _request(graph, kind, scope, packet, schema, symbols, chosen, options):
+    for field in ("max_packet_bytes", "max_result_bytes"):
+        if type(options[field]) is not int or options[field] < 1024:
+            raise ValueError(f"{field} must be an integer of at least 1024 bytes")
     digest = hashlib.sha256(
         json.dumps(
             {
-                "schema": 1,
+                "schema": 2,
                 "snapshot": graph.snapshot.id,
                 "kind": kind,
-                "scope": sorted(ids),
+                "scope": scope,
                 "packet": packet,
+                "options": options,
             },
             sort_keys=True,
         ).encode()
@@ -253,11 +378,101 @@ def build_request(
         "request_id": digest,
         "kind": kind,
         "snapshot_id": graph.snapshot.id,
-        "scope": sorted(ids),
+        "scope": scope,
         "packet": packet,
         "response_schema": schema,
         "function_ids": {n.id: [s.id for s in symbols if s.path == n.path] for n in chosen},
+        "request_options": options,
+        "max_result_bytes": options["max_result_bytes"],
     }
-    if len(json.dumps(request).encode()) > MAX_PACKET_BYTES:
-        raise ValueError("Analysis packet exceeds 256 KB; select a smaller independent scope")
+    if len(json.dumps(request).encode()) > options["max_packet_bytes"]:
+        raise ValueError(
+            "Analysis batch exceeds its configured input budget; split this batch or raise max_packet_bytes"
+        )
+    return request
+
+
+def build_product_request(
+    graph: Graph,
+    children: list[dict[str, Any]],
+    *,
+    max_packet_bytes: int = DEFAULT_PACKET_BYTES,
+    max_result_bytes: int = DEFAULT_RESULT_BYTES,
+) -> dict[str, Any]:
+    """Design the product from bounded blind functional briefs, never source.
+
+    Children contain full saved ``request`` and accepted ``result`` values. The
+    request envelope records exact module coverage and child identities; only
+    ``packet`` and ``response_schema`` are delivered to the blind designer.
+    Recursive groups make the same operation usable beyond one model's context.
+    """
+    from .validation import validate_result
+
+    if not isinstance(children, list) or not 1 <= len(children) <= 16:
+        raise ValueError("Product synthesis needs between one and sixteen child briefs")
+    scope, child_ids, requirements = set(), [], []
+    mapped = {node.id for node in graph.nodes if node.kind == "module"}
+    for child in children:
+        request, result = child["request"], child["result"]
+        if request["kind"] != "fresh-eyes" or request["snapshot_id"] != graph.snapshot.id:
+            raise ValueError("Product inputs must be current Fresh Eyes requests")
+        if request["request_id"] in child_ids:
+            raise ValueError("Product inputs must not repeat a child review")
+        child_scope = request.get("scope")
+        if (
+            not isinstance(child_scope, list)
+            or not child_scope
+            or len(set(child_scope)) != len(child_scope)
+            or set(child_scope) - mapped
+            or scope.intersection(child_scope)
+        ):
+            raise ValueError("Product children must cover distinct mapped module scopes")
+        validate_result(request, result, graph)
+        child_ids.append(request["request_id"])
+        scope.update(child_scope)
+        brief = result.get("functional_requirements")
+        if not isinstance(brief, list) or not 1 <= len(brief) <= 8:
+            raise ValueError("Each product input requires one to eight functional_requirements")
+        if "functional_coverage" not in result:
+            raise ValueError("Each product input requires explicit functional_coverage")
+        for behavior in brief:
+            if not isinstance(behavior, str) or not behavior.strip() or len(behavior) > 600:
+                raise ValueError("Functional requirements must be concise behavior statements")
+            requirements.append({"id": f"R{len(requirements) + 1}", "behavior": behavior})
+    _check_behaviors(graph, [item["behavior"] for item in requirements])
+    # Reuse the blind design contract, not the source-aware module packet.
+    exemplar = next(n for n in graph.nodes if n.id in scope and n.kind == "module")
+    packet, schema = _fresh_packet(graph, [exemplar])
+    packet["requirements"] = requirements
+    packet["level"] = "product"
+    packet["instruction"] += (
+        " This is a higher-level product design from functional briefs. Recover the overall "
+        "user purpose, challenge unnecessary complexity, and compare three coherent complete "
+        "architectures. Functional briefs describe behavior, not component boundaries to preserve."
+    )
+    options = {
+        "max_packet_bytes": max_packet_bytes,
+        "max_result_bytes": max_result_bytes,
+        "pattern_ids": None,
+        "level": "product",
+    }
+    request = _request(graph, "fresh-eyes", sorted(scope), packet, schema, [], [], options)
+    # Child result digests make revalidation sensitive to a revised functional brief.
+    lineage = [
+        {
+            "request_id": child["request"]["request_id"],
+            "result_digest": hashlib.sha256(
+                json.dumps(child["result"], sort_keys=True, allow_nan=False).encode()
+            ).hexdigest(),
+        }
+        for child in children
+    ]
+    request["children"] = lineage
+    request["request_id"] = hashlib.sha256(
+        (request["request_id"] + json.dumps(lineage, sort_keys=True)).encode()
+    ).hexdigest()[:24]
+    if len(json.dumps(request).encode()) > max_packet_bytes:
+        raise ValueError(
+            "Product batch exceeds its configured input budget; split its child briefs"
+        )
     return request

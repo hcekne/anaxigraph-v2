@@ -4,6 +4,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = { sort: "path", descending: false, offset: 0, limit: 25, selected: null, request: null };
 let moduleGeneration = 0;
 let entityGeneration = 0;
+let reviewOffset = 0;
 
 function notice(message, error = false) {
   const element = $("#notice");
@@ -102,6 +103,7 @@ async function refreshStatus() {
   renderCheckout(data.snapshot, data.snapshot?.root || data.root || data.repository || "Checkout");
   renderCoverage(data);
   renderMetrics(data);
+  if (data.baseline_id) $("#change-baseline").textContent = `Pinned baseline ${data.baseline_id} · preserved across scans until you start another change.`;
   return data;
 }
 
@@ -250,12 +252,15 @@ async function requestAnalysis(kind) {
   notice("Task prepared. Give its packet and response schema to your agent.");
 }
 
-async function refreshReviews() {
-  const data = await api("/api/reviews");
+async function refreshReviews(append = false) {
+  if (!append) reviewOffset = 0;
+  const data = await api(`/api/reviews?${new URLSearchParams({ limit: 12, offset: reviewOffset })}`);
   const items = data.items || data.reviews || [];
-  $("#saved-reviews").replaceChildren();
-  $("#saved-reviews").classList.toggle("empty", !items.length);
-  if (!items.length) $("#saved-reviews").textContent = "No saved reviews yet.";
+  if (!append) $("#saved-reviews").replaceChildren();
+  $("#saved-reviews").classList.toggle("empty", !data.total);
+  if (!items.length && !append) $("#saved-reviews").textContent = "No saved reviews yet.";
+  reviewOffset += items.length;
+  $("#more-reviews").hidden = data.next_offset == null;
   for (const item of items) {
     const section = document.createElement("details");
     section.className = "review-card";
@@ -373,6 +378,129 @@ async function refresh() {
   }
 }
 
+const stageLabels = { annotate: "Mapping", patterns: "Patterns", "fresh-eyes": "Fresh Eyes" };
+let workflowSettings = null;
+let workflowTimer = null;
+const workflowStatuses = new Map();
+
+function renderModelSettings(config) {
+  workflowSettings = config;
+  $("#workflow-workers").value = config.workers;
+  $("#workflow-timeout").value = config.timeout_seconds;
+  const parent = $("#stage-models");
+  parent.replaceChildren();
+  for (const [kind, label] of Object.entries(stageLabels)) {
+    const group = document.createElement("div");
+    const providerLabel = textElement("label", `${label} provider`);
+    const provider = document.createElement("select");
+    provider.id = `provider-${kind}`;
+    for (const name of ["codex", "claude"]) {
+      const option = textElement("option", name === "codex" ? "OpenAI / Codex" : "Claude");
+      option.value = name;
+      provider.append(option);
+    }
+    provider.value = config.stages[kind].provider;
+    providerLabel.append(provider);
+    const modelLabel = textElement("label", `${label} model`);
+    const model = document.createElement("input");
+    model.id = `model-${kind}`;
+    model.value = config.stages[kind].model || "";
+    model.placeholder = "CLI configured default";
+    modelLabel.append(model);
+    const fallbackLabel = textElement("label", "Stronger fallback models, in order");
+    const fallback = document.createElement("input");
+    fallback.id = `fallback-${kind}`;
+    fallback.value = (config.stages[kind].fallbacks || []).map((x) => x.provider === config.stages[kind].provider ? x.model : `${x.provider}:${x.model}`).join(", ");
+    fallback.placeholder = "model, claude:other-model";
+    fallbackLabel.append(fallback);
+    group.append(providerLabel, modelLabel, fallbackLabel);
+    parent.append(group);
+  }
+  for (const provider of ["codex", "claude"]) {
+    const pass = config.review_passes.find((x) => x.provider === provider);
+    $(`#review-${provider}-enabled`).checked = !!pass;
+    $(`#review-${provider}-model`).value = pass?.model || "";
+  }
+}
+
+function readWorkflowSettings() {
+  if (!workflowSettings) throw new Error("Model settings are still loading.");
+  const config = { workers: Number($("#workflow-workers").value), timeout_seconds: Number($("#workflow-timeout").value), stages: {}, review_passes: [] };
+  for (const kind of Object.keys(stageLabels)) {
+    const provider = $(`#provider-${kind}`).value;
+    config.stages[kind] = { provider, model: $(`#model-${kind}`).value.trim(), fallbacks: $(`#fallback-${kind}`).value.split(",").map((x) => x.trim()).filter(Boolean).map((model) => {
+      const separator = model.indexOf(":");
+      const selected = separator > 0 ? model.slice(0, separator) : "";
+      return ["codex", "claude"].includes(selected) ? { provider: selected, model: model.slice(separator + 1) } : { provider, model };
+    }) };
+  }
+  for (const provider of ["codex", "claude"]) {
+    if ($(`#review-${provider}-enabled`).checked) config.review_passes.push({ provider, model: $(`#review-${provider}-model`).value.trim() });
+  }
+  return config;
+}
+
+async function refreshWorkflows() {
+  const data = await api("/api/workflows");
+  const parent = $("#workflow-runs");
+  parent.replaceChildren();
+  parent.classList.toggle("empty", !data.items.length);
+  if (!data.items.length) parent.textContent = "No workflows started.";
+  let running = false;
+  let finished = false;
+  for (const run of data.items) {
+    finished ||= run.status === "completed" && ["running", "queued"].includes(workflowStatuses.get(run.run_id));
+    workflowStatuses.set(run.run_id, run.status);
+    const card = textElement("article", "", "run-card");
+    const heading = textElement("div", "", "run-heading");
+    heading.append(textElement("h3", `${stageLabels[run.kind] || run.kind} · ${run.status}`));
+    if (["failed", "interrupted"].includes(run.status)) {
+      const button = textElement("button", "Retry unfinished batches", "secondary");
+      button.addEventListener("click", () => action(button, async () => {
+        await api(`/api/workflows/${run.run_id}/resume`, {});
+        await refreshWorkflows();
+      }));
+      heading.append(button);
+    }
+    card.append(heading, textElement("p", run.phase, "run-phase"));
+    const progress = document.createElement("progress");
+    progress.max = Math.max(1, run.total_batches);
+    progress.value = run.completed_batches;
+    progress.setAttribute("aria-label", `${run.completed_batches} of ${run.total_batches} batches complete`);
+    card.append(progress, textElement("p", `${run.completed_batches}/${run.total_batches} batches complete · ${run.active_workers} active workers · ${Math.round(run.elapsed_seconds)} seconds elapsed`, "section-note"));
+    if (run.error) card.append(textElement("p", run.error, "run-error"));
+    for (const failure of run.failures || []) card.append(textElement("p", `Batch ${failure.batch_id}: ${failure.error}`, "run-error"));
+    if (run.reconciliation) card.append(textElement("p", `Final reconciliation: ${run.reconciliation.status}. ${run.record_exported ? "Portable record saved." : "Results saved locally."}`));
+    parent.append(card);
+    running ||= ["running", "queued"].includes(run.status);
+  }
+  clearTimeout(workflowTimer);
+  if (running) workflowTimer = setTimeout(() => refreshWorkflows().catch((error) => notice(error.message, true)), 1500);
+  if (finished) await Promise.all([refresh(), refreshReviews()]);
+}
+
+async function startWorkflow(kind) {
+  const scope = lines($("#workflow-scope").value);
+  await api("/api/workflows/start", { kind, config: readWorkflowSettings(), scope: scope.length ? scope : null });
+  await refreshWorkflows();
+  notice("Full workflow started. Each completed batch is saved immediately; progress updates below.");
+}
+
+document.querySelectorAll("[data-run]").forEach((button) => button.addEventListener("click", () => action(button, () => startWorkflow(button.dataset.run))));
+$("#load-workflows").addEventListener("click", () => action($("#load-workflows"), refreshWorkflows));
+$("#save-workflow-settings").addEventListener("click", () => action($("#save-workflow-settings"), async () => {
+  renderModelSettings(await api("/api/workflows/config", { config: readWorkflowSettings() }));
+  notice("Model choices and parallel workers saved.");
+}));
+for (const operation of ["export", "import"]) {
+  $(`#${operation}-record`).addEventListener("click", () => action($(`#${operation}-record`), async () => {
+    const result = await api(`/api/record/${operation}`, {});
+    $("#portable-state").textContent = formatJSON(result);
+    await refresh();
+    notice(operation === "export" ? "Portable record saved in anaxigraph/. Commit and push it through Git." : "Compatible saved analyses imported into this checkout.");
+  }));
+}
+
 document.querySelectorAll("[data-page]").forEach((button) => button.addEventListener("click", () => switchPage(button.dataset.page)));
 document.querySelectorAll("[data-kind]").forEach((button) => button.addEventListener("click", () => action(button, () => requestAnalysis(button.dataset.kind))));
 document.querySelectorAll("[data-sort]").forEach((button) => button.addEventListener("click", () => {
@@ -403,9 +531,22 @@ $("#submit-analysis").addEventListener("click", () => action($("#submit-analysis
   notice("Agent result validated and saved for its requested snapshot.");
 }));
 $("#load-reviews").addEventListener("click", () => action($("#load-reviews"), refreshReviews));
+$("#more-reviews").addEventListener("click", () => action($("#more-reviews"), () => refreshReviews(true)));
+$("#new-change-baseline").addEventListener("click", () => action($("#new-change-baseline"), async () => {
+  if (!$("#change-task").value.trim()) throw new Error("Describe the new change first.");
+  const status = await api("/api/status");
+  if (!status.snapshot) throw new Error("Refresh the structural map first.");
+  const brief = await api("/api/prepare", { task: $("#change-task").value, baseline_id: status.snapshot.id });
+  $("#change-brief").textContent = formatJSON(brief);
+  $("#change-baseline").textContent = `Pinned baseline ${brief.baseline_id} · preserved across scans until you start another change.`;
+}));
 $("#prepare-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  action(event.submitter, async () => { $("#change-brief").textContent = formatJSON(await api("/api/prepare", { task: $("#change-task").value })); });
+  action(event.submitter, async () => {
+    const brief = await api("/api/prepare", { task: $("#change-task").value });
+    $("#change-brief").textContent = formatJSON(brief);
+    $("#change-baseline").textContent = `Pinned baseline ${brief.baseline_id} · preserved across scans until you start another change.`;
+  });
 });
 $("#assess-form").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -419,3 +560,5 @@ $("#validate-change").addEventListener("click", () => action($("#validate-change
   $("#change-validation").textContent = formatJSON(await api("/api/validate", { receipts }));
 }));
 refresh().catch((error) => notice(error.message, true));
+api("/api/workflows/config").then(renderModelSettings).catch((error) => notice(error.message, true));
+refreshWorkflows().catch((error) => notice(error.message, true));

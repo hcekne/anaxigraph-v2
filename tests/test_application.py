@@ -217,10 +217,11 @@ def test_evidence_uses_physical_lines_not_code_line_count(app: Application) -> N
 
 def test_dependency_edits_invalidate_unchanged_caller_annotation(app: Application) -> None:
     annotate(app)
+    app.prepare_change("invoice")
     assert app.status()["annotations"]["current"] == 2
     previous = app.status()["snapshot"]["id"]
     path = app.root / "persistence.py"
-    path.write_text(path.read_text() + "\n# Persistence guarantee changed.\n")
+    path.write_text(path.read_text().replace("'id': 1", "'id': 2"))
     app.scan()
     status = app.status()
     assert status["snapshot"]["id"] != previous
@@ -428,3 +429,44 @@ def test_unchanged_application_cycles_preserve_database_bytes(app: Application) 
         app.submit_analysis(request["request_id"], result)
     assert app.store.path.read_bytes() == before
     assert app.store.stats(str(app.root))["snapshots"] == 1
+
+
+def test_change_baseline_survives_followup_scans_and_restart(app: Application) -> None:
+    baseline = app.prepare_change("Grow invoice service")["baseline_id"]
+    path = app.root / "service.py"
+    path.write_text("\n".join(f"value_{n} = {n}" for n in range(605)))
+    app.scan()
+    first = app.validate_change()
+    assert first["base_snapshot_id"] == baseline
+    assert any(f["change"] == "introduced" for f in first["findings"])
+    path.write_text(path.read_text() + "\nvalue_606 = 606\n")
+    app.scan()
+    restarted = Application(app.root, app.store.path)
+    following = restarted.validate_change()
+    assert following["base_snapshot_id"] == baseline
+    assert following["comparison"] == "pinned change baseline"
+    assert any(f["change"] == "introduced" for f in following["findings"])
+    for n in range(3):
+        path.write_text(path.read_text() + f"\nnew_value_{n} = {n}\n")
+        restarted.scan()
+    assert restarted.store.stats(str(app.root))["snapshots"] == 3
+    assert restarted.prepare_change("Continue")["baseline_id"] == baseline
+    current = restarted.status()["snapshot"]["id"]
+    assert restarted.prepare_change("Next change", baseline_id=current)["baseline_id"] == current
+    assert restarted.validate_change()["changed_total"] == 0
+    with pytest.raises(ValueError, match="Baseline"):
+        restarted.validate_change(baseline_id="another-checkout")
+
+
+def test_comment_only_dependency_edit_does_not_stale_callers(app: Application) -> None:
+    annotate(app)
+    persistence = app.root / "persistence.py"
+    persistence.write_text("# Explain the existing operation.\n" + persistence.read_text())
+    scan = app.scan()
+    assert scan["indexing"]["files_read"] == 1
+    assert scan["indexing"]["modules_parsed"] == 1
+    assert app.inspect("service.py")["entity"]["data"]["annotation_status"] == "current"
+    assert app.inspect("persistence.py")["entity"]["data"]["annotation_status"] == "stale"
+    persistence.write_text(persistence.read_text().replace("'id': 1", "'id': 2"))
+    app.scan()
+    assert app.inspect("service.py")["entity"]["data"]["annotation_status"] == "stale"

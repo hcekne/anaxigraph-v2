@@ -12,7 +12,8 @@ def create_mcp(application: Any) -> FastMCP:
         "AnaxiGraph V2",
         instructions=(
             "Prepare substantial changes, inspect evidence, assess placement, then scan and validate. "
-            "For model analysis, request an explicit packet and submit its result. "
+            "Run complete model workflows using workflow_start; inspect progress with workflow_status. "
+            "Explicit request/submit packets remain available for independent agents. "
             "Fresh Eyes packets are implementation-blind; do not add source context to that task."
         ),
     )
@@ -40,8 +41,10 @@ def create_mcp(application: Any) -> FastMCP:
         return application.inspect(entity_id, limit)
 
     @server.tool()
-    def prepare_change(task: str, limit: int = 12) -> dict:
+    def prepare_change(task: str, limit: int = 12, baseline_id: str | None = None) -> dict:
         """Find existing responsibilities, reuse opportunities and checks before editing."""
+        if baseline_id:
+            return application.prepare_change(task, limit, baseline_id)
         return application.prepare_change(task, limit)
 
     @server.tool()
@@ -50,8 +53,12 @@ def create_mcp(application: Any) -> FastMCP:
         return application.assess_plan(task, files)
 
     @server.tool()
-    def validate_change(receipts: list[dict[str, Any]] | None = None) -> dict:
+    def validate_change(
+        receipts: list[dict[str, Any]] | None = None, baseline_id: str | None = None
+    ) -> dict:
         """Compare saved states; supplied checks only count for their exact fingerprint."""
+        if baseline_id:
+            return application.validate_change(receipts, baseline_id)
         return application.validate_change(receipts)
 
     @server.tool()
@@ -65,8 +72,47 @@ def create_mcp(application: Any) -> FastMCP:
         return application.submit_analysis(request_id, result)
 
     @server.tool()
-    def reviews(kind: str | None = None) -> dict:
+    def reviews(kind: str | None = None, limit: int = 12, offset: int = 0) -> dict:
         """Discover saved review metadata; use inspect('review:<id>') for the full result."""
+        if limit != 12 or offset:
+            return application.reviews(kind, limit, offset)
         return application.reviews(kind)
+
+    @server.tool()
+    def workflow_start(
+        kind: str, config: dict[str, Any] | None = None, scope: list[str] | None = None
+    ) -> dict:
+        """Run a complete resumable mapping, Patterns or Fresh Eyes workflow in the background."""
+        return application.workflow_start(kind, config, scope)
+
+    @server.tool()
+    def workflow_status(run_id: str | None = None) -> dict:
+        """Show completed/total batches, active workers, elapsed time and final reconciliation."""
+        return application.workflow_status(run_id)
+
+    @server.tool()
+    def workflow_resume(run_id: str) -> dict:
+        """Retry failed or interrupted batches while retaining every completed batch."""
+        return application.workflow_resume(run_id)
+
+    @server.tool()
+    def workflow_configure(config: dict[str, Any] | None = None) -> dict:
+        """Read or save model choices by stage, stronger fallbacks and ordered review passes."""
+        return application.workflow_configure(config)
+
+    @server.tool()
+    def export_record() -> dict:
+        """Save current portable analyses in anaxigraph/; committing and pushing is separate."""
+        return application.export_record()
+
+    @server.tool()
+    def import_record() -> dict:
+        """Reuse Git-carried analyses whose content and context match this checkout."""
+        return application.import_record()
+
+    @server.tool()
+    def portable_status() -> dict:
+        """Distinguish local map, exported portable record and commit/push state."""
+        return application.portable_status()
 
     return server

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+import zlib
 from collections import Counter
 from contextlib import contextmanager
 from dataclasses import asdict
@@ -37,6 +38,20 @@ def _root(root: str) -> str:
     return str(Path(root).resolve())
 
 
+def _review_text(body: str | bytes, maximum: int) -> str:
+    """Read old JSON or one bounded compressed canonical review, without temp files."""
+    if isinstance(body, str):
+        return body
+    try:
+        decoder = zlib.decompressobj()
+        raw = decoder.decompress(body, maximum + 1)
+        if len(raw) > maximum or decoder.unconsumed_tail or not decoder.eof or decoder.unused_data:
+            raise ValueError("Saved review exceeds its configured size limit or is incomplete")
+        return raw.decode()
+    except (zlib.error, UnicodeError) as exc:
+        raise ValueError("Saved review is not valid compressed JSON") from exc
+
+
 class Store:
     """A thread-safe connection-per-operation SQLite repository.
 
@@ -45,22 +60,86 @@ class Store:
     last valid map. DELETE journaling avoids persistent WAL growth.
     """
 
-    def __init__(self, path: Path, *, max_bytes: int = 100_000_000) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        max_bytes: int = 100_000_000,
+        max_record_bytes: int | None = None,
+        request_limit: int = 1024,
+    ) -> None:
         if max_bytes < 65_536:
             raise ValueError("Storage budget must be at least 65,536 bytes")
         self.path = Path(path).resolve()
         self.max_bytes = max_bytes
+        self.max_record_bytes = max_record_bytes or max_bytes
+        if type(request_limit) is not int or request_limit < 1:
+            raise ValueError("Request retention must be a positive integer")
+        self.request_limit = request_limit
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, SCHEMA_VERSION):
+            if version not in (0, 3, 4, SCHEMA_VERSION):
                 raise ValueError(f"Unsupported knowledge-store schema: {version}")
-            if version == 0:
+            if version in (0, 3, 4):
+                if version:
+                    self._backup_before_migration(db)
+                before = (
+                    "ALTER TABLE reviews RENAME TO reviews_v3;\nDROP INDEX IF EXISTS review_kind;\n"
+                    if version == 3
+                    else ""
+                )
+                after = (
+                    "INSERT INTO reviews(root,id,kind,snapshot_id,result,created_at,updated_at) "
+                    "SELECT root,id,kind,snapshot_id,result,created_at,updated_at FROM reviews_v3;\n"
+                    "DROP TABLE reviews_v3;\n"
+                    if version == 3
+                    else ""
+                )
                 db.executescript(
                     "BEGIN IMMEDIATE;\n"
+                    + before
                     + SCHEMA
+                    + after
                     + f"\nPRAGMA user_version={SCHEMA_VERSION};\nCOMMIT;"
                 )
+
+    def _backup_before_migration(self, db: sqlite3.Connection) -> None:
+        """Keep one recoverable original, and remove incomplete backup output."""
+        backup = self.path.with_name(self.path.name + f".pre-v{SCHEMA_VERSION}.sqlite")
+        if backup.exists():
+            return
+        temporary = backup.with_suffix(backup.suffix + ".tmp")
+        try:
+            with sqlite3.connect(temporary) as target:
+                db.backup(target)
+            temporary.replace(backup)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def knowledge_token(self, root: str) -> tuple[int, ...]:
+        """Graph cache identity unaffected by request/checkpoint bookkeeping writes."""
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT version FROM knowledge_versions WHERE root=?", (_root(root),)
+            ).fetchone()
+        return (self.path.stat().st_ino, row[0] if row else 0)
+
+    def review_token(self, root: str) -> tuple[int, ...]:
+        """Completed proposals change independently of queued request packets."""
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT version FROM knowledge_versions WHERE root=?", ("reviews:" + _root(root),)
+            ).fetchone()
+        return (self.path.stat().st_ino, row[0] if row else 0)
+
+    @staticmethod
+    def _changed(db: sqlite3.Connection, root: str) -> None:
+        db.execute(
+            "INSERT INTO knowledge_versions VALUES (?,1) ON CONFLICT(root) "
+            "DO UPDATE SET version=version+1",
+            (root,),
+        )
 
     def cache_token(self) -> tuple[int, ...]:
         """Invalidate an application's one-graph cache after any process writes.
@@ -71,6 +150,45 @@ class Store:
         """
         state = self.path.stat()
         return (state.st_dev, state.st_ino, state.st_size, state.st_mtime_ns, state.st_ctime_ns)
+
+    def pin_baseline(self, root: str, snapshot_id: str | None = None) -> str:
+        """Keep one explicit change baseline independently of subsequent scans.
+
+        With no ID, reuse the active baseline or pin the current snapshot. Supplying
+        an ID explicitly starts/rebases a change; unknown and other-checkout IDs fail.
+        At most one extra graph is retained, rather than unbounded task history.
+        """
+        root = _root(root)
+        if snapshot_id is not None and (not isinstance(snapshot_id, str) or not snapshot_id):
+            raise ValueError("Baseline ID must be a nonempty snapshot identity")
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            old = db.execute("SELECT snapshot_id FROM baselines WHERE root=?", (root,)).fetchone()
+            if snapshot_id is None and old:
+                return old[0]
+            current = self._current(db, root)
+            selected = snapshot_id or (current["current_id"] if current else None)
+            if (
+                not selected
+                or db.execute(
+                    "SELECT 1 FROM snapshots WHERE root=? AND id=?", (root, selected)
+                ).fetchone()
+                is None
+            ):
+                raise ValueError("Baseline must identify a retained snapshot of this checkout")
+            if old is None or old[0] != selected:
+                db.execute(
+                    "INSERT INTO baselines VALUES (?,?) ON CONFLICT(root) "
+                    "DO UPDATE SET snapshot_id=excluded.snapshot_id",
+                    (root, selected),
+                )
+                keep = tuple(
+                    dict.fromkeys(
+                        x for x in (current["current_id"], current["previous_id"], selected) if x
+                    )
+                )
+                self._prune(db, root, keep)
+            return selected
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -112,10 +230,15 @@ class Store:
             )
 
     @staticmethod
-    def _annotation_rows(db: sqlite3.Connection, root: str) -> dict[str, list[sqlite3.Row]]:
+    def _annotation_rows(
+        db: sqlite3.Connection, root: str, node_id: str | None = None
+    ) -> dict[str, list[sqlite3.Row]]:
         result: dict[str, list[sqlite3.Row]] = {}
         for row in db.execute(
-            "SELECT * FROM annotations WHERE root=? ORDER BY updated_at DESC", (root,)
+            "SELECT * FROM annotations WHERE root=?"
+            + (" AND node_id=?" if node_id is not None else "")
+            + " ORDER BY updated_at DESC",
+            (root, node_id) if node_id is not None else (root,),
         ):
             result.setdefault(row["node_id"], []).append(row)
         return result
@@ -282,9 +405,17 @@ class Store:
                 "INSERT INTO checkouts VALUES (?,?,?) ON CONFLICT(root) DO UPDATE SET current_id=excluded.current_id,previous_id=excluded.previous_id",
                 (root, graph.snapshot.id, previous),
             )
-            keep = (graph.snapshot.id,) if previous is None else (graph.snapshot.id, previous)
+            baseline = db.execute(
+                "SELECT snapshot_id FROM baselines WHERE root=?", (root,)
+            ).fetchone()
+            keep = tuple(
+                dict.fromkeys(
+                    x for x in (graph.snapshot.id, previous, baseline[0] if baseline else None) if x
+                )
+            )
             self._prune(db, root, keep)
             self._refresh_search(db, root)
+            self._changed(db, root)
 
     def load_graph(self, root: str, snapshot_id: str | None = None) -> Graph | None:
         root = _root(root)
@@ -332,7 +463,7 @@ class Store:
         annotation: dict[str, Any],
         *,
         expected_digest: str | None = None,
-    ) -> None:
+    ) -> bool:
         root = _root(root)
         body = _encode(annotation, limit=65_536)
         with self._connection() as db:
@@ -353,11 +484,11 @@ class Store:
                 (root, node_id, node["fingerprint"]),
             ).fetchone()
             if old is not None and old["body"] == body:
-                return
+                return False
             if expected_digest is not None:
-                current_annotation = self._annotation(node, self._annotation_rows(db, root)).get(
-                    "annotation"
-                )
+                current_annotation = self._annotation(
+                    node, self._annotation_rows(db, root, node_id)
+                ).get("annotation")
                 actual = sha256(_encode(current_annotation).encode()).hexdigest()
                 if actual != expected_digest:
                     raise ValueError("Annotation inputs changed; a newer result was already saved")
@@ -365,7 +496,14 @@ class Store:
                 "INSERT INTO annotations VALUES (?,?,?,?,?) ON CONFLICT(root,node_id,fingerprint) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at",
                 (root, node_id, node["fingerprint"], body, time.time_ns()),
             )
-            self._refresh_search(db, root)
+            # Annotation changes one canonical document; rebuilding every source/symbol
+            # document here made full mapping quadratic in repository size.
+            db.execute(
+                "UPDATE search SET overview=?,status='current' WHERE root=? AND node_id=?",
+                (str(annotation.get("overview", "")), root, node_id),
+            )
+            self._changed(db, root)
+        return True
 
     def search(self, root: str, query: str, limit: int = 20) -> list[dict[str, Any]]:
         if not 1 <= limit <= 100:
@@ -388,7 +526,16 @@ class Store:
         root = _root(root)
         if not review_id or not kind:
             raise ValueError("Review identity and kind are required")
-        body = _encode(result, limit=262_144)
+        # Task/result sizing belongs to the analysis request. The store enforces
+        # the complete database budget, not an unrelated 256 KiB review ceiling.
+        body = _encode(result, limit=self.max_record_bytes)
+        payload = zlib.compress(body.encode(), level=6)
+        scope_key = _encode(
+            {
+                "scope": result.get("scope", review_id),
+                "options": result.get("request_options", {}),
+            }
+        )
         now = datetime.now(timezone.utc).isoformat()
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -397,21 +544,49 @@ class Store:
                 "SELECT snapshot_id,result FROM reviews WHERE root=? AND id=? AND kind=?",
                 (root, review_id, kind),
             ).fetchone()
-            if old is not None and old["snapshot_id"] == snapshot_id and old["result"] == body:
+            if (
+                old is not None
+                and old["snapshot_id"] == snapshot_id
+                and _review_text(old["result"], self.max_record_bytes) == body
+            ):
                 return
             db.execute(
-                "INSERT INTO reviews VALUES (?,?,?,?,?,?,?) ON CONFLICT(root,id,kind) DO UPDATE SET snapshot_id=excluded.snapshot_id,result=excluded.result,updated_at=excluded.updated_at",
-                (root, review_id, kind, snapshot_id, body, now, time.time_ns()),
+                "INSERT INTO reviews VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(root,id,kind) DO UPDATE "
+                "SET snapshot_id=excluded.snapshot_id,result=excluded.result,"
+                "updated_at=excluded.updated_at,scope_key=excluded.scope_key",
+                (root, review_id, kind, snapshot_id, payload, now, time.time_ns(), scope_key),
             )
-            request = kind == "request"
-            condition = "kind='request'" if request else "kind!='request'"
-            cap = 64 if request else 20
-            db.execute(
-                f"DELETE FROM reviews WHERE root=? AND {condition} AND rowid NOT IN (SELECT rowid FROM reviews WHERE root=? AND {condition} ORDER BY updated_at DESC LIMIT ?)",
-                (root, root, cap),
-            )
+            if kind == "request":
+                db.execute(
+                    "DELETE FROM reviews WHERE root=? AND kind='request' AND snapshot_id!=? "
+                    "AND rowid NOT IN (SELECT rowid FROM reviews WHERE root=? AND kind='request' "
+                    "AND snapshot_id!=? ORDER BY updated_at DESC LIMIT ?)",
+                    (root, snapshot_id, root, snapshot_id, self.request_limit),
+                )
+            elif "scope" in result:
+                # Keep every module/pattern shard, rather than only the last20
+                # batches of a repository. Replace only the same logical analysis.
+                db.execute(
+                    "DELETE FROM reviews WHERE root=? AND kind=? AND scope_key=? AND id!=?",
+                    (root, kind, scope_key, review_id),
+                )
+            if kind != "request":
+                self._changed(db, "reviews:" + root)
 
-    def reviews(self, root: str, kind: str | None = None) -> list[dict[str, Any]]:
+    def get_review(
+        self, root: str, review_id: str, kind: str | None = None
+    ) -> dict[str, Any] | None:
+        rows = self.reviews(root, kind, review_id=review_id)
+        return rows[0] if rows else None
+
+    def reviews(
+        self,
+        root: str,
+        kind: str | None = None,
+        *,
+        review_id: str | None = None,
+        include_requests: bool = True,
+    ) -> list[dict[str, Any]]:
         root = _root(root)
         with self._connection() as db:
             db.execute("BEGIN")
@@ -422,16 +597,21 @@ class Store:
             if kind is not None:
                 statement += " AND kind=?"
                 parameters.append(kind)
+            if review_id is not None:
+                statement += " AND id=?"
+                parameters.append(review_id)
+            if not include_requests:
+                statement += " AND kind!='request'"
             return [
                 {
                     "id": row["id"],
                     "kind": row["kind"],
                     "snapshot_id": row["snapshot_id"],
-                    "result": json.loads(row["result"]),
+                    "result": json.loads(_review_text(row["result"], self.max_record_bytes)),
                     "created_at": row["created_at"],
                     "status": "current" if row["snapshot_id"] == current_id else "stale",
                 }
-                for row in db.execute(statement + " ORDER BY updated_at DESC LIMIT 84", parameters)
+                for row in db.execute(statement + " ORDER BY updated_at DESC", parameters)
             ]
 
     def stats(self, root: str) -> dict[str, Any]:
@@ -448,6 +628,15 @@ class Store:
                 "root": root,
                 "snapshot_id": snapshot_id,
                 "previous_snapshot_id": current["previous_id"] if current else None,
+                "pinned_snapshot_id": (
+                    baseline[0]
+                    if (
+                        baseline := db.execute(
+                            "SELECT snapshot_id FROM baselines WHERE root=?", (root,)
+                        ).fetchone()
+                    )
+                    else None
+                ),
                 "nodes": sum(counts.values()),
                 "modules": counts.get("module", 0),
                 "node_kinds": counts,

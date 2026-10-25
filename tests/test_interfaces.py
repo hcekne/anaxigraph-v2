@@ -52,6 +52,18 @@ def test_checkout_options_work_before_or_after_command(position: str, tmp_path: 
         (["validate"], "validate_change", (None,)),
         (["request", "fresh-eyes"], "analysis_request", ("fresh-eyes", None)),
         (["reviews", "--kind", "patterns"], "reviews", ("patterns",)),
+        (["run", "mapping"], "workflow_start", ("mapping", None, None, True)),
+        (["runs"], "workflow_status", (None,)),
+        (["resume", "r"], "workflow_resume", ("r", True)),
+        (["workflow-config"], "workflow_configure", (None,)),
+        (["export"], "export_record", ()),
+        (["import"], "import_record", ()),
+        (
+            ["prepare", "Add export", "--baseline-id", "base"],
+            "prepare_change",
+            ("Add export", 12, "base"),
+        ),
+        (["validate", "--baseline-id", "base"], "validate_change", (None, "base")),
     ],
 )
 def test_cli_uses_application_contract(arguments, operation, expected) -> None:
@@ -107,6 +119,18 @@ def test_dashboard_assets_and_bounded_http_dispatch() -> None:
             ["Add export", ["export.py"]],
         ),
         ("validate", {}, "validate_change", [None]),
+        ("validate", {"baseline_id": "base"}, "validate_change", [None, "base"]),
+        (
+            "prepare",
+            {"task": "Add export", "baseline_id": "base"},
+            "prepare_change",
+            ["Add export", 12, "base"],
+        ),
+        ("workflows/start", {"kind": "mapping"}, "workflow_start", ["mapping", None, None]),
+        ("workflows/r/resume", {}, "workflow_resume", ["r"]),
+        ("workflows/config", {"config": {"workers": 4}}, "workflow_configure", [{"workers": 4}]),
+        ("record/export", {}, "export_record", []),
+        ("record/import", {}, "import_record", []),
         (
             "analysis/request",
             {"kind": "patterns", "scope": ["module:x.py"]},
@@ -158,6 +182,13 @@ def test_mcp_tools_dispatch_the_same_arguments() -> None:
             "analysis_request",
             "submit_analysis",
             "reviews",
+            "workflow_start",
+            "workflow_status",
+            "workflow_resume",
+            "workflow_configure",
+            "export_record",
+            "import_record",
+            "portable_status",
         }
         await server.call_tool("prepare_change", {"task": "Add export", "limit": 3})
         await server.call_tool("analysis_request", {"kind": "fresh-eyes"})

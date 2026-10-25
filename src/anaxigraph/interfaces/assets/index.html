@@ -64,15 +64,32 @@
     </section>
 
     <section id="page-workflows" class="page" hidden>
-      <div class="panel-heading workflow-intro"><div><p class="eyebrow">BUILD UNDERSTANDING, THEN CHALLENGE IT</p><h2>A small, visible analysis loop</h2></div></div>
+      <div class="panel-heading workflow-intro"><div><p class="eyebrow">BUILD UNDERSTANDING, THEN CHALLENGE IT</p><h2>Run the full analysis, one saved batch at a time</h2></div></div>
       <div class="workflow-grid">
-        <article class="panel workflow-card"><span class="step">01</span><h3>Mapping</h3><p>Extract source facts, then let an agent add concise purpose and contract annotations.</p><button class="secondary" data-kind="annotate">Prepare annotation task →</button></article>
-        <article class="panel workflow-card"><span class="step">02</span><h3>Pattern discovery</h3><p>Evaluate catalogue opportunities with explicit trade-offs and evidence. A familiar design is only one possible answer.</p><button class="secondary" data-kind="patterns">Prepare Patterns task →</button></article>
-        <article class="panel workflow-card"><span class="step">03</span><h3>Fresh Eyes</h3><p>Give a separate worker the required functionality, then ask for alternative designs without current source context.</p><button class="secondary" data-kind="fresh-eyes">Prepare blind design task →</button></article>
+        <article class="panel workflow-card"><span class="step">01</span><h3>Mapping</h3><p>Refresh the source graph, annotate only missing or stale modules, then reconcile the current map.</p><button class="primary" data-run="mapping">Run full mapping →</button><small>Current annotations are reused.</small></article>
+        <article class="panel workflow-card"><span class="step">02</span><h3>Pattern discovery</h3><p>Review every catalogue pattern against every selected module. Save explicit ratings, alternatives and trade-offs.</p><button class="primary" data-run="patterns">Run full pattern analysis →</button><small>Missing mapping runs first.</small></article>
+        <article class="panel workflow-card"><span class="step">03</span><h3>Fresh Eyes</h3><p>Explore three designs per subsystem, then reconcile a product design from behavior alone. Workers cannot inspect source.</p><button class="primary" data-run="fresh-eyes">Run full Fresh Eyes →</button><small>Subsystem designs feed a final product review.</small></article>
       </div>
+      <section class="panel workflow-settings">
+        <div class="panel-heading"><h2>Models and parallel workers</h2><button id="save-workflow-settings" class="secondary">Save choices</button></div>
+        <p class="section-note">Each stage uses the model you choose. A blank model uses that CLI's configured default. Installed Codex or Claude CLI authentication is required.</p>
+        <div class="model-settings">
+          <label>Parallel workers<input id="workflow-workers" type="number" min="1" max="100" value="8"></label>
+          <label>Seconds per model call<input id="workflow-timeout" type="number" min="30" max="3600" value="600"></label>
+        </div>
+        <div id="stage-models" class="model-settings"></div>
+        <details><summary>Ordered review passes</summary><p class="section-note">Independent batches run in parallel. Within each batch, enabled review passes run in this order.</p>
+          <div class="model-settings"><label><span><input id="review-codex-enabled" type="checkbox"> 1. OpenAI / Codex review</span><input id="review-codex-model" placeholder="Configured Codex model"></label><label><span><input id="review-claude-enabled" type="checkbox"> 2. Claude review</span><input id="review-claude-model" placeholder="Configured Claude model"></label></div>
+        </details>
+        <label for="workflow-scope">Optional scope <span class="muted">module paths, one per line; blank means the whole repository</span></label><textarea id="workflow-scope" rows="2" placeholder="Leave blank for all modules"></textarea>
+      </section>
+      <section class="panel"><div class="panel-heading"><h2>Workflow progress</h2><button id="load-workflows" class="quiet">Refresh progress</button></div><div id="workflow-runs" class="empty" aria-live="polite">No workflows started.</div></section>
+      <section class="panel"><div class="panel-heading"><div><h2>Portable understanding</h2><p class="section-note">Current analyses travel with your repository in <code>anaxigraph/</code>. Commit and push that folder through your normal Git workflow.</p></div></div><div class="record-actions"><button id="export-record" class="secondary">Save portable record</button><button id="import-record" class="secondary">Reuse record from this repo</button></div><p id="portable-state" class="section-note">Mapped locally, exported, and committed/pushed are reported separately.</p></section>
+      <details class="panel manual-analysis"><summary>Advanced: prepare and submit an individual agent task</summary>
+        <div class="record-actions"><button class="secondary" data-kind="annotate">Prepare annotation task</button><button class="secondary" data-kind="patterns">Prepare Patterns task</button><button class="secondary" data-kind="fresh-eyes">Prepare blind design task</button></div>
       <section class="panel analysis-workspace">
         <div class="panel-heading"><div><p class="eyebrow">AGENT REVIEW</p><h2 id="analysis-title">Prepare a task to begin</h2></div><span id="analysis-state" class="pill">No task selected</span></div>
-        <p class="section-note">This milestone prepares precise tasks for your coding agent. A review becomes complete only after its result is validated and saved.</p>
+        <p class="section-note">Use these packets with an independent agent when you want direct control. Full workflows above run and save their batches automatically.</p>
         <label for="analysis-scope">Scope <span class="muted">optional entity IDs, one per line; leave blank for the default batch</span></label>
         <textarea id="analysis-scope" rows="2" placeholder="module:src/example.py"></textarea>
         <div class="analysis-columns">
@@ -84,17 +101,18 @@
             <button id="submit-analysis" class="primary" disabled>Validate and save result</button></div>
         </div>
       </section>
-      <section class="panel"><div class="panel-heading"><h2>Saved reviews</h2><button id="load-reviews" class="quiet">Refresh reviews</button></div><div id="saved-reviews" class="empty">No reviews loaded.</div></section>
+      </details>
+      <section class="panel"><div class="panel-heading"><h2>Saved reviews</h2><button id="load-reviews" class="quiet">Refresh reviews</button></div><div id="saved-reviews" class="empty">No reviews loaded.</div><button id="more-reviews" class="secondary" hidden>Load more reviews</button></section>
     </section>
 
     <section id="page-change" class="page" hidden>
       <div class="change-grid">
         <section class="panel"><p class="eyebrow">START WITH WHAT ALREADY EXISTS</p><h2>Prepare a change</h2><p class="section-note">Find an owner, reuse opportunities, affected contracts and relevant checks.</p>
-          <form id="prepare-form"><label for="change-task">What are you trying to change?</label><textarea id="change-task" rows="4" required placeholder="Add CSV export of invoices while preserving tenant isolation"></textarea><button class="primary" type="submit">Prepare change brief →</button></form>
+          <form id="prepare-form"><label for="change-task">What are you trying to change?</label><textarea id="change-task" rows="4" required placeholder="Add CSV export of invoices while preserving tenant isolation"></textarea><button class="primary" type="submit">Prepare change brief →</button></form><p id="change-baseline" class="section-note">Preparing a change pins its baseline across subsequent scans.</p><button id="new-change-baseline" class="quiet">Start new change from current map</button>
           <pre id="change-brief">Your change brief will appear here.</pre>
         </section>
         <section class="panel"><p class="eyebrow">CHECK BEFORE AND AFTER</p><h2>Assess and verify</h2><form id="assess-form"><label for="planned-files">Proposed files, one per line</label><textarea id="planned-files" rows="4" required placeholder="src/billing/export.py"></textarea><button class="secondary" type="submit">Assess placement</button></form>
-          <div class="validation-area"><label for="receipts">Optional check receipts JSON array</label><textarea id="receipts" rows="3" spellcheck="false" placeholder="[]"></textarea><button id="validate-change" class="secondary">Compare saved snapshots</button></div>
+          <div class="validation-area"><label for="receipts">Optional check receipts JSON array</label><textarea id="receipts" rows="3" spellcheck="false" placeholder="[]"></textarea><button id="validate-change" class="secondary">Compare with change baseline</button></div>
           <p class="section-note">Run project tests through your agent or CI. Supplied results are attributed to their exact source fingerprint.</p><pre id="change-validation">No assessment or comparison yet.</pre>
         </section>
       </div>

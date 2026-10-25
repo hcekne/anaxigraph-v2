@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from anaxigraph.indexing import capture_sources, index
+from anaxigraph.indexing import IndexSession, capture_sources, index
 
 
 def write(root: Path, relative: str, content: str) -> None:
@@ -289,10 +289,10 @@ def test_source_capture_rejects_drift_unmapped_paths_and_oversized_packets(tmp_p
         capture_sources(tmp_path, ["app.py"], fingerprints)
     with pytest.raises(ValueError, match="analyzed snapshot"):
         capture_sources(tmp_path, ["unmapped.py"], fingerprints)
-    oversized = b"#" * 100_001
+    oversized = b"#" * 2_000_001
     (tmp_path / "app.py").write_bytes(oversized)
     fingerprints["app.py"] = hashlib.sha256(oversized).hexdigest()
-    with pytest.raises(ValueError, match="100000-byte input limit"):
+    with pytest.raises(ValueError, match="2000000-byte input limit"):
         capture_sources(tmp_path, ["app.py"], fingerprints)
 
 
@@ -314,3 +314,45 @@ def test_source_capture_rejects_invalid_python_encoding_instead_of_replacing_byt
     (tmp_path / "app.py").write_bytes(raw)
     with pytest.raises(ValueError, match="Source encoding"):
         capture_sources(tmp_path, ["app.py"], {"app.py": hashlib.sha256(raw).hexdigest()})
+
+
+def test_incremental_capture_and_parse_reuse_detect_same_size_mtime_restored_edits(tmp_path):
+    import os
+
+    write(tmp_path, "a.py", "def run():\n    return 1\n")
+    write(tmp_path, "b.py", "from a import run\nrun()\n")
+    session = IndexSession(tmp_path)
+    first = session.scan()
+    assert session.last_scan["modules_parsed"] == 2
+    warm = session.scan()
+    assert warm.snapshot.id == first.snapshot.id
+    assert warm.nodes == first.nodes and warm.edges == first.edges
+    assert session.last_scan["modules_parsed"] == 0
+    assert session.last_scan["files_read"] == 0
+    assert session.last_scan["modules_resolved"] == 0
+    target = tmp_path / "a.py"
+    before = target.stat()
+    target.write_text(target.read_text().replace("return 1", "return 2"))
+    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+    changed = session.scan()
+    assert changed.snapshot.id != first.snapshot.id
+    assert session.last_scan["files_read"] == 1
+    assert session.last_scan["modules_parsed"] == 1
+    assert session.last_scan["modules_resolved"] == 1
+    target.write_text("def renamed():\n    return 2\n")
+    changed = session.scan()
+    assert session.last_scan["modules_parsed"] == 1
+    assert session.last_scan["modules_resolved"] == 2
+    assert any(
+        e.kind == "calls" and e.path == "b.py" and e.resolution == "unresolved"
+        for e in changed.edges
+    )
+
+
+def test_source_capture_over100kb_uses_requested_budget_without_truncation(tmp_path):
+    raw = b"#" + b"x" * 150_000 + b"\ndef work():\n    return 1\n"
+    (tmp_path / "app.py").write_bytes(raw)
+    fingerprints = {"app.py": hashlib.sha256(raw).hexdigest()}
+    assert capture_sources(tmp_path, ["app.py"], fingerprints)["app.py"].encode() == raw
+    with pytest.raises(ValueError, match="100000-byte input limit"):
+        capture_sources(tmp_path, ["app.py"], fingerprints, maximum=100_000)

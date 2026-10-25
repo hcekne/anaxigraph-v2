@@ -1,0 +1,481 @@
+"""Small resumable batch executor shared by CLI, MCP and HTTP.
+
+Only progress and request identities live here. Validated annotations/reviews are
+saved by Application immediately; their contents are never copied into run files.
+"""
+
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+import re
+import threading
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
+from pathlib import Path
+from typing import Any, Callable
+
+from anaxigraph.analysis.packets import plan_scopes
+from anaxigraph.workflows.providers import configured_model, execute
+
+_MUTEX = threading.RLock()
+_RUNNING: dict[tuple[str, str], threading.Thread] = {}
+_ACTIVE: set[tuple[str, str]] = set()
+KINDS = {
+    "mapping": "annotate",
+    "annotate": "annotate",
+    "patterns": "patterns",
+    "fresh-eyes": "fresh-eyes",
+}
+DEFAULTS = {
+    "workers": 8,
+    "timeout_seconds": 600,
+    "stages": {
+        kind: {"provider": "codex", "model": "", "fallbacks": []}
+        for kind in ("annotate", "patterns", "fresh-eyes")
+    },
+    "review_passes": [],
+}
+
+
+def _worker(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.get("provider", "codex") not in {"codex", "claude"}:
+        raise ValueError("Each model worker must choose provider codex or claude")
+    model = value.get("model", "")
+    if not isinstance(model, str) or len(model) > 150:
+        raise ValueError("model must be a CLI model name, or blank for its configured default")
+    return {"provider": value.get("provider", "codex"), "model": model}
+
+
+def _selected_worker(value: dict[str, Any]) -> dict[str, Any]:
+    selected = _worker(value)
+    selected["model"] = selected["model"] or configured_model(selected["provider"])
+    return selected
+
+
+def _config(value: dict[str, Any] | None) -> dict[str, Any]:
+    config = deepcopy(DEFAULTS)
+    if value:
+        if not isinstance(value, dict) or set(value) - set(DEFAULTS):
+            raise ValueError(
+                "Workflow settings are workers, timeout_seconds, stages and review_passes"
+            )
+        config.update({k: v for k, v in value.items() if k != "stages"})
+        stages = value.get("stages", {})
+        if not isinstance(stages, dict):
+            raise ValueError("stages must map analysis names to model choices")
+        for name, choice in stages.items():
+            if name not in KINDS:
+                raise ValueError("Unknown model stage")
+            fallbacks = choice.get("fallbacks", []) if isinstance(choice, dict) else []
+            if not isinstance(fallbacks, list) or len(fallbacks) > 4:
+                raise ValueError("Select at most four progressively stronger fallback workers")
+            config["stages"][KINDS[name]] = _worker(choice) | {
+                "fallbacks": [_worker(x) for x in fallbacks]
+            }
+    if type(config["workers"]) is not int or not 1 <= config["workers"] <= 100:
+        raise ValueError("workers must be between 1 and 100")
+    if type(config["timeout_seconds"]) is not int or not 30 <= config["timeout_seconds"] <= 3600:
+        raise ValueError("timeout_seconds must be between 30 and 3600")
+    passes = config["review_passes"]
+    if not isinstance(passes, list) or len(passes) > 4:
+        raise ValueError("Select at most four ordered review passes")
+    config["review_passes"] = [_worker(x) for x in passes]
+    return config
+
+
+class WorkflowRunner:
+    def __init__(self, application: Any, provider: Callable = execute) -> None:
+        self.application, self.provider = application, provider
+        self.directory = application.root / ".anaxigraph-v2" / "workflows"
+        for path in (self.directory.parent, self.directory):
+            if path.is_symlink():
+                raise ValueError("Workflow storage must not be a symlink")
+            path.mkdir(exist_ok=True)
+
+    def _write(self, path: Path, value: dict[str, Any]) -> None:
+        body = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+        if len(body) > 2_000_000:
+            raise ValueError("Workflow progress exceeds its 2 MB local budget")
+        progress = sum(p.stat().st_size for p in self.directory.glob("*.json") if p != path)
+        if progress + len(body) > 20_000_000:
+            raise ValueError("Workflow progress exceeds its aggregate 20 MB budget")
+        retained = [self.application.store.path]
+        record_directory = self.application.root / "anaxigraph"
+        if record_directory.is_dir():
+            retained.extend(p for p in record_directory.iterdir() if p.is_file())
+        extra = sum(p.stat().st_size for p in retained if p.exists())
+        if extra + progress + len(body) > 200_000_000:
+            raise ValueError(
+                "Retained AnaxiGraph data would exceed 200 MB; last progress is preserved"
+            )
+        temporary = path.with_suffix(".tmp")
+        try:
+            with temporary.open("wb") as stream:
+                stream.write(body)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def configuration(self, value: dict[str, Any] | None = None) -> dict[str, Any]:
+        with _MUTEX:
+            path = self.directory / "settings.json"
+            if value is not None:
+                result = _config(value)
+                self._write(path, result)
+                return result
+            return _config(json.loads(path.read_text()) if path.exists() else None)
+
+    def _path(self, run_id: str) -> Path:
+        if not isinstance(run_id, str) or not re.fullmatch(r"[0-9a-f]{32}", run_id):
+            raise ValueError("Unknown workflow run identity")
+        return self.directory / f"{run_id}.json"
+
+    def _load(self, run_id: str) -> dict[str, Any]:
+        path = self._path(run_id)
+        if not path.exists():
+            raise ValueError("Workflow run not found")
+        return json.loads(path.read_text())
+
+    def _save(self, run: dict[str, Any]) -> None:
+        run["updated_at"] = time.time()
+        self._write(self._path(run["id"]), run)
+
+    def _summary(self, run: dict[str, Any]) -> dict[str, Any]:
+        batches = run["batches"]
+        active = sum(batch["status"] == "running" for batch in batches)
+        status = run["status"]
+        if status == "running" and not self._process_alive(run):
+            status, active = "interrupted", 0
+        if (
+            status == "queued"
+            and time.time() - run["updated_at"] > 5
+            and not self._process_alive(run)
+        ):
+            status, active = "interrupted", 0
+        elapsed = max(0, (run.get("finished_at") or time.time()) - run["started_at"])
+        return {
+            "run_id": run["id"],
+            "kind": run["kind"],
+            "status": status,
+            "phase": run["phase"],
+            "snapshot_id": run.get("snapshot_id"),
+            "completed_batches": sum(b["status"] == "completed" for b in batches),
+            "total_batches": len(batches),
+            "active_workers": active,
+            "failed_batches": sum(b["status"] == "failed" for b in batches),
+            "reused_batches": sum(bool(b.get("reused")) for b in batches),
+            "elapsed_seconds": round(elapsed, 1),
+            "workers": run["config"]["workers"],
+            "failures": [
+                {"batch_id": b["id"], "error": b.get("error", "Worker failed")}
+                for b in batches
+                if b["status"] == "failed"
+            ][:10],
+            "error": run.get("error"),
+            "reconciliation": run.get("reconciliation"),
+            "export_error": run.get("export_error"),
+            "record_exported": run.get("record_exported", False),
+            "committed_pushed": False,
+        }
+
+    def _process_alive(self, run: dict[str, Any]) -> bool:
+        if run.get("pid") == os.getpid():
+            return (str(self.application.root), run["id"]) in _ACTIVE
+        try:
+            pid = run.get("pid", 0)
+            if pid <= 0:
+                return False
+            os.kill(pid, 0)
+        except (ProcessLookupError, PermissionError, OSError):
+            return False
+        with (self.directory / "worker.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return False
+            except BlockingIOError:
+                return True
+
+    def status(self, run_id: str | None = None) -> dict[str, Any]:
+        with _MUTEX:
+            if run_id:
+                return self._summary(self._load(run_id))
+            paths = sorted(
+                self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+            )
+            runs = [json.loads(p.read_text()) for p in paths if p.name != "settings.json"]
+            return {"items": [self._summary(run) for run in runs], "total": len(runs)}
+
+    def start(
+        self,
+        kind: str,
+        config: dict[str, Any] | None = None,
+        scope: list[str] | None = None,
+        *,
+        background: bool = True,
+    ) -> dict[str, Any]:
+        if kind not in KINDS:
+            raise ValueError("Workflow must be mapping, patterns, or fresh-eyes")
+        with _MUTEX:
+            active = [x for x in self.status()["items"] if x["status"] in {"running", "queued"}]
+            if active:
+                raise ValueError(f"Workflow {active[0]['run_id']} is already running")
+            paths = sorted(
+                (p for p in self.directory.glob("*.json") if p.name != "settings.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            for old in paths[11:]:
+                old.unlink()
+            run = {
+                "id": uuid.uuid4().hex,
+                "kind": KINDS[kind],
+                "scope": scope,
+                "config": _config(config) if config is not None else self.configuration(),
+                "status": "queued",
+                "phase": "Source scan",
+                "started_at": time.time(),
+                "batches": [],
+                "stages_planned": [],
+                "pid": os.getpid(),
+            }
+            self._save(run)
+        return self._launch(run["id"], background)
+
+    def resume(self, run_id: str, *, background: bool = True) -> dict[str, Any]:
+        with _MUTEX:
+            run = self._load(run_id)
+            if self._summary(run)["status"] == "completed":
+                return self._summary(run)
+            if self._summary(run)["status"] == "running":
+                raise ValueError("This workflow is already running")
+            run.pop("finished_at", None)
+            run.pop("error", None)
+            run["status"], run["pid"] = "queued", os.getpid()
+            for batch in run["batches"]:
+                if batch["status"] != "completed":
+                    batch["status"] = "pending"
+            self._save(run)
+        return self._launch(run_id, background)
+
+    def _launch(self, run_id: str, background: bool) -> dict[str, Any]:
+        if not background:
+            self._execute(run_id)
+            return self.status(run_id)
+        thread = threading.Thread(target=self._execute, args=(run_id,), daemon=True)
+        with _MUTEX:
+            _RUNNING[(str(self.application.root), run_id)] = thread
+        thread.start()
+        return self.status(run_id)
+
+    def _execute(self, run_id: str) -> None:
+        with (self.directory / "worker.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                with _MUTEX:
+                    run = self._load(run_id)
+                    run["status"], run["error"] = (
+                        "failed",
+                        "Another workflow worker owns this checkout",
+                    )
+                    self._save(run)
+                return
+            run = self._load(run_id)
+            try:
+                _ACTIVE.add((str(self.application.root), run_id))
+                run["status"], run["pid"] = "running", os.getpid()
+                self._save(run)
+                scanned = self.application.scan()
+                snapshot = scanned["snapshot"]["id"]
+                if run.get("snapshot_id") and run["snapshot_id"] != snapshot:
+                    raise ValueError(
+                        "Checkout changed; start a new workflow for its current snapshot"
+                    )
+                run["snapshot_id"] = snapshot
+                stages = ["annotate"] if run["kind"] == "annotate" else ["annotate", run["kind"]]
+                for stage in stages:
+                    self._stage(run, stage)
+                    if any(b["status"] == "failed" for b in run["batches"]):
+                        raise ValueError(
+                            "Some batches failed; completed results are saved. Retry failed batches."
+                        )
+                run["phase"] = "Final reconciliation"
+                self._save(run)
+                if run["kind"] == "fresh-eyes":
+                    self._product(run)
+                review_ids = [
+                    b["request_id"]
+                    for b in run["batches"]
+                    if b.get("request_id") and b["kind"] != "annotate"
+                ]
+                reconciliation = self.application.analysis_reconcile(
+                    run["kind"], review_ids, run["scope"]
+                )
+                run["reconciliation"] = reconciliation | {
+                    "status": "completed",
+                    "phase": "Final reconciliation",
+                    "review_ids": review_ids,
+                    "message": "Validated batches form one current map; all declared scopes are accounted for.",
+                }
+                run["status"] = "completed"
+            except Exception as error:
+                run["status"], run["error"] = "failed", str(error)[:600]
+            finally:
+                # Accepted partial work is useful on another clone too. This runs
+                # once per attempt, never once per annotation (which would be quadratic).
+                try:
+                    run["record_exported"] = bool(
+                        self.application.export_record().get("record_exported")
+                    )
+                except Exception as error:
+                    run["export_error"] = str(error)[:500]
+                    if run["status"] == "completed":
+                        run["status"], run["error"] = (
+                            "failed",
+                            "Analysis saved locally; portable export failed",
+                        )
+                run["finished_at"] = time.time()
+                self._save(run)
+                _RUNNING.pop((str(self.application.root), run_id), None)
+                _ACTIVE.discard((str(self.application.root), run_id))
+
+    def _stage(self, run: dict[str, Any], kind: str) -> None:
+        run["phase"] = {
+            "annotate": "Mapping annotations",
+            "patterns": "Catalogue review",
+            "fresh-eyes": "Independent subsystem designs",
+        }[kind]
+        if kind not in run["stages_planned"]:
+            scopes = plan_scopes(
+                self.application._current(),
+                kind,
+                run["scope"],
+                include_current=kind == "annotate" and bool(run["config"]["review_passes"]),
+            )
+            for scope in scopes:
+                run["batches"].append(
+                    {
+                        "id": len(run["batches"]) + 1,
+                        "kind": kind,
+                        "scope": scope,
+                        "status": "pending",
+                        "attempts": 0,
+                    }
+                )
+            run["stages_planned"].append(kind)
+        self._save(run)
+        pending = [b for b in run["batches"] if b["kind"] == kind and b["status"] != "completed"]
+        with ThreadPoolExecutor(max_workers=run["config"]["workers"]) as pool:
+            jobs = [pool.submit(self._batch, run, batch) for batch in pending]
+            for job in as_completed(jobs):
+                job.result()
+
+    def _batch(self, run: dict[str, Any], batch: dict[str, Any]) -> None:
+        with _MUTEX:
+            batch["status"], batch["attempts"] = "running", batch["attempts"] + 1
+            batch.pop("error", None)
+            self._save(run)
+        try:
+            request = (
+                self.application.analysis_product_request(batch["children"])
+                if "children" in batch
+                else self.application.analysis_request(batch["kind"], batch["scope"])
+            )
+            with _MUTEX:
+                batch["request_id"] = request["request_id"]
+                self._save(run)
+            choice = run["config"]["stages"][batch["kind"]]
+            selected = _selected_worker(choice) | {
+                "fallbacks": [_selected_worker(x) for x in choice.get("fallbacks", [])]
+            }
+            reviewers = [_selected_worker(x) for x in run["config"]["review_passes"]]
+            pipeline = {"worker": selected, "review_passes": reviewers}
+            if self.application.analysis_saved(request["request_id"], pipeline):
+                with _MUTEX:
+                    batch["status"], batch["reused"] = "completed", True
+                    self._save(run)
+                return
+            candidates = [_worker(selected), *selected.get("fallbacks", [])]
+            last_error = None
+            for candidate in candidates:
+                try:
+                    result = self.provider(
+                        request, candidate, timeout=run["config"]["timeout_seconds"]
+                    )
+                    for reviewer in reviewers:
+                        result = self.provider(
+                            request,
+                            reviewer,
+                            timeout=run["config"]["timeout_seconds"],
+                            draft=result,
+                        )
+                    execution = {
+                        "pipeline": pipeline,
+                        "worker": candidate,
+                        "review_passes": reviewers,
+                    }
+                    result["execution"] = execution
+                    for annotation in result.get("annotations", []):
+                        annotation["execution"] = execution
+                    self.application.submit_analysis(request["request_id"], result)
+                    break
+                except Exception as error:
+                    last_error = error
+            else:
+                raise ValueError(str(last_error))
+            with _MUTEX:
+                batch["status"] = "completed"
+                self._save(run)
+        except Exception as error:
+            with _MUTEX:
+                batch["status"], batch["error"] = "failed", str(error)[:500]
+                self._save(run)
+
+    def _product(self, run: dict[str, Any]) -> None:
+        children = [
+            b["request_id"]
+            for b in run["batches"]
+            if b["kind"] == "fresh-eyes" and "children" not in b and b["status"] == "completed"
+        ]
+        level = 0
+        while children:
+            groups = [children[i : i + 16] for i in range(0, len(children), 16)]
+            planned = []
+            for group in groups:
+                batch = next((b for b in run["batches"] if b.get("children") == group), None)
+                if batch is None:
+                    batch = {
+                        "id": len(run["batches"]) + 1,
+                        "kind": "fresh-eyes",
+                        "children": group,
+                        "scope": [],
+                        "status": "pending",
+                        "attempts": 0,
+                    }
+                    run["batches"].append(batch)
+                planned.append(batch)
+            self._save(run)
+            with ThreadPoolExecutor(max_workers=run["config"]["workers"]) as pool:
+                jobs = [
+                    pool.submit(self._batch, run, batch)
+                    for batch in planned
+                    if batch["status"] != "completed"
+                ]
+                for job in as_completed(jobs):
+                    job.result()
+            next_level = []
+            for batch in planned:
+                if batch["status"] != "completed":
+                    raise ValueError("Product reconciliation failed; subsystem designs are saved")
+                next_level.append(batch["request_id"])
+            if len(next_level) == 1:
+                return
+            children, level = next_level, level + 1
+            if level > 8:
+                raise ValueError("Product hierarchy exceeds the supported reconciliation depth")

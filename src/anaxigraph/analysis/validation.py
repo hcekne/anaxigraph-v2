@@ -7,6 +7,138 @@ from typing import Any
 
 from anaxigraph.contracts import Graph
 
+from .packets import DEFAULT_RESULT_BYTES, _check_behavior
+
+
+def _project(value: Any, fields: set[str], children: dict[str, Any] | None = None) -> Any:
+    """Keep malformed required values intact for the normal validator to reject."""
+    if not isinstance(value, dict):
+        return value
+    result = {key: item for key, item in value.items() if key in fields}
+    for key, projection in (children or {}).items():
+        if key in result and isinstance(result[key], list):
+            result[key] = [projection(item) for item in result[key]]
+    return result
+
+
+def _execution_worker(value: Any, *, fallbacks: bool = False) -> dict[str, Any]:
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("provider"), str)
+        or value["provider"] not in {"codex", "claude"}
+    ):
+        raise ValueError("Execution worker provider must be codex or claude")
+    model = value.get("model")
+    if not isinstance(model, str) or len(model) > 150:
+        raise ValueError("Execution worker model must be text of at most 150 characters")
+    worker = {"provider": value["provider"], "model": model}
+    if fallbacks and "fallbacks" in value:
+        choices = value["fallbacks"]
+        if not isinstance(choices, list) or len(choices) > 4:
+            raise ValueError("Execution permits at most four fallback workers")
+        worker["fallbacks"] = [_execution_worker(choice) for choice in choices]
+    return worker
+
+
+def _execution(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or not isinstance(value.get("pipeline"), dict):
+        raise ValueError("Execution provenance needs a model pipeline")
+    pipeline = value["pipeline"]
+
+    def reviewers(choices):
+        if not isinstance(choices, list) or len(choices) > 4:
+            raise ValueError("Execution permits at most four ordered review passes")
+        return [_execution_worker(choice) for choice in choices]
+
+    return {
+        "pipeline": {
+            "worker": _execution_worker(pipeline.get("worker"), fallbacks=True),
+            "review_passes": reviewers(pipeline.get("review_passes")),
+        },
+        "worker": _execution_worker(value.get("worker")),
+        "review_passes": reviewers(value.get("review_passes")),
+    }
+
+
+def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    """Project validated model output onto the portable analysis contract.
+
+    Raw source, cache fragments and unknown diagnostics have no place in saved
+    understanding. This projection does not establish correctness: call
+    ``validate_result`` too. Required fields are never invented or defaulted.
+    """
+
+    def reference(item):
+        return _project(item, {"path", "line"})
+
+    def annotation(item):
+        projected = _project(
+            item,
+            {
+                "node_id",
+                "overview",
+                "detail",
+                "capabilities",
+                "functions",
+                "contracts",
+                "uncertainty",
+            },
+            {
+                "functions": lambda function: _project(function, {"node_id", "overview"}),
+                "contracts": lambda contract: _project(
+                    contract, {"statement", "basis", "evidence"}, {"evidence": reference}
+                ),
+            },
+        )
+        return projected
+
+    kind = request["kind"]
+    fields, children = {
+        "annotate": ({"producer", "annotations"}, {"annotations": annotation}),
+        "patterns": (
+            {"producer", "evaluations"},
+            {
+                "evaluations": lambda item: _project(
+                    item,
+                    {
+                        "module_id",
+                        "pattern_id",
+                        "opportunity",
+                        "current_fit",
+                        "proposed_change",
+                        "pros",
+                        "cons",
+                        "alternative",
+                        "evidence",
+                    },
+                    {"evidence": reference},
+                )
+            },
+        ),
+        "fresh-eyes": (
+            {
+                "producer",
+                "alternatives",
+                "functional_summary",
+                "functional_requirements",
+                "functional_coverage",
+            },
+            {
+                "alternatives": lambda item: _project(
+                    item, {"name", "design", "requirements", "pros", "cons", "diagram"}
+                )
+            },
+        ),
+    }.get(kind, (None, None))
+    if fields is None:
+        raise ValueError("Unknown analysis result kind")
+    canonical = _project(result, fields, children)
+    if not isinstance(canonical, dict):
+        raise ValueError("Analysis result must be an object")
+    if result.get("execution") is not None:
+        canonical["execution"] = _execution(result["execution"])
+    return canonical
+
 
 def _text(value: Any, field: str, limit: int = 1000) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
@@ -102,19 +234,47 @@ def _patterns(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> 
         _texts(evaluation.get("cons"), "cons", required=True)
         _text(evaluation.get("alternative"), "alternative", 600)
         _evidence(evaluation.get("evidence"), graph, required=bool(score))
-        if score:
+        if score or "current_fit" in evaluation:
             if not isinstance(evaluation.get("current_fit"), str) or evaluation[
                 "current_fit"
             ] not in {"present", "partial", "absent", "unknown"}:
                 raise ValueError("Positive opportunities need an explicit current_fit")
+        if score or "proposed_change" in evaluation:
             _text(evaluation.get("proposed_change"), "proposed_change", 1000)
 
 
 def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> None:
+    expected = {item["id"] for item in request["packet"]["requirements"]}
+    if "functional_summary" in result:
+        _check_behavior(graph, _text(result["functional_summary"], "functional_summary", 600))
+    if "functional_requirements" in result:
+        brief = result["functional_requirements"]
+        if not isinstance(brief, list) or not 1 <= len(brief) <= 8:
+            raise ValueError("functional_requirements needs one to eight behavior statements")
+        for statement in brief:
+            _check_behavior(graph, _text(statement, "functional requirement", 600))
+    if "functional_coverage" in result:
+        coverage = result["functional_coverage"]
+        brief = result.get("functional_requirements")
+        if (
+            not isinstance(brief, list)
+            or not isinstance(coverage, list)
+            or len(coverage) != len(brief)
+            or any(
+                not isinstance(group, list)
+                or not group
+                or any(not isinstance(item, str) for item in group)
+                for group in coverage
+            )
+        ):
+            raise ValueError(
+                "functional_coverage must align requirement IDs with functional_requirements"
+            )
+        if set(item for group in coverage for item in group) != expected:
+            raise ValueError("Functional brief coverage must preserve every requirement")
     alternatives = result.get("alternatives")
     if not isinstance(alternatives, list) or len(alternatives) != 3:
         raise ValueError("Fresh Eyes requires three alternatives, retained independently")
-    expected = {item["id"] for item in request["packet"]["requirements"]}
     designs = set()
     names = set()
     for alternative in alternatives:
@@ -142,8 +302,11 @@ def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -
 
 def validate_result(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> None:
     """Validation establishes shape and coverage, not truth or model originality."""
-    if not isinstance(result, dict) or len(json.dumps(result, allow_nan=False).encode()) > 262_144:
-        raise ValueError("Analysis result must be a JSON object of at most 256 KiB")
+    maximum = request.get("max_result_bytes", DEFAULT_RESULT_BYTES)
+    if type(maximum) is not int or maximum < 1024:
+        raise ValueError("Analysis result budget must be an integer of at least 1024 bytes")
+    if not isinstance(result, dict) or len(json.dumps(result, allow_nan=False).encode()) > maximum:
+        raise ValueError("Analysis result exceeds its configured batch budget")
     _text(result.get("producer"), "producer", 200)
     kind = request["kind"]
     validators = {"annotate": _annotations, "patterns": _patterns, "fresh-eyes": _fresh_eyes}

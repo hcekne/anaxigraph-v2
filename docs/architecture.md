@@ -16,7 +16,7 @@ The only copied product data is a compact selection of the existing 133 pattern 
 scoring, planning and execution engines were not copied. The Apache license is retained. The
 dashboard borrows visual direction, with a new small implementation.
 
-## Six components, one application
+## Seven components and one application
 
 ```mermaid
 flowchart TB
@@ -27,6 +27,8 @@ flowchart TB
     Indexing --> App[Application]
     Storage <--> App
     Analysis <--> App
+    App <--> Execution[Resumable model workflow execution]
+    Analysis --> Execution
     App <--> Interfaces[CLI / MCP / HTTP and dashboard]
     Interfaces <--> Agents[Coding agents and independent reviewers]
 ```
@@ -37,7 +39,8 @@ flowchart TB
 | `indexing/` | `index(root) -> Graph`, `capture_snapshot` and `capture_sources`: exact identity, bounded verified source, Python syntax and scoped references | Executing analyzed code, generating semantic prose or saving results |
 | `storage/` | Atomic graph publication, canonical annotations, compact FTS and bounded reviews | Architectural judgment, source parsing or provider execution |
 | `analysis/` | Source/behavior evidence packets, complete-result validation and bounded guidance | SQL, UI, model-provider state or reading project files |
-| `application.py` | Compose operations, guard source/context identity, publish validated results | A separate store, parser, provider engine or transport-specific reasoning |
+| `application/` | Shared facade, review operations and portable exchange; guard source/context identity and publish validated results | A separate store, parser, provider engine or transport-specific reasoning |
+| `workflows/` | Durable batch scheduling, bounded provider execution, ordered review passes and retries | Source indexing, SQL, architectural reasoning outside the analysis contract |
 | `interfaces/` | CLI, ten MCP tools, HTTP and dashboard over the same application | Independent ownership inference or analysis state |
 
 These are logical Python packages with explicit records and functions, installed together. Separate
@@ -50,7 +53,8 @@ contracts without forcing their callers to know internal implementations.
 1. Scan a checkout into a useful structural graph without a model call.
 2. Inspect modules/functions, dependencies, consumers and observed test links.
 3. Prepare a change using lexical/symbol/capability evidence; assess proposed file placement.
-4. Compare current and previous scans; attribute supplied check reports to the exact candidate.
+4. Pin a change baseline at preparation and compare subsequent candidates against it; attribute
+   supplied check reports to the exact candidate.
 5. Generate an annotation task with every supplied function and accept only complete results.
 6. Generate a pattern task accounting for every catalogue card for the selected modules, including
    ratings, pros, cons, simpler alternatives and unknown evidence.
@@ -58,14 +62,18 @@ contracts without forcing their callers to know internal implementations.
    complete declared requirement coverage, tradeoffs and high-level Mermaid diagrams.
 8. Explore the same saved understanding through a sortable table, focused graph and review workflow.
 
-External coding agents do the model reasoning in this milestone. There is no hidden simulated
-analysis or automatic model scheduler. Each request is saved before work starts. Results validate
-against its snapshot, declared scope, coverage, size and evidence references. Stale source or
-changed annotation inputs are rejected; completed annotation retries are idempotent. Annotation
-batches commit each module individually so an interrupted submission can safely retry.
+The first milestone's external-agent request/submit interface remains available. The next selected
+capability is an internal model runner: choose a provider/model per stage, independent parallel
+batches, optional stronger fallbacks and ordered review passes. Each request is saved before work
+starts. Accepted batches commit immediately. Run progress retains identities and status, rather than
+another copy of source/results. Interrupted runs retry unfinished work; compatible accepted results
+are reused only for the requested pipeline. Final reconciliation verifies module/catalogue coverage
+or the blind product hierarchy. It is not an extra unverified claim that a review happened.
 
-Annotation validity includes its own source and resolved outgoing source dependencies. A dependency
-change conservatively marks an unchanged caller's explanation stale. This is not a guarantee of
+Annotation validity includes its own source and normalized syntax of resolved outgoing dependencies.
+Comment-only dependency edits preserve callers; meaningful syntax changes conservatively invalidate
+them. This includes implementation bodies, rather than assuming signatures describe all behavior.
+An annotation contract version also controls reuse. This is not a guarantee of
 complete dynamic-call invalidation. Stored annotations distinguish agent interpretations from
 source observations; contracts distinguish declared evidence from inference. Reviews remain proposals.
 
@@ -73,32 +81,46 @@ source observations; contracts distinguish declared evidence from inference. Rev
 
 The returned blind request contains opaque requirement IDs, behavior statements and the response
 contract. Source, module identities, symbols, dependency topology and prior recommendations are
-excluded. Literal mapped-source identities in behavior statements are rejected. Functional statements
+excluded. Module IDs, source paths and distinctive or capitalized symbol identities are rejected;
+common lowercase verbs are allowed as ordinary prose unless explicitly written as code. Functional statements
 still require judgment: the validator cannot prove a sentence contains no conceptual implementation
 assumption, that all product requirements were extracted, or that three descriptions are genuinely
 different architectures.
 
-Give only this packet to a fresh worker without repository/source tools. The server controls packet
-contents; it cannot sandbox an external coding agent's filesystem. Source-aware assessment of a
-frozen alternative must remain a separate operation. This milestone preserves alternatives rather
-than declaring one tested or best. Product/subsystem hierarchy and rigorous scenario comparison can
-be added to this component when useful, without giving blind designers source access.
+Internal workers start in fresh temporary directories with tools, MCP connections, source rules and
+prior sessions disabled. Give only the blind packet to an external worker without repository/source
+tools; the server cannot sandbox an independently supplied agent's filesystem. Source-aware assessment of a
+frozen alternative must remain a separate operation. Each level retains three alternatives rather
+than declaring one tested or best. Subsystems produce behavior-only functional briefs with explicit
+input-requirement attribution. Recursive groups of up to sixteen briefs feed independent product
+designs. Final alternatives cover these product requirements without thousands of source IDs.
+Coverage is checked mechanically; semantic preservation remains a model claim.
 
 ## State and bounds
 
 - One local SQLite database per checkout by default: `.anaxigraph-v2/knowledge.sqlite`.
 - Root identity is the exact resolved checkout. Linked worktrees do not share mutable analysis.
 - Content, revision and analysis identity pin snapshots, including eligible untracked source.
-- Current graph plus one previous comparison graph; repeated unchanged scans do not append history.
+- Current graph, one previous graph and one pinned change baseline; repeated unchanged scans do not
+  append history. The baseline changes only when explicitly selected.
 - One canonical module annotation contains its sentence, paragraph, function sentences and contracts.
   Search indexes compact names/overviews; it does not copy full essays or source bodies.
 - Canonical node and interned-edge sets are compressed inside SQLite. Small source indexes support
   annotations/search. The application keeps at most one materialized current graph in memory;
-  a database change from any process invalidates it. No decompressed graph is written alongside it.
+  knowledge mutations from any process invalidate it. Request bookkeeping does not force a graph
+  reload. Own annotation writes update cached modules only when no concurrent writer intervened.
 - The default database ceiling is 100 MB. Writes fail atomically and preserve the last valid map.
   SQLite rollback journals are temporary; retained data is not an unbounded history archive.
-- Up to 64 recent request packets and 20 completed reviews per checkout, tied to the two retained
-  snapshots. This alpha is a current-understanding workspace, not long-term saved-analysis archival.
+- Compressed requests and current per-scope reviews live within the database budget. Current workflow
+  batches are never discarded by a twenty-review cap; obsolete requests have bounded retention.
+  Completed analyses survive graph-checkpoint pruning and disclose stale inputs.
+- One `anaxigraph/record.json` carries canonical annotations, analyses and provenance through Git,
+  without source, SQLite or deterministic graphs. Clone imports compare source, dependency and
+  analysis input identities; product child identities are reconstructed in dependency order.
+  Unknown model payload fields are excluded from saved result contracts.
+- Portable publication targets 100 MB combined with active local state. Up to twelve workflow
+  progress files have an aggregate 20 MB bound; retained-state writes enforce a 200 MB guard.
+  Schema upgrades preserve one pre-migration backup. Failed writes preserve the last valid record.
 - Ordinary lists are compact and paged. Source packets and explicit review/entity expansion are
   separate from list views; task/result size ceilings remain enforced.
 
@@ -109,10 +131,12 @@ Static resolution is incomplete for dynamic dispatch and frameworks; missing edg
 dead code. No project code or project tests are executed by the service. Check results are
 fingerprint-attributed agent/CI reports, not independently attested executions.
 
-Git-portable records, old-result import, shared worktree bases, autonomous worker pools, accepted
-architecture-rule editing, hierarchical design comparison and production deployment are not part
-of this first milestone. Existing saved analyses and the legacy database remain untouched. Reuse
-or add any of these only after a concrete user need justifies it; the old feature list is not frozen.
+Portable records, internal worker pools and hierarchical blind design are selected extensions to the
+first milestone, specified in [the change request](change-request-workflows.md). Legacy-format
+result import, shared worktree bases, accepted architecture-rule editing, source-aware design
+comparison and production deployment remain separate work. Unsupported portable formats are
+preserved and rejected explicitly; they are never silently overwritten. The legacy database remains
+untouched. The old feature list is not frozen.
 
 ## Packaging destination
 

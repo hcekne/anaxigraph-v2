@@ -3,6 +3,10 @@
 **25 October 2026.** The separate V2 project runs through uv, CLI, MCP and a small dashboard.
 The development version is `anaxigraph 1.0.0a1`; this is not a published 1.0 release.
 
+This is a historical milestone record. The subsequent
+[workflow and portability qualification](workflow-qualification.md) supersedes the external-only
+execution, deferred portability and review-retention limits described below.
+
 The project now lives independently at `~/repos/anaxigraph-v2`. The structural measurements below
 were taken before separation on the combined legacy/V2 checkout; they remain historical evidence.
 
