@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,8 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
+
+from anaxigraph.interfaces.mcp import create_mcp
 
 
 class Input(BaseModel):
@@ -52,8 +55,18 @@ class ConfigurationInput(Input):
 
 
 def create_app(application: Any) -> FastAPI:
+    mcp = create_mcp(application)
+    transport = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_server: FastAPI):
+        async with mcp.session_manager.run():
+            yield
+
     server = FastAPI(
-        title="AnaxiGraph V2", description="One shared map for humans and coding agents"
+        title="AnaxiGraph V2",
+        description="One shared map for humans and coding agents",
+        lifespan=lifespan,
     )
     assets = Path(__file__).parent / "assets"
     server.mount("/assets", StaticFiles(directory=assets), name="assets")
@@ -153,4 +166,6 @@ def create_app(application: Any) -> FastAPI:
     def import_record() -> dict:
         return application.import_record()
 
+    # Existing REST/assets routes win; the transport handles /mcp unchanged.
+    server.mount("/", transport)
     return server

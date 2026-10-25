@@ -15,8 +15,11 @@ from anaxigraph.indexing.resolution import Resolver
 class IndexSession:
     """One checkout's bounded incremental parser and verified capture cache."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, excluded: tuple[str, ...] = ()) -> None:
         self.root = root.resolve(strict=True)
+        if any(not isinstance(pattern, str) or not pattern for pattern in excluded):
+            raise ValueError("Exclusions must be nonempty path patterns")
+        self.excluded = excluded
         self.sources = SourceCache()
         self.parsed: dict = {}
         self.relationships: dict = {}
@@ -25,10 +28,10 @@ class IndexSession:
         self.unchanged = False
 
     def scan(self) -> Graph:
-        return index(self.root, session=self)
+        return index(self.root, excluded=self.excluded, session=self)
 
     def snapshot(self) -> Snapshot:
-        return discover(self.root, (), self.sources)[0]
+        return discover(self.root, self.excluded, self.sources)[0]
 
 
 def index(

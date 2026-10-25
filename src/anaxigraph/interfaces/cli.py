@@ -14,6 +14,12 @@ def _location(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--database", type=Path, default=argparse.SUPPRESS, help="Local SQLite path"
     )
+    parser.add_argument(
+        "--exclusions",
+        type=Path,
+        default=argparse.SUPPRESS,
+        help="JSON array of repository-relative exclusion patterns",
+    )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -147,8 +153,11 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser().parse_args(argv)
     try:
+        exclusions = _read_json(args.exclusions, list) if hasattr(args, "exclusions") else []
         application = Application(
-            getattr(args, "repo", Path.cwd()), getattr(args, "database", None)
+            getattr(args, "repo", Path.cwd()),
+            getattr(args, "database", None),
+            excluded=tuple(exclusions),
         )
         if args.command == "serve":
             import uvicorn

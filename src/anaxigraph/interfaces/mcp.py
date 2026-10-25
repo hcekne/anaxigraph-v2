@@ -10,6 +10,8 @@ from mcp.server.fastmcp import FastMCP
 def create_mcp(application: Any) -> FastMCP:
     server = FastMCP(
         "AnaxiGraph V2",
+        stateless_http=True,
+        json_response=True,
         instructions=(
             "Prepare substantial changes, inspect evidence, assess placement, then scan and validate. "
             "Run complete model workflows using workflow_start; inspect progress with workflow_status. "

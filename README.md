@@ -55,6 +55,16 @@ start a new comparison; validation reports the baseline and candidate identities
 project code. Test/type/lint receipts supplied by an agent or CI are attributed reports, bound to
 the exact snapshot ID. Missing checks remain unchecked; stale receipts cannot pass the candidate.
 
+`serve` also exposes the same MCP tools over Streamable HTTP at
+`http://127.0.0.1:8766/mcp` (or your selected port). A local shared service can keep an existing
+HTTP client connection while switching its runtime to V2; the dashboard and MCP use one Application.
+Stdio remains available for an agent tied to a specific checkout.
+
+When replacing an older service with custom source exclusions, pass
+`--exclusions /path/to/exclusions.json` on every CLI/server invocation. The JSON array contains
+repository-relative glob patterns. The same policy applies to scans and live-source checks;
+V2 does not silently interpret the legacy `.anaxigraph.yml` provider configuration.
+
 ## Run Mapping, Patterns or Fresh Eyes
 
 The dashboard's **Run full mapping**, **Run full pattern analysis** and **Run full Fresh Eyes**

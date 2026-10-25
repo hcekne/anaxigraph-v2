@@ -24,12 +24,14 @@ from anaxigraph.workflows.engine import WorkflowRunner
 class Application:
     """Compose independent components; do not duplicate reasoning in transports."""
 
-    def __init__(self, root: Path, database: Path | None = None) -> None:
+    def __init__(
+        self, root: Path, database: Path | None = None, *, excluded: tuple[str, ...] = ()
+    ) -> None:
         self.root = Path(root).resolve(strict=True)
         if not self.root.is_dir():
             raise ValueError("Repository root must be a directory")
         self.store = Store(database or self.root / ".anaxigraph-v2" / "knowledge.sqlite")
-        self.indexer = IndexSession(self.root)
+        self.indexer = IndexSession(self.root, excluded=excluded)
         self._graph_cache: tuple[tuple[int, ...], Graph] | None = None
 
     def _current(self) -> Graph:
