@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "assessment_version": 2,
+  "experiment_id": "snow-rankings-2026-10-26",
+  "registered_at": "2026-10-26T10:03:22.844930+00:00",
+  "registered_before_observing": "milestone2 outcomes",
+  "applies_to": ["treatment", "control"],
+  "milestones": [1, 2, 3, 4],
+  "original_checker_sha256": "e4de860e530273eefea0e115cd0e326756aa69806a9c4c0ce2dca9563e5791d6",
+  "original_assessments_and_feedback_preserved": true,
+  "new_feedback_sent_to_coding_agents": false,
+  "amendments": [
+    {
+      "field": "powder_days",
+      "change": "Accept finite fractions from0 through requested ski days, or null when unknown, as well as integer counts.",
+      "rationale": "The published brief asks for expected powder days. The API does not prescribe integer counts. Both frozen milestone1 implementations legitimately sum daily probability estimates."
+    },
+    {
+      "field": "score",
+      "change": "Check presence without imposing an unpublished numeric JSON type.",
+      "rationale": "The published API requires score and a transparent best ranking but does not specify its type. Both milestone1 scores were already numeric, so this did not cause that failure."
+    },
+    {
+      "field": "snowfall_total_cm",
+      "change": "Verify arithmetic when every requested-day input is known. With missing inputs allow unknown total, or a finite nonnegative partial total explicitly labelled as partial in warnings.",
+      "rationale": "The brief explicitly says missing measurements remain unknown, not zero. The original checker coerced null daily amounts to zero."
+    },
+    {
+      "field": "confidence ordering",
+      "change": "Check ordering only when every result exposes an explicit comparable numeric-or-null confidence field with at least one numeric value. Otherwise record confidence ordering as not measured.",
+      "rationale": "The published contract does not equate daily powder probability/heuristics with forecast confidence or prescribe a particular confidence field. Inferring known confidence from another quantity imposes an unpublished requirement."
+    }
+  ],
+  "unchanged": ["original acceptance.py", "running coordinator", "product code", "coding prompts", "all other published behavior checks"],
+  "limitations": [
+    "Both coding agents received the original failed milestone1 summary before this correction; that potential influence cannot be undone.",
+    "Original as-run and version2 adjudicated results must both be reported.",
+    "Correcting an invalid checker is not an AnaxiGraph benefit, and the correction applies equally to both frozen implementations.",
+    "One matched stochastic pair remains exploratory, regardless of adjudicated acceptance results."
+  ]
+}

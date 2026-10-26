@@ -39,6 +39,23 @@ Progress and sanitized event metadata live outside the repos under the experimen
 Per-arm event logs are capped at4MB; full source, command output and model transcripts are discarded.
 Task, session, PID, timestamps, actual reported token usage and nullable cost remain available.
 
+The original as-run checker and feedback remain frozen. `amendment-v2.json` records corrections to
+unpublished integer/score/unknown/confidence assumptions, registered before milestone2 outcomes were
+observed. Use the separate adjudicator against finished commits, without changing either agent:
+
+```bash
+python3 experiments/snow_rankings/adjudicate.py --through 1
+# Once all tasks have finished:
+python3 experiments/snow_rankings/adjudicate.py
+```
+
+It exports exact Git commits into temporary directories under home, uses isolated source paths with
+the existing arm dependency environment, and writes `assessment-v2.json` beside the original results.
+Both original and adjudicated scores remain visible. Both coding agents already received the original
+failed milestone1 summary; that influence remains a limitation. The correction is not an AnaxiGraph
+benefit. Qualitative quality, actual provider correctness and unavailable confidence comparisons
+remain separately unmeasured.
+
 An outcome JSON can contain `starting_revision`, `candidate_revision`, `status`, `elapsed_seconds`
 and `notes`. Coding and analysis call events additionally accept model/session identities, tokens,
 cost, reported provenance and nulls for unknown values. Context consultations identify what the
