@@ -1,0 +1,15 @@
+{
+  "kind": "synthetic",
+  "description": "Deterministic test/demo inputs only. Not current snow, open terrain, travel availability or bookable prices.",
+  "reference_date": "2026-01-15",
+  "currency": "GBP",
+  "exchange_rates": {"GBP": 1.0, "EUR": 1.17, "USD": 1.28},
+  "resorts": [
+    {"id":"chamonix","name":"Chamonix","country":"France","latitude":45.9237,"longitude":6.8694,"elevation_m":2000,"snowfall_cm":[12,8,0,18,5,0,2],"snow_depth_cm":120,"powder_probability":[0.8,0.7,0.1,0.85,0.6,0.1,0.3],"travel_hours":6,"transport_gbp":220,"hotel_night_gbp":95,"lift_day_gbp":60},
+    {"id":"niseko","name":"Niseko","country":"Japan","latitude":42.8048,"longitude":140.6874,"elevation_m":1000,"snowfall_cm":[25,20,15,30,10,8,20],"snow_depth_cm":250,"powder_probability":[0.9,0.85,0.8,0.95,0.7,0.65,0.9],"travel_hours":22,"transport_gbp":1000,"hotel_night_gbp":110,"lift_day_gbp":55},
+    {"id":"whistler","name":"Whistler Blackcomb","country":"Canada","latitude":50.1163,"longitude":-122.9574,"elevation_m":1800,"snowfall_cm":[5,15,22,8,0,12,4],"snow_depth_cm":180,"powder_probability":[0.5,0.75,0.85,0.6,0.1,0.7,0.4],"travel_hours":15,"transport_gbp":760,"hotel_night_gbp":145,"lift_day_gbp":115},
+    {"id":"alta","name":"Alta","country":"United States","latitude":40.5884,"longitude":-111.6386,"elevation_m":2800,"snowfall_cm":[0,10,18,0,25,5,0],"snow_depth_cm":160,"powder_probability":[0.1,0.7,0.8,0.1,0.9,0.5,0.1],"travel_hours":16,"transport_gbp":820,"hotel_night_gbp":130,"lift_day_gbp":100},
+    {"id":"hemsedal","name":"Hemsedal","country":"Norway","latitude":60.8611,"longitude":8.5523,"elevation_m":1100,"snowfall_cm":[3,0,8,12,4,0,6],"snow_depth_cm":90,"powder_probability":[0.4,0.1,0.6,0.75,0.5,0.1,0.55],"travel_hours":7,"transport_gbp":180,"hotel_night_gbp":90,"lift_day_gbp":50},
+    {"id":"queenstown","name":"The Remarkables","country":"New Zealand","latitude":-45.0548,"longitude":168.8111,"elevation_m":1700,"snowfall_cm":[0,0,0,0,0,0,0],"snow_depth_cm":null,"powder_probability":[null,null,null,null,null,null,null],"travel_hours":30,"transport_gbp":1400,"hotel_night_gbp":100,"lift_day_gbp":75}
+  ]
+}

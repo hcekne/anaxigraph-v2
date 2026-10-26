@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "experiment_id": "snow-rankings-2026-10-26",
+  "status": "preregistered",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "xhigh",
+  "replicates": 1,
+  "seed_commit": "901251eb98406ec4a9f6bb86cd5f0e8af443ce9c",
+  "anaxigraph_commit": "dcc1a68173c794fc37d9e83541fd3bb89b6eef2c",
+  "arms": {
+    "treatment": {
+      "repository": "hcekne/snow-rankings",
+      "anaxigraph": true
+    },
+    "control": {
+      "repository": "hcekne/snow-rankings-control",
+      "anaxigraph": false
+    }
+  },
+  "tasks": [
+    "01-foundation",
+    "02-ranking",
+    "03-resilience",
+    "04-maintenance"
+  ],
+  "budget": {
+    "coding_minutes_per_task": 20,
+    "coding_tokens_per_arm": null,
+    "model_spend_limit_usd": null,
+    "max_extra_repair_rounds_per_task": 1,
+    "basis": "Initial equal wall-clock allocation; root records actual launch limits. Unknown usage or cost stays null."
+  },
+  "measurements": [
+    "acceptance_checks",
+    "regressions",
+    "subsequent_change_success",
+    "elapsed_seconds",
+    "coding_tokens",
+    "analysis_tokens",
+    "coding_cost_usd",
+    "analysis_cost_usd",
+    "review_effort",
+    "source_lines",
+    "dependency_cycles"
+  ],
+  "notes": "One matched pair is exploratory evidence, not a causal effectiveness claim. Analysis time and cost are recorded separately and included in total-resource comparison.",
+  "anaxigraph_wheel_sha256": "d07b851519855d658447b0120ae27826dcc6d277bfc447a16b12f492ddf0efbf",
+  "runtime_path": "/home/aihans/.local/state/anaxigraph/experiments/snow-rankings-2026-10-26/runtime/bin/anaxigraph"
+}
