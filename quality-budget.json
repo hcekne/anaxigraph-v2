@@ -2,7 +2,7 @@
   "version": 1,
   "baseline_commit": "dcc1a68173c794fc37d9e83541fd3bb89b6eef2c",
   "limits": {
-    "production_physical_lines": 7850,
+    "production_physical_lines": 7900,
     "file_physical_lines": 800,
     "package_data_bytes": 200000,
     "new_function_complexity": 15
@@ -31,6 +31,10 @@
     "src/anaxigraph/workflows/engine.py:WorkflowRunner._product": 18
   },
   "reviewed_changes": {
+    "src/anaxigraph/application/records.py:import_record": {
+      "ceiling": 20,
+      "reason": "A portable analysis can match either its complete legacy source identity or its recorded resource context. Exact rebuilt scoped input identity and result validation remain mandatory in both cases."
+    },
     "src/anaxigraph/analysis/portable.py:compatible_annotations": {
       "ceiling": 18,
       "reason": "Skip a source-matching legacy annotation with an implementation-leaking behavior brief individually, retaining compatible unaffected annotations instead of rejecting the whole portable record."

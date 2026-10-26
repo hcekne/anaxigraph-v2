@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import uuid
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,40 @@ def encode(value: Any) -> bytes:
 def content_identity(files: dict[str, str]) -> str:
     """Path-relative source identity survives a commit or a clone at another path."""
     return hashlib.sha256(encode(files)).hexdigest()
+
+
+def analysis_contexts(graph: Graph) -> Callable[[list[str]], str]:
+    """Guard opaque resources while scoped requests validate parsed source facts."""
+    parsed = {
+        node.path
+        for node in graph.nodes
+        if node.kind == "module" and node.data.get("parse_status") == "parsed"
+    }
+    resources = {
+        path: fingerprint
+        for path, fingerprint in graph.snapshot.files.items()
+        if path not in parsed and Path(path).suffix.lower() not in {".md", ".rst", ".adoc"}
+    }
+    resource_id = content_identity(resources)
+    documents = {
+        node.id: {
+            item["path"]: graph.snapshot.files[item["path"]]
+            for contract in (node.data.get("annotation") or {}).get("contracts", [])
+            for item in contract.get("evidence", [])
+            if item["path"] in graph.snapshot.files
+            and Path(item["path"]).suffix.lower() in {".md", ".rst", ".adoc"}
+        }
+        for node in graph.nodes
+        if node.kind == "module"
+    }
+
+    def identity(scope: list[str]) -> str:
+        evidence = {path: value for key in scope for path, value in documents.get(key, {}).items()}
+        return hashlib.sha256(
+            encode({"policy": 1, "resources": resource_id, "evidence": evidence})
+        ).hexdigest()
+
+    return identity
 
 
 def record_path(root: Path, *, create: bool = False) -> Path:
@@ -122,7 +157,13 @@ def _same_analysis(previous: dict[str, Any], current: dict[str, Any]) -> bool:
     old, new = previous["body"], current["body"]
     return bool(
         current["status"] == "current"
-        and previous.get("source_identity") == current["source_identity"]
+        and (
+            previous.get("source_identity") == current["source_identity"]
+            or (
+                current.get("analysis_context") is not None
+                and previous.get("analysis_context") == current["analysis_context"]
+            )
+        )
         and new.get("input_identity")
         and old.get("input_identity") == new["input_identity"]
         and old.get("result") == new.get("result")
@@ -178,7 +219,11 @@ def _retained_analyses(
 
 
 def _analysis_records(
-    reviews: list[dict[str, Any]], existing: dict[str, Any], module_ids: set[str], source_id: str
+    reviews: list[dict[str, Any]],
+    existing: dict[str, Any],
+    module_ids: set[str],
+    source_id: str,
+    contexts: Callable[[list[str]], str],
 ) -> dict[str, Any]:
     analyses = _retained_analyses(existing, module_ids, source_id)
     canonical_ids: dict[str, str] = {}
@@ -193,6 +238,9 @@ def _analysis_records(
             "kind": review["kind"],
             "status": review["status"],
             "source_identity": source_id if review["status"] == "current" else None,
+            "analysis_context": contexts(body.get("scope", []))
+            if review["status"] == "current"
+            else None,
             "source_snapshot": review["snapshot_id"],
             "created_at": review["created_at"],
             "body": body,
@@ -200,7 +248,7 @@ def _analysis_records(
         key = _analysis_key(item)
         prior = analyses.get(key)
         if prior and _same_analysis(prior, item):
-            item = prior | {"status": item["status"]}
+            item = prior | {"status": item["status"], "analysis_context": item["analysis_context"]}
         if prior and prior.get("id") == item["id"] and item["source_identity"] is None:
             item["source_identity"] = prior.get("source_identity")
         analyses[key] = item
@@ -232,7 +280,7 @@ def build_record(
     source_id = content_identity(graph.snapshot.files)
     module_ids = {node.id for node in graph.nodes if node.kind == "module"}
     modules = _module_records(graph, existing, module_ids)
-    analyses = _analysis_records(reviews, existing, module_ids, source_id)
+    analyses = _analysis_records(reviews, existing, module_ids, source_id, analysis_contexts(graph))
     previous_source = (existing or {}).get("source", {})
     revision = (
         previous_source.get("revision")

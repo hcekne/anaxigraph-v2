@@ -11,6 +11,7 @@ from anaxigraph.analysis import validate_result
 from anaxigraph.analysis.portable import compatible_annotations, input_identity
 from anaxigraph.application.context import context_fingerprints
 from anaxigraph.storage.portable import (
+    analysis_contexts,
     build_record,
     content_identity,
     read_record,
@@ -114,10 +115,15 @@ def import_record(app: Application) -> dict[str, Any]:
         )
     graph = app._current()
     source_id = content_identity(graph.snapshot.files)
+    contexts = analysis_contexts(graph)
     pending = [
         row
         for row in record["analyses"]
-        if row.get("status") == "current" and row.get("source_identity") == source_id
+        if row.get("status") == "current"
+        and (
+            row.get("source_identity") == source_id
+            or row.get("analysis_context") == contexts(row.get("body", {}).get("scope", []))
+        )
     ]
     imported = 0
     remapped: dict[str, str] = {}

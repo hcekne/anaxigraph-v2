@@ -95,6 +95,9 @@ Modules containing only documentation, comments or `pass` are observed as inert:
 can have empty capabilities, and Fresh Eyes retains their coverage without inventing requirements.
 Capability and contract statements must be behavior-only; source references belong in separate
 evidence fields. Older briefs that leak implementation identities are marked stale individually.
+Portable analyses can survive unrelated documentation or Python changes when their rebuilt scoped
+inputs match exactly. Seed data, configuration, frontend resources and cited documents remain guarded;
+older records without that resource-context proof require a complete source match.
 
 The same workflows are available to coding agents through MCP and the CLI:
 
