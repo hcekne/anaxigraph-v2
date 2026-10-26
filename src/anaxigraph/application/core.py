@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import time
 from collections import Counter
 from dataclasses import asdict, replace
@@ -14,8 +16,13 @@ from anaxigraph.analysis.changes import change_review
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
 from anaxigraph.application import records, reviews
-from anaxigraph.application.context import _bounds, context_fingerprints
+from anaxigraph.application.context import (
+    _bounds,
+    context_fingerprints,
+    dependency_implementation_fingerprints,
+)
 from anaxigraph.contracts import Graph
+from anaxigraph.evidence import Evidence
 from anaxigraph.indexing import IndexSession
 from anaxigraph.storage import Store
 from anaxigraph.workflows.engine import WorkflowRunner
@@ -32,6 +39,12 @@ class Application:
             raise ValueError("Repository root must be a directory")
         self.store = Store(database or self.root / ".anaxigraph-v2" / "knowledge.sqlite")
         self.indexer = IndexSession(self.root, excluded=excluded)
+        self.evidence = Evidence(
+            self.root,
+            enabled=os.environ.get("ANAXIGRAPH_EVIDENCE", "on") != "off",
+            arm=os.environ.get("ANAXIGRAPH_EXPERIMENT_ARM", "unassigned"),
+            experiment_id=os.environ.get("ANAXIGRAPH_EXPERIMENT_ID"),
+        )
         self._graph_cache: tuple[tuple[int, ...], Graph] | None = None
 
     def _current(self) -> Graph:
@@ -42,6 +55,7 @@ class Application:
         if graph is None:
             raise ValueError("No map for this checkout; run scan first")
         contexts = context_fingerprints(graph)
+        implementations = dependency_implementation_fingerprints(graph)
         nodes = []
         for node in graph.nodes:
             data = dict(node.data)
@@ -51,6 +65,12 @@ class Application:
                 or annotation.get("annotation_contract") != ANNOTATION_CONTRACT_VERSION
             ):
                 data["annotation_status"] = "stale"
+            if annotation and node.kind == "module":
+                prior = annotation.get("dependency_implementation_fingerprint")
+                data["dependency_implementation_changed"] = (
+                    prior != implementations[node.path] if prior is not None else None
+                )
+                data["behavioral_validation"] = "not_independently_verified"
             nodes.append(replace(node, data=data))
         current = replace(graph, nodes=tuple(nodes))
         if self.store.knowledge_token(str(self.root)) == token:
@@ -141,7 +161,15 @@ class Application:
         for node in nodes[offset : offset + limit]:
             data = {
                 key: node.data[key]
-                for key in ("loc", "function_count", "parse_status", "is_test", "annotation_status")
+                for key in (
+                    "loc",
+                    "function_count",
+                    "parse_status",
+                    "is_test",
+                    "annotation_status",
+                    "dependency_implementation_changed",
+                    "behavioral_validation",
+                )
                 if key in node.data
             }
             annotation = node.data.get("annotation")
@@ -174,6 +202,7 @@ class Application:
             if row is None:
                 raise ValueError("Saved review not found")
             row = self._review_state(row, graph)
+            self.evidence.consulted(entity_id, graph.snapshot.id)
             return {
                 "entity": {
                     "id": entity_id,
@@ -204,10 +233,15 @@ class Application:
                     None,
                 )
                 entity["data"]["annotation_status"] = owner.data.get("annotation_status", "missing")
+        self.evidence.consulted(entity_id, graph.snapshot.id)
         return result
 
     def prepare_change(
-        self, task: str, limit: int = 12, baseline_id: str | None = None
+        self,
+        task: str,
+        limit: int = 12,
+        baseline_id: str | None = None,
+        continue_task: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(task, str) or not task.strip() or len(task) > 4000:
             raise ValueError("task must be nonempty text of at most 4,000 characters")
@@ -221,12 +255,32 @@ class Application:
         }
         for match in matches:
             match["annotation_status"] = statuses.get(match["path"], "missing")
-        pinned = self.store.pin_baseline(str(self.root), baseline_id)
-        return prepare(graph, matches, task) | {
+        task_key = hashlib.sha256(" ".join(task.casefold().split()).encode()).hexdigest()
+        pinned = self.store.pin_baseline(
+            str(self.root),
+            baseline_id,
+            task_key=task_key,
+            revision=graph.snapshot.revision,
+            continue_task=continue_task,
+        )
+        result = prepare(graph, matches, task) | {
             "baseline_id": pinned,
             "baseline_basis": "pinned-change-baseline",
-            "baseline_note": "Preserved across scans. Supply a baseline_id to begin a new comparison.",
+            "task_key": task_key,
+            "baseline_note": "Preserved for this task and HEAD. A new task or HEAD starts a new baseline; continue_task explicitly keeps the existing change.",
         }
+        result["task_id"] = self.evidence.start_task(
+            task, graph.snapshot.revision, graph.snapshot.id, pinned, continue_task=continue_task
+        )
+        self.evidence.record(
+            "context_supplied",
+            {
+                "snapshot_id": graph.snapshot.id,
+                "operation": "prepare_change",
+                "entity_ids": [item["id"] for item in result["likely_owners"]],
+            },
+        )
+        return result
 
     def assess_plan(self, task: str, files: list[str]) -> dict[str, Any]:
         if not isinstance(files, list) or not files or len(files) > 30:
@@ -271,7 +325,7 @@ class Application:
         previous = self.store.load_graph(str(self.root), selected) if selected else None
         if selected and previous is None:
             raise ValueError("Baseline must identify a retained snapshot of this checkout")
-        return change_review(graph, previous, receipts) | {
+        result = change_review(graph, previous, receipts) | {
             "baseline_id": selected,
             "baseline_basis": "explicit"
             if baseline_id
@@ -284,6 +338,20 @@ class Application:
                 else ("previous scan" if selected else "no saved baseline")
             ),
         }
+
+        self.evidence.outcome(
+            "validation_reported",
+            graph.snapshot.id,
+            receipts,
+            "Supplied checks and structural comparison; not independent correctness proof.",
+        )
+        return result
+
+    def trial_evidence(self, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        return {"summary": self.evidence.summary(), "events": self.evidence.events(limit, offset)}
+
+    def export_evidence(self) -> dict[str, Any]:
+        return self.evidence.export()
 
     def analysis_request(
         self, kind: str, scope: list[str] | None = None, **options: Any

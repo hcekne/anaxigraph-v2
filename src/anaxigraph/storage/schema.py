@@ -1,6 +1,6 @@
 """The unpublished V2 schema: canonical sets plus small mutable indexes."""
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS checkouts (
 );
 CREATE TABLE IF NOT EXISTS baselines (
     root TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL,
+    task_key TEXT, revision TEXT,
     FOREIGN KEY(root, snapshot_id) REFERENCES snapshots(root, id)
 );
 CREATE TABLE IF NOT EXISTS knowledge_versions (

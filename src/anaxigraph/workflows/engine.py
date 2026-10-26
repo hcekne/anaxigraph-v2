@@ -104,6 +104,9 @@ class WorkflowRunner:
         if progress + len(body) > 20_000_000:
             raise ValueError("Workflow progress exceeds its aggregate 20 MB budget")
         retained = [self.application.store.path]
+        evidence_path = self.directory.parent / "trial.sqlite"
+        if evidence_path.exists():
+            retained.append(evidence_path)
         record_directory = self.application.root / "anaxigraph"
         if record_directory.is_dir():
             retained.extend(p for p in record_directory.iterdir() if p.is_file())
@@ -180,6 +183,7 @@ class WorkflowRunner:
             "error": run.get("error"),
             "reconciliation": run.get("reconciliation"),
             "export_error": run.get("export_error"),
+            "evidence_error": run.get("evidence_error"),
             "record_exported": run.get("record_exported", False),
             "committed_pushed": False,
         }
@@ -397,6 +401,7 @@ class WorkflowRunner:
             reviewers = [_selected_worker(x) for x in run["config"]["review_passes"]]
             pipeline = {"worker": selected, "review_passes": reviewers}
             if self.application.analysis_saved(request["request_id"], pipeline):
+                self._record_call(run, batch, request, selected, "reused", 0, reused=True)
                 with _MUTEX:
                     batch["status"], batch["reused"] = "completed", True
                     self._save(run)
@@ -405,16 +410,9 @@ class WorkflowRunner:
             last_error = None
             for candidate in candidates:
                 try:
-                    result = self.provider(
-                        request, candidate, timeout=run["config"]["timeout_seconds"]
-                    )
+                    result = self._call(run, batch, request, candidate)
                     for reviewer in reviewers:
-                        result = self.provider(
-                            request,
-                            reviewer,
-                            timeout=run["config"]["timeout_seconds"],
-                            draft=result,
-                        )
+                        result = self._call(run, batch, request, reviewer, draft=result)
                     execution = {
                         "pipeline": pipeline,
                         "worker": candidate,
@@ -436,6 +434,64 @@ class WorkflowRunner:
             with _MUTEX:
                 batch["status"], batch["error"] = "failed", str(error)[:500]
                 self._save(run)
+
+    def _call(self, run, batch, request, worker, *, draft=None):
+        started = time.monotonic()
+        try:
+            result = self.provider(
+                request,
+                worker,
+                timeout=run["config"]["timeout_seconds"],
+                **({"draft": draft} if draft is not None else {}),
+            )
+        except Exception:
+            self._record_call(run, batch, request, worker, "failed", time.monotonic() - started)
+            raise
+        usage = result.pop("_anaxigraph_usage", None)
+        self._record_call(
+            run,
+            batch,
+            request,
+            worker,
+            "completed",
+            time.monotonic() - started,
+            usage=usage,
+            review=draft is not None,
+        )
+        return result
+
+    def _record_call(
+        self,
+        run,
+        batch,
+        request,
+        worker,
+        status,
+        elapsed,
+        *,
+        usage=None,
+        reused=False,
+        review=False,
+    ):
+        evidence = getattr(self.application, "evidence", None)
+        if evidence is None:
+            return
+        try:
+            evidence.model_call(
+                worker["provider"],
+                worker["model"],
+                request["kind"] + (":review" if review else ""),
+                status,
+                elapsed,
+                usage=usage,
+                request_id=request["request_id"],
+                reused=reused,
+                attempt=batch["attempts"],
+            )
+        except (ValueError, OSError) as error:
+            # Do not pay for another model call because the separate ledger is full.
+            with _MUTEX:
+                run["evidence_error"] = str(error)[:300]
 
     def _product(self, run: dict[str, Any]) -> None:
         children = [

@@ -18,6 +18,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from anaxigraph.evidence import provider_usage
+
 NO_TOOLS = (
     "shell_tool",
     "multi_agent",
@@ -117,6 +119,7 @@ def _command(provider: str, model: str, directory: Path) -> tuple[list[str], Pat
                 "read-only",
                 "--color",
                 "never",
+                "--json",
                 "--output-last-message",
                 str(directory / "result.json"),
             ]
@@ -237,13 +240,14 @@ def execute(
             process = subprocess.Popen(
                 command,
                 stdin=source,
-                stdout=output if result_path is None else subprocess.DEVNULL,
+                stdout=output,
                 stderr=subprocess.DEVNULL,
                 cwd=directory,
                 env=environment,
                 start_new_session=True,
             )
-            _wait(process, [result_path] if result_path is not None else [output_path], timeout)
+            paths = [output_path] + ([result_path] if result_path is not None else [])
+            _wait(process, paths, timeout)
         if process.returncode:
             # Do not publish CLI stderr: it can contain credentials or complete source prompts.
             raise ValueError(
@@ -252,4 +256,9 @@ def execute(
         chosen = result_path if result_path is not None else output_path
         if not chosen.exists() or chosen.stat().st_size > OUTPUT_BYTES:
             raise ValueError("Worker did not produce a bounded final response")
-        return _result(chosen.read_text(encoding="utf-8"))
+        result = _result(chosen.read_text(encoding="utf-8"))
+        # Read transport metadata, never a usage claim generated inside the answer.
+        result["_anaxigraph_usage"] = provider_usage(
+            provider, output_path.read_text(encoding="utf-8")
+        )
+        return result

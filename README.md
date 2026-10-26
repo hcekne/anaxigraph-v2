@@ -49,8 +49,10 @@ Use this stdio configuration, replacing both absolute paths:
 
 The everyday loop is `scan` → `prepare_change` → focused `inspect` → edit → `scan` →
 `validate_change`. `assess_plan` checks proposed file placement before a substantial change.
-Preparation pins the change's baseline across subsequent scans. Pass `baseline_id` explicitly to
-start a new comparison; validation reports the baseline and candidate identities.
+Preparation pins the baseline for the current task and Git HEAD. A new task or HEAD starts a fresh
+comparison; repeated scans within the same task retain it. Use `continue_task=true` (CLI
+`--continue-task`) to explicitly continue across those changes, or select `baseline_id` directly.
+Validation reports both comparison identities.
 `modules` lists the inventory; `reviews` finds saved proposals. The server never executes target
 project code. Test/type/lint receipts supplied by an agent or CI are attributed reports, bound to
 the exact snapshot ID. Missing checks remain unchecked; stale receipts cannot pass the candidate.
@@ -164,9 +166,10 @@ are fingerprinted but **not parsed** yet. Missing references do not establish de
 assessment is advisory; behavioral correctness and architectural usefulness require real review.
 
 Unchanged files reuse verified fingerprints and parser observations within the service. Annotation
-writes update one search document. Dependency freshness uses normalized Python syntax, so a
-dependency's comment-only edit does not invalidate its callers. Meaningful implementation changes
-still conservatively invalidate dependent annotations. Fresh CLI processes start with cold caches.
+writes update one search document. Dependency freshness uses public signatures, docstrings and
+exports. Body-only changes preserve caller annotations and separately flag changed implementations;
+preserved annotations do not prove unchanged behavior. Own-source edits still invalidate that module.
+Fresh CLI processes start with cold caches.
 
 ## Carry understanding through Git
 
@@ -200,8 +203,17 @@ the objective. See the [change request and acceptance checks](docs/change-reques
 
 ## Components and tests
 
-Seven components have explicit boundaries: contracts, indexing, storage, analysis, workflow execution,
-application and interfaces. See [architecture and packaging direction](docs/architecture.md).
+Eight components have explicit boundaries: contracts, indexing, storage, analysis, workflow execution,
+local evidence, application and interfaces. See [architecture and packaging direction](docs/architecture.md).
+
+Task preparation, explicitly inspected entities, validation reports and actual model calls produce
+bounded local evidence in `.anaxigraph-v2/trial.sqlite` (5 MB). Supplied context and requested
+inspections are distinct; neither proves the agent understood a result. Codex/Claude CLI usage is
+captured when reported; missing tokens or dollar costs remain unknown. Read or export it with
+`anaxigraph evidence` / `anaxigraph evidence --export`, or the equivalent MCP/HTTP tools. No external
+telemetry is sent; `ANAXIGRAPH_EVIDENCE=off` disables recording. The separate
+[Snow Rankings experiment](docs/snow-rankings-experiment.md) compares the same product tasks with
+and without AnaxiGraph using the same GPT-6.1-Sol/xhigh coding model.
 
 From this folder:
 

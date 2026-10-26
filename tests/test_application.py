@@ -215,7 +215,7 @@ def test_evidence_uses_physical_lines_not_code_line_count(app: Application) -> N
     assert app.submit_analysis(request["request_id"], result)["saved"]
 
 
-def test_dependency_edits_invalidate_unchanged_caller_annotation(app: Application) -> None:
+def test_dependency_body_edit_preserves_caller_interface_understanding(app: Application) -> None:
     annotate(app)
     app.prepare_change("invoice")
     assert app.status()["annotations"]["current"] == 2
@@ -225,13 +225,20 @@ def test_dependency_edits_invalidate_unchanged_caller_annotation(app: Applicatio
     app.scan()
     status = app.status()
     assert status["snapshot"]["id"] != previous
-    assert status["annotations"] == {"current": 0, "stale": 2, "missing": 0}
+    assert status["annotations"] == {"current": 1, "stale": 1, "missing": 0}
     modules = {node["path"]: node for node in app.modules()["items"]}
-    assert modules["service.py"]["data"]["annotation_status"] == "stale"
+    assert modules["service.py"]["data"]["annotation_status"] == "current"
     assert modules["persistence.py"]["data"]["annotation_status"] == "stale"
     brief = app.prepare_change("invoice")
     assert brief["contracts"]
-    assert all(contract["annotation_status"] == "stale" for contract in brief["contracts"])
+    assert {contract["annotation_status"] for contract in brief["contracts"]} == {
+        "current",
+        "stale",
+    }
+    assert (
+        app.inspect("service.py")["entity"]["data"]["behavioral_validation"]
+        == "not_independently_verified"
+    )
     with pytest.raises(ValueError, match="current behavior|missing/stale"):
         app.analysis_request("fresh-eyes")
     comparison = app.validate_change()
@@ -450,7 +457,7 @@ def test_change_baseline_survives_followup_scans_and_restart(app: Application) -
         path.write_text(path.read_text() + f"\nnew_value_{n} = {n}\n")
         restarted.scan()
     assert restarted.store.stats(str(app.root))["snapshots"] == 3
-    assert restarted.prepare_change("Continue")["baseline_id"] == baseline
+    assert restarted.prepare_change("Continue", continue_task=True)["baseline_id"] == baseline
     current = restarted.status()["snapshot"]["id"]
     assert restarted.prepare_change("Next change", baseline_id=current)["baseline_id"] == current
     assert restarted.validate_change()["changed_total"] == 0
@@ -469,4 +476,4 @@ def test_comment_only_dependency_edit_does_not_stale_callers(app: Application) -
     assert app.inspect("persistence.py")["entity"]["data"]["annotation_status"] == "stale"
     persistence.write_text(persistence.read_text().replace("'id': 1", "'id': 2"))
     app.scan()
-    assert app.inspect("service.py")["entity"]["data"]["annotation_status"] == "stale"
+    assert app.inspect("service.py")["entity"]["data"]["annotation_status"] == "current"

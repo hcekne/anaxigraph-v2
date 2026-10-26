@@ -58,7 +58,15 @@ class KnowledgeStore(Protocol):
 
     def load_graph(self, root: str, snapshot_id: str | None = None) -> Graph | None: ...
 
-    def pin_baseline(self, root: str, snapshot_id: str | None = None) -> str: ...
+    def pin_baseline(
+        self,
+        root: str,
+        snapshot_id: str | None = None,
+        *,
+        task_key: str | None = None,
+        revision: str | None = None,
+        continue_task: bool = False,
+    ) -> str: ...
 
     def annotate(
         self,

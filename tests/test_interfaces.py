@@ -189,6 +189,8 @@ def test_mcp_tools_dispatch_the_same_arguments() -> None:
             "export_record",
             "import_record",
             "portable_status",
+            "trial_evidence",
+            "export_evidence",
         }
         await server.call_tool("prepare_change", {"task": "Add export", "limit": 3})
         await server.call_tool("analysis_request", {"kind": "fresh-eyes"})

@@ -43,8 +43,12 @@ def create_mcp(application: Any) -> FastMCP:
         return application.inspect(entity_id, limit)
 
     @server.tool()
-    def prepare_change(task: str, limit: int = 12, baseline_id: str | None = None) -> dict:
+    def prepare_change(
+        task: str, limit: int = 12, baseline_id: str | None = None, continue_task: bool = False
+    ) -> dict:
         """Find existing responsibilities, reuse opportunities and checks before editing."""
+        if continue_task:
+            return application.prepare_change(task, limit, baseline_id, True)
         if baseline_id:
             return application.prepare_change(task, limit, baseline_id)
         return application.prepare_change(task, limit)
@@ -116,5 +120,15 @@ def create_mcp(application: Any) -> FastMCP:
     def portable_status() -> dict:
         """Distinguish local map, exported portable record and commit/push state."""
         return application.portable_status()
+
+    @server.tool()
+    def trial_evidence(limit: int = 50, offset: int = 0) -> dict:
+        """Read local task/context/usage evidence; unknown costs remain unknown."""
+        return application.trial_evidence(limit, offset)
+
+    @server.tool()
+    def export_evidence() -> dict:
+        """Export bounded local trial evidence without source or model transcripts."""
+        return application.export_evidence()
 
     return server

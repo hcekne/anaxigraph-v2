@@ -79,9 +79,9 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 3, 4, SCHEMA_VERSION):
+            if version not in (0, 3, 4, 5, SCHEMA_VERSION):
                 raise ValueError(f"Unsupported knowledge-store schema: {version}")
-            if version in (0, 3, 4):
+            if version in (0, 3, 4, 5):
                 if version:
                     self._backup_before_migration(db)
                 before = (
@@ -89,6 +89,13 @@ class Store:
                     if version == 3
                     else ""
                 )
+                baseline_columns = {row[1] for row in db.execute("PRAGMA table_info(baselines)")}
+                if baseline_columns:
+                    before += "".join(
+                        f"ALTER TABLE baselines ADD COLUMN {name} TEXT;\n"
+                        for name in ("task_key", "revision")
+                        if name not in baseline_columns
+                    )
                 after = (
                     "INSERT INTO reviews(root,id,kind,snapshot_id,result,created_at,updated_at) "
                     "SELECT root,id,kind,snapshot_id,result,created_at,updated_at FROM reviews_v3;\n"
@@ -151,23 +158,40 @@ class Store:
         state = self.path.stat()
         return (state.st_dev, state.st_ino, state.st_size, state.st_mtime_ns, state.st_ctime_ns)
 
-    def pin_baseline(self, root: str, snapshot_id: str | None = None) -> str:
-        """Keep one explicit change baseline independently of subsequent scans.
+    def pin_baseline(
+        self,
+        root: str,
+        snapshot_id: str | None = None,
+        *,
+        task_key: str | None = None,
+        revision: str | None = None,
+        continue_task: bool = False,
+    ) -> str:
+        """Pin one change, rebasing for a new declared task or base revision.
 
-        With no ID, reuse the active baseline or pin the current snapshot. Supplying
-        an ID explicitly starts/rebases a change; unknown and other-checkout IDs fail.
-        At most one extra graph is retained, rather than unbounded task history.
+        Low-level callers without task identity keep explicit-pin behavior. Application
+        callers supply the task and HEAD; continuation deliberately retains the pin.
         """
         root = _root(root)
         if snapshot_id is not None and (not isinstance(snapshot_id, str) or not snapshot_id):
             raise ValueError("Baseline ID must be a nonempty snapshot identity")
+        if type(continue_task) is not bool:
+            raise ValueError("continue_task must be a boolean")
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            old = db.execute("SELECT snapshot_id FROM baselines WHERE root=?", (root,)).fetchone()
-            if snapshot_id is None and old:
-                return old[0]
+            old = db.execute("SELECT * FROM baselines WHERE root=?", (root,)).fetchone()
             current = self._current(db, root)
             selected = snapshot_id or (current["current_id"] if current else None)
+            if (
+                snapshot_id is None
+                and old
+                and (
+                    continue_task
+                    or task_key is None
+                    or (old["task_key"] == task_key and old["revision"] == revision)
+                )
+            ):
+                selected = old["snapshot_id"]
             if (
                 not selected
                 or db.execute(
@@ -176,12 +200,18 @@ class Store:
                 is None
             ):
                 raise ValueError("Baseline must identify a retained snapshot of this checkout")
-            if old is None or old[0] != selected:
-                db.execute(
-                    "INSERT INTO baselines VALUES (?,?) ON CONFLICT(root) "
-                    "DO UPDATE SET snapshot_id=excluded.snapshot_id",
-                    (root, selected),
-                )
+            db.execute(
+                "INSERT INTO baselines(root,snapshot_id,task_key,revision) VALUES (?,?,?,?) "
+                "ON CONFLICT(root) DO UPDATE SET snapshot_id=excluded.snapshot_id,"
+                "task_key=excluded.task_key,revision=excluded.revision",
+                (
+                    root,
+                    selected,
+                    task_key if task_key is not None else (old["task_key"] if old else None),
+                    revision if task_key is not None else (old["revision"] if old else revision),
+                ),
+            )
+            if old is None or old["snapshot_id"] != selected:
                 keep = tuple(
                     dict.fromkeys(
                         x for x in (current["current_id"], current["previous_id"], selected) if x

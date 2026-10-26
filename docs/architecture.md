@@ -16,7 +16,7 @@ The only copied product data is a compact selection of the existing 133 pattern 
 scoring, planning and execution engines were not copied. The Apache license is retained. The
 dashboard borrows visual direction, with a new small implementation.
 
-## Seven components and one application
+## Eight components and one application
 
 ```mermaid
 flowchart TB
@@ -41,6 +41,7 @@ flowchart TB
 | `analysis/` | Source/behavior evidence packets, complete-result validation and bounded guidance | SQL, UI, model-provider state or reading project files |
 | `application/` | Shared facade, review operations and portable exchange; guard source/context identity and publish validated results | A separate store, parser, provider engine or transport-specific reasoning |
 | `workflows/` | Durable batch scheduling, bounded provider execution, ordered review passes and retries | Source indexing, SQL, architectural reasoning outside the analysis contract |
+| `evidence/` | Bounded local task, consultation, outcome and provider-usage records | Architectural reasoning, raw prompts/source, external telemetry or invented costs |
 | `interfaces/` | CLI, ten MCP tools, HTTP and dashboard over the same application | Independent ownership inference or analysis state |
 
 These are logical Python packages with explicit records and functions, installed together. Separate
@@ -70,9 +71,10 @@ another copy of source/results. Interrupted runs retry unfinished work; compatib
 are reused only for the requested pipeline. Final reconciliation verifies module/catalogue coverage
 or the blind product hierarchy. It is not an extra unverified claim that a review happened.
 
-Annotation validity includes its own source and normalized syntax of resolved outgoing dependencies.
-Comment-only dependency edits preserve callers; meaningful syntax changes conservatively invalidate
-them. This includes implementation bodies, rather than assuming signatures describe all behavior.
+Annotation validity includes its own source and public interfaces of resolved outgoing dependencies.
+Comment and body-only dependency edits preserve callers; changed signatures, documentation and
+exports invalidate them. A separate implementation-change flag preserves behavioral uncertainty;
+interface freshness never establishes behavior preservation.
 An annotation contract version also controls reuse. This is not a guarantee of
 complete dynamic-call invalidation. Stored annotations distinguish agent interpretations from
 source observations; contracts distinguish declared evidence from inference. Reviews remain proposals.
@@ -102,7 +104,7 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 - Root identity is the exact resolved checkout. Linked worktrees do not share mutable analysis.
 - Content, revision and analysis identity pin snapshots, including eligible untracked source.
 - Current graph, one previous graph and one pinned change baseline; repeated unchanged scans do not
-  append history. The baseline changes only when explicitly selected.
+  append history. A new task or Git HEAD repins by default; explicit continuation preserves the pin.
 - One canonical module annotation contains its sentence, paragraph, function sentences and contracts.
   Search indexes compact names/overviews; it does not copy full essays or source bodies.
 - Canonical node and interned-edge sets are compressed inside SQLite. Small source indexes support

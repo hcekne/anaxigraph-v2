@@ -15,7 +15,11 @@ from anaxigraph.analysis import (
 )
 from anaxigraph.analysis.packets import catalogue
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION, input_identity
-from anaxigraph.application.context import _bounds, context_fingerprints
+from anaxigraph.application.context import (
+    _bounds,
+    context_fingerprints,
+    dependency_implementation_fingerprints,
+)
 from anaxigraph.contracts import Graph
 from anaxigraph.indexing import capture_sources
 
@@ -63,6 +67,7 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
         )
         written, updated = 0, {}
         contexts = context_fingerprints(graph)
+        implementations = dependency_implementation_fingerprints(graph)
         for annotation in result["annotations"]:
             node = next(n for n in graph.nodes if n.id == annotation["node_id"])
             value = dict(annotation) | {
@@ -70,6 +75,7 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
                 "basis": "agent-reported-interpretation",
                 "source_snapshot": graph.snapshot.id,
                 "context_fingerprint": contexts[node.path],
+                "dependency_implementation_fingerprint": implementations[node.path],
                 "annotation_contract": ANNOTATION_CONTRACT_VERSION,
                 "request_id": request_id,
                 "execution": result.get("execution"),
@@ -106,6 +112,8 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
                         "annotation": updated[node.id],
                         "annotation_status": "current",
                         "annotation_fingerprint": graph.snapshot.files[node.path],
+                        "dependency_implementation_changed": False,
+                        "behavioral_validation": "not_independently_verified",
                     },
                 )
                 if node.id in updated

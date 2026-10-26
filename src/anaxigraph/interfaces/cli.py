@@ -46,6 +46,7 @@ def parser() -> argparse.ArgumentParser:
         ("workflow-config", "Read or save model choices and worker settings"),
         ("export", "Write the current portable record into anaxigraph/"),
         ("import", "Reuse compatible analyses from anaxigraph/"),
+        ("evidence", "Read or export local task and model-usage evidence"),
         ("serve", "Open the local dashboard API"),
         ("mcp", "Serve the shared application over MCP stdio"),
     ):
@@ -66,6 +67,11 @@ def parser() -> argparse.ArgumentParser:
             else:
                 command.add_argument("--limit", type=int, default=12)
                 command.add_argument("--baseline-id", help="Explicitly pin a new change baseline")
+                command.add_argument(
+                    "--continue-task",
+                    action="store_true",
+                    help="Continue the existing task across new wording or commits",
+                )
         elif name == "validate":
             command.add_argument("--receipts", type=Path, help="JSON array of check receipts")
             command.add_argument("--baseline-id", help="Compare against this retained snapshot")
@@ -93,6 +99,10 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument(
                 "--file", type=Path, help="Save model and parallelism settings JSON"
             )
+        elif name == "evidence":
+            command.add_argument("--export", action="store_true")
+            command.add_argument("--limit", type=int, default=50)
+            command.add_argument("--offset", type=int, default=0)
         elif name == "serve":
             command.add_argument("--host", default="127.0.0.1")
             command.add_argument("--port", type=int, default=8766)
@@ -115,6 +125,8 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "inspect":
         return application.inspect(args.entity_id, args.limit)
     if args.command == "prepare":
+        if args.continue_task:
+            return application.prepare_change(args.task, args.limit, args.baseline_id, True)
         if args.baseline_id:
             return application.prepare_change(args.task, args.limit, args.baseline_id)
         return application.prepare_change(args.task, args.limit)
@@ -143,6 +155,12 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "workflow-config":
         config = _read_json(args.file, dict) if args.file else None
         return application.workflow_configure(config)
+    if args.command == "evidence":
+        return (
+            application.export_evidence()
+            if args.export
+            else application.trial_evidence(args.limit, args.offset)
+        )
     if args.command in {"export", "import"}:
         return getattr(application, f"{args.command}_record")()
     raise ValueError(f"Unsupported application command: {args.command}")

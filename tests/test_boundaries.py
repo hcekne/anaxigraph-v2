@@ -48,7 +48,8 @@ def test_internal_dependencies_follow_component_contracts(path):
         "indexing": {"contracts", "indexing"},
         "storage": {"contracts", "storage"},
         "analysis": {"contracts", "analysis"},
-        "workflows": {"analysis", "workflows"},
+        "evidence": {"evidence"},
+        "workflows": {"analysis", "workflows", "evidence"},
         "application": {
             "metadata",
             "contracts",
@@ -57,6 +58,7 @@ def test_internal_dependencies_follow_component_contracts(path):
             "analysis",
             "workflows",
             "application",
+            "evidence",
         },
         "interfaces": {"metadata", "application", "interfaces"},
     }

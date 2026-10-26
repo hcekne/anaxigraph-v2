@@ -33,6 +33,7 @@ ANNOTATION_FIELDS = {
     "provenance",
     "execution",
     "annotation_contract",
+    "dependency_implementation_fingerprint",
 }
 
 

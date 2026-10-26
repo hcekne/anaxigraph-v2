@@ -142,7 +142,7 @@ def test_annotation_planner_only_selects_missing_or_stale_modules():
 @pytest.mark.parametrize(
     "symbol,behavior",
     [
-        ("Store", "Delegate persistence to Store."),
+        ("InvoiceStore", "Delegate persistence to InvoiceStore."),
         ("create_invoice", "Use create_invoice to accept the request."),
         ("validate", "Use `validate` before accepting input."),
         ("validate", "Call validate() before accepting input."),

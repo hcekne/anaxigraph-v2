@@ -12,6 +12,7 @@ from collections import Counter
 import pytest
 
 from anaxigraph.application import Application
+from anaxigraph.evidence import Evidence, provider_usage
 from anaxigraph.workflows.engine import WorkflowRunner
 from anaxigraph.workflows.providers import _result, _verified, execute
 
@@ -250,7 +251,9 @@ else:
     payload = sys.stdin.read()
     assert 'BEHAVIOR ONLY' in payload and 'secret.py' not in payload
     target = pathlib.Path(sys.argv[sys.argv.index('--output-last-message')+1])
-    target.write_text(json.dumps({'producer':'synthetic-executable','alternatives':[]}))
+    assert '--json' in sys.argv
+    target.write_text(json.dumps({'producer':'synthetic-executable','alternatives':[], '_anaxigraph_usage':{'cost_usd':999}}))
+    print(json.dumps({'type':'turn.completed','usage':{'input_tokens':101,'cached_input_tokens':80,'output_tokens':7}}))
 """)
     executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
@@ -263,10 +266,11 @@ else:
         "response_schema": {},
         "scope": ["secret.py"],
     }
-    assert (
-        execute(request, {"provider": "codex", "model": "fixture"})["producer"]
-        == "synthetic-executable"
-    )
+    result = execute(request, {"provider": "codex", "model": "fixture"})
+    assert result["producer"] == "synthetic-executable"
+    assert result["_anaxigraph_usage"]["input_tokens"] == 101
+    assert result["_anaxigraph_usage"]["output_tokens"] == 7
+    assert result["_anaxigraph_usage"]["cost_usd"] is None
     _verified.cache_clear()
 
 
@@ -278,6 +282,104 @@ def test_worker_transport_parses_only_json_objects_and_claude_envelopes():
     )
     with pytest.raises(ValueError):
         _result("[]")
+
+
+def test_claude_actual_subprocess_usage_is_retained_without_result_text(tmp_path, monkeypatch):
+    executable = tmp_path / "claude"
+    executable.write_text("""#!/usr/bin/env python3
+import json, sys
+if '--help' in sys.argv:
+    print('--tools --restricted --strict-mcp-config --setting-sources --system-prompt --no-session-persistence --safe-mode')
+else:
+    assert '--tools' in sys.argv and '--safe-mode' in sys.argv
+    print(json.dumps({'type':'result','result':'{"producer":"synthetic-claude"}', 'total_cost_usd':0.015, 'usage':{'input_tokens':20,'cache_read_input_tokens':80,'cache_creation_input_tokens':0,'output_tokens':5}}))
+""")
+    executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    _verified.cache_clear()
+    result = execute(
+        {"kind": "probe", "packet": {}, "response_schema": {}},
+        {"provider": "claude", "model": "fixture"},
+    )
+    assert result["producer"] == "synthetic-claude"
+    assert result["_anaxigraph_usage"]["input_tokens"] == 100
+    assert result["_anaxigraph_usage"]["cost_usd"] == 0.015
+    assert result["_anaxigraph_usage"]["cost_source"] == "provider-reported-estimate"
+    _verified.cache_clear()
+
+
+def test_workflow_records_each_fallback_review_and_reuse_without_saving_usage_in_answers(tmp_path):
+    application = app(tmp_path, count=1)
+    application.evidence = Evidence(tmp_path, arm="treatment", experiment_id="fixture")
+    task = application.evidence.start_task("Implement ranker", "start", "before", "baseline")
+
+    def provider(request, worker, *, draft=None, **_kwargs):
+        assert draft is None or "_anaxigraph_usage" not in draft
+        if worker["model"] == "weak":
+            raise ValueError("Synthetic transport failure")
+        result = answer(request)
+        transport = {"type": "turn.completed", "usage": {"input_tokens": 50, "output_tokens": 5}}
+        if worker["provider"] == "claude":
+            transport = {
+                "type": "result",
+                "total_cost_usd": 0.02,
+                "usage": {
+                    "input_tokens": 10,
+                    "cache_read_input_tokens": 20,
+                    "cache_creation_input_tokens": 0,
+                    "output_tokens": 5,
+                },
+            }
+        result["_anaxigraph_usage"] = provider_usage(worker["provider"], transport)
+        return result
+
+    config = {
+        "stages": {
+            "annotate": {
+                "provider": "codex",
+                "model": "weak",
+                "fallbacks": [{"provider": "codex", "model": "strong"}],
+            }
+        },
+        "review_passes": [{"provider": "claude", "model": "reviewer"}],
+    }
+    runner = WorkflowRunner(application, provider)
+    run = runner.start("mapping", config, background=False)
+    assert run["status"] == "completed", run
+    events = [
+        row for row in application.evidence.events(100)["items"] if row["kind"] == "model_call"
+    ]
+    assert [row["payload"]["status"] for row in events] == ["failed", "completed", "completed"]
+    assert [row["payload"]["model"] for row in events] == ["weak", "strong", "reviewer"]
+    assert all(row["task_id"] == task for row in events)
+    assert events[0]["payload"]["cost_usd"] is None
+    assert events[1]["payload"]["input_tokens"] == 50
+    assert events[2]["payload"]["stage"] == "annotate:review"
+    assert events[2]["payload"]["cost_usd"] == 0.02
+    module = application.modules()["items"][0]["id"]
+    assert "_anaxigraph_usage" not in json.dumps(application.inspect(module))
+    repeated = runner.start("mapping", config, background=False)
+    assert repeated["status"] == "completed" and repeated["reused_batches"] == 1
+    assert application.evidence.events(100)["items"][-1]["payload"]["reused"] is True
+
+
+def test_trial_ledger_failure_does_not_trigger_another_paid_model_attempt(tmp_path):
+    application = app(tmp_path, count=1)
+    calls = []
+
+    class FullLedger:
+        def model_call(self, *args, **kwargs):
+            raise ValueError("Trial storage budget reached")
+
+    application.evidence = FullLedger()
+
+    def provider(request, _worker, **_kwargs):
+        calls.append(request["request_id"])
+        return answer(request)
+
+    result = WorkflowRunner(application, provider).start("mapping", background=False)
+    assert result["status"] == "completed", result
+    assert len(calls) == 1 and result["evidence_error"] == "Trial storage budget reached"
 
 
 def test_workflow_budget_failure_keeps_last_settings_and_removes_temporary_output(tmp_path):

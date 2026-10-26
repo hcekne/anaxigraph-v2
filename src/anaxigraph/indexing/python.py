@@ -45,6 +45,101 @@ def is_test(path: str) -> bool:
     return "tests" in p.parts or p.name.startswith("test_") or p.name.endswith("_test.py")
 
 
+def _public_surface(body: list[ast.stmt], exports: set[str] | None = None) -> list[tuple]:
+    """Static public declarations, without executable function implementations.
+
+    This is an interface identity, not proof of behavioral equivalence. The full
+    syntax digest remains available to disclose dependency implementation edits.
+    """
+    surface = []
+    for item in body:
+        name = getattr(item, "name", "")
+        public = bool(name) and (
+            (name in exports if exports is not None else not name.startswith("_"))
+            or (name.startswith("__") and name.endswith("__"))
+        )
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and public:
+            surface.append(
+                (
+                    "function",
+                    item.name,
+                    type(item).__name__,
+                    ast.dump(item.args),
+                    ast.dump(item.returns) if item.returns else None,
+                    [ast.dump(part) for part in item.decorator_list],
+                    [ast.dump(part) for part in getattr(item, "type_params", [])],
+                    item.type_comment,
+                    ast.get_docstring(item),
+                )
+            )
+        elif isinstance(item, ast.ClassDef) and public:
+            surface.append(
+                (
+                    "class",
+                    item.name,
+                    [ast.dump(part) for part in item.bases],
+                    [ast.dump(part) for part in item.keywords],
+                    [ast.dump(part) for part in item.decorator_list],
+                    [ast.dump(part) for part in getattr(item, "type_params", [])],
+                    ast.get_docstring(item),
+                    _public_surface(item.body),
+                )
+            )
+        elif isinstance(item, (ast.Assign, ast.AnnAssign)):
+            targets = item.targets if isinstance(item, ast.Assign) else [item.target]
+            names = sorted(
+                n.id
+                for target in targets
+                for n in ast.walk(target)
+                if isinstance(n, ast.Name)
+                and (n.id in exports if exports is not None else not n.id.startswith("_"))
+            )
+            if names:
+                surface.append(("binding", ",".join(names), ast.dump(item)))
+        elif isinstance(item, (ast.Import, ast.ImportFrom)):
+            names = [
+                (alias.name, alias.asname)
+                for alias in item.names
+                if (
+                    (alias.asname or alias.name.split(".")[0]) in exports
+                    if exports is not None
+                    else not (alias.asname or alias.name).startswith("_")
+                )
+            ]
+            if names:
+                surface.append(
+                    (
+                        "import",
+                        repr(names),
+                        getattr(item, "module", None),
+                        getattr(item, "level", 0),
+                    )
+                )
+    return sorted(surface, key=lambda declaration: declaration[:2])
+
+
+def interface_fingerprint(tree: ast.Module) -> str:
+    exports = None
+    for item in tree.body:
+        if isinstance(item, (ast.Assign, ast.AnnAssign)):
+            targets = item.targets if isinstance(item, ast.Assign) else [item.target]
+            if any(isinstance(target, ast.Name) and target.id == "__all__" for target in targets):
+                try:
+                    declared = ast.literal_eval(item.value)
+                    if isinstance(declared, (list, tuple)) and all(
+                        isinstance(name, str) for name in declared
+                    ):
+                        exports = set(declared)
+                except (ValueError, TypeError, SyntaxError):
+                    pass  # Dynamic exports remain outside the static guarantee.
+    value = (
+        ast.get_docstring(tree),
+        sorted(exports) if exports is not None else None,
+        _public_surface(tree.body, exports),
+    )
+    return hashlib.sha256(repr(value).encode()).hexdigest()
+
+
 @dataclass
 class Module:
     path: str
@@ -108,6 +203,7 @@ def parse_module(
     data["semantic_fingerprint"] = hashlib.sha256(
         ast.dump(tree, annotate_fields=True, include_attributes=False).encode()
     ).hexdigest()
+    data["interface_fingerprint"] = interface_fingerprint(tree)
     _Definitions(module).visit(tree)
     data["function_count"] = sum(node.kind == "function" for node in module.nodes)
     data["class_count"] = sum(node.kind in {"class", "interface"} for node in module.nodes)

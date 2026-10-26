@@ -22,6 +22,7 @@ class TaskInput(Input):
     task: str = Field(min_length=1, max_length=8000)
     limit: int = Field(default=12, ge=1, le=50)
     baseline_id: str | None = Field(default=None, max_length=200)
+    continue_task: bool = False
 
 
 class PlanInput(Input):
@@ -112,6 +113,8 @@ def create_app(application: Any) -> FastAPI:
 
     @server.post("/api/prepare")
     def prepare(body: TaskInput) -> dict:
+        if body.continue_task:
+            return application.prepare_change(body.task, body.limit, body.baseline_id, True)
         if body.baseline_id:
             return application.prepare_change(body.task, body.limit, body.baseline_id)
         return application.prepare_change(body.task, body.limit)
@@ -165,6 +168,16 @@ def create_app(application: Any) -> FastAPI:
     @server.post("/api/record/import")
     def import_record() -> dict:
         return application.import_record()
+
+    @server.get("/api/evidence")
+    def trial_evidence(
+        limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)
+    ) -> dict:
+        return application.trial_evidence(limit, offset)
+
+    @server.post("/api/evidence/export")
+    def export_evidence() -> dict:
+        return application.export_evidence()
 
     # Existing REST/assets routes win; the transport handles /mcp unchanged.
     server.mount("/", transport)

@@ -70,56 +70,25 @@ def plan_scopes(
 def _check_behaviors(graph: Graph, behaviors: list[str]) -> None:
     identities = {node.id for node in graph.nodes}
     identities.update(node.path for node in graph.nodes if node.kind == "module")
-    # Exact spelling matters: "Store" identifies the mapped class, while the
-    # ordinary verb "store" need not. Identifier boundaries avoid rejecting
-    # "storage" merely because the code contains a symbol named "store".
-    generic = {
-        "add",
-        "apply",
-        "build",
-        "check",
-        "clear",
-        "close",
-        "create",
-        "delete",
-        "find",
-        "get",
-        "index",
-        "inspect",
-        "list",
-        "load",
-        "open",
-        "parse",
-        "prepare",
-        "read",
-        "remove",
-        "run",
-        "save",
-        "search",
-        "send",
-        "set",
-        "start",
-        "stop",
-        "store",
-        "submit",
-        "update",
-        "validate",
-        "write",
-    }
+    # A dictionary word does not become an implementation leak because a function
+    # happens to use it. Reject distinctive identifier spelling, or explicit code
+    # notation for ordinary words, without maintaining an English allowlist.
     code_names = set()
     for node in graph.nodes:
         if node.kind == "external":
             continue
-        if node.name not in generic:
+        if "_" in node.name or re.search(r"[a-z0-9][A-Z]|[A-Z]{2}[a-z]|\.", node.name):
             identities.add(node.name)
-        else:
-            code_names.add(node.name)
+        code_names.add(node.name)
     # Compile one matcher per packet instead of one regex per symbol per
     # requirement. That distinction matters when thousands of symbols are mapped.
     alternatives = "|".join(re.escape(token) for token in sorted(identities) if token)
     literal = re.compile(r"(?<!\w)(?:" + alternatives + r")(?!\w)")
     names = "(?:" + "|".join(re.escape(name) for name in sorted(code_names)) + ")"
-    code = re.compile(r"(?:`|\b\w+\.)" + names + r"(?:`|\b)|\b" + names + r"\s*\(")
+    code = re.compile(
+        r"`" + names + r"`|(?<!\w)" + names + r"(?=\(|\.[A-Za-z_])"
+        r"|(?<!\w)[A-Za-z_]\w*\." + names + r"(?!\w)"
+    )
     for behavior in behaviors:
         if literal.search(behavior) or (code_names and code.search(behavior)):
             raise ValueError(
