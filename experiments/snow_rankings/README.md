@@ -4,6 +4,42 @@ This harness is independent of the installed AnaxiGraph runtime. It holds the co
 brief, external acceptance contract, synthetic seed, ordered tasks, preregistered manifest and
 bounded experiment evidence. Product architecture and implementation belong to the two app repos.
 
+## Fresh Snow Rankings V2 build
+
+The maintainer requested a new build in `~/repos/snow-rankings-v2`, using the identical original
+brief and clean seed commit `901251e`. Its private repository is `hcekne/snow-rankings-v2`; the
+earlier applications and both experiment records remain preserved. This is one new tool-assisted
+build, not a matched causal comparison with the earlier timed control.
+
+`run_build.py` uses GPT-6.1-Sol with explicit xhigh reasoning and has **no development deadline**.
+AnaxiGraph runs independently as `anaxigraph-snow-rankings-v2.service` at
+`http://127.0.0.1:18782/mcp`. Its actual analysis settings explicitly select the same model and
+reasoning, with `timeout_seconds: null`. The build first verifies real authorized MCP calls and
+independent server-side effects; successful attachment alone is insufficient.
+
+```sh
+~/.local/state/anaxigraph/experiments/snow-rankings-v2/runtime/bin/python \
+  experiments/snow_rankings/run_build.py --preflight-only
+~/.local/state/anaxigraph/experiments/snow-rankings-v2/runtime/bin/python \
+  experiments/snow_rankings/run_build.py \
+  --preflight-proof ~/.local/state/anaxigraph/experiments/snow-rankings-v2/preflight.json
+```
+
+Coding and analysis occupy separate phases. At milestones 2 and 4 the coordinator waits for whole
+mapping, every catalogue/module pair, and Fresh Eyes subsystem and final product reconciliation.
+It preserves accepted batches when retrying failures. A fresh coding session then assesses the
+saved alternatives, records accepted/rejected advice and applies useful improvements. Changed
+implementations receive another complete stable analysis. Shared acceptance failures receive
+repair attempts and remain incomplete until corrected. Git-only publication reuses compatible
+analysis and verifies current whole-product coverage without paying to regenerate the same work.
+
+Progress, coding usage and separately ingested analysis receipts live under
+`~/.local/state/anaxigraph/experiments/snow-rankings-v2`. Unknown billed costs stay unknown.
+Completed analyses are explicitly checked; a launched or interrupted workflow is never completion.
+Structural coverage is currently Python/PYI; frontend JavaScript is fingerprinted but not parsed.
+
+## Historical matched pair
+
 Copy `brief.md`, `api-contract.md`, `seed.json` and `tasks/` into the shared initial commit. Both
 coding agents receive that same content and use GPT-6.1-Sol with xhigh reasoning. Only the treatment
 arm receives AnaxiGraph access/instructions. Do not give either agent the other's code or results.
