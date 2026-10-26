@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -33,6 +34,124 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(command[command.index("--sandbox") + 1], "workspace-write")
             has_server = any("mcp_servers.anaxigraph.command=" in item for item in command)
             self.assertEqual(has_server, arm == "treatment")
+            self.assertIn('approval_policy="never"', command)
+            scoped_approval = 'mcp_servers.anaxigraph.default_tools_approval_mode="approve"'
+            self.assertEqual(scoped_approval in command, arm == "treatment")
+        command = run_pair.command(root, "treatment", directory, runtime, experiment_id="new-trial")
+        self.assertIn('mcp_servers.anaxigraph.env.ANAXIGRAPH_EXPERIMENT_ID="new-trial"', command)
+
+    def test_mcp_delivery_checks_errors_instead_of_completed_status(self):
+        for reply, error, expected in (
+            (
+                None,
+                {"message": "MCP tool call requires approval, but approval policy is never"},
+                False,
+            ),
+            ({"content": [], "isError": True}, None, False),
+            (None, None, False),
+            (
+                {"content": [{"type": "text", "text": "private context"}], "isError": False},
+                None,
+                True,
+            ),
+        ):
+            projected = run_pair.extract(
+                json.dumps(
+                    {
+                        "type": "item.completed",
+                        "item": {
+                            "type": "mcp_tool_call",
+                            "status": "completed",
+                            "server": "anaxigraph",
+                            "tool": "inspect",
+                            "result": reply,
+                            "error": error,
+                        },
+                    }
+                ).encode()
+            )
+            self.assertEqual(projected["mcp_success"], expected)
+            self.assertNotIn("private context", json.dumps(projected))
+            if error:
+                self.assertEqual(projected["mcp_failure_category"], "approval_blocked")
+
+    def test_blocked_inspect_does_not_record_context_consulted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "codex"
+            fake.write_text("""#!/usr/bin/env python3
+import json, sys
+sys.stdin.read()
+print(json.dumps({'type':'item.completed','item':{'type':'mcp_tool_call','status':'completed','server':'anaxigraph','tool':'inspect','error':{'message':'requires approval'}}}))
+print(json.dumps({'type':'turn.completed','usage':{}}))
+""")
+            fake.chmod(0o755)
+            with (
+                patch.dict(os.environ, {"PATH": str(root) + os.pathsep + os.environ["PATH"]}),
+                patch.object(run_pair.trial, "record") as record,
+            ):
+                result = run_pair.coding(
+                    root,
+                    "treatment",
+                    root / "state",
+                    Path("/bin/true"),
+                    "fixture",
+                    time.monotonic() + 5,
+                    {"task": "test"},
+                    lambda: None,
+                )
+            self.assertEqual(result["mcp_successes"], 0)
+            self.assertEqual(result["mcp_failures"], 1)
+            self.assertFalse(result["treatment_delivered"])
+            record.assert_not_called()
+
+    def test_prompt_states_equal_budget_and_actual_deadline(self):
+        for arm in ("treatment", "control"):
+            prompt = run_pair.prompt_for(
+                arm,
+                1,
+                18780,
+                Path("/home/state"),
+                None,
+                minutes=20,
+                deadline="2026-10-26T12:00:00+00:00",
+            )
+            self.assertIn("20 minutes", prompt)
+            self.assertIn("2026-10-26T12:00:00+00:00", prompt)
+
+    def test_milestone_push_targets_requested_remote_branch(self):
+        with patch.object(run_pair, "git", side_effect=["", "revision", ""]) as git:
+            result = run_pair.commit_and_push(
+                Path("/home/repo"), 1, "experiment/verified-anaxigraph"
+            )
+        self.assertTrue(result["pushed"])
+        self.assertEqual(result["branch"], "experiment/verified-anaxigraph")
+        self.assertEqual(
+            git.call_args.args[1:],
+            ("push", "origin", "HEAD:refs/heads/experiment/verified-anaxigraph"),
+        )
+
+    def test_failed_real_client_preflight_prevents_both_coding_arms(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with (
+                patch.object(
+                    sys, "argv", ["run_pair", "--state", str(root), "--runtime", "/bin/true"]
+                ),
+                patch.object(run_pair.shutil, "which", return_value="codex"),
+                patch.object(run_pair, "preflight", return_value={"status": "failed"}),
+                patch.object(run_pair.concurrent.futures, "ThreadPoolExecutor") as workers,
+            ):
+                self.assertEqual(run_pair.main(), 1)
+            workers.assert_not_called()
+            self.assertFalse((root / "summary.json").exists())
+
+    def test_new_trial_selects_corrected_contract_checker(self):
+        config = run_pair.parser().parse_args([])
+        self.assertEqual(config.assessment_version, 2)
+        prompt = run_pair.prompt_for("treatment", 2, 18780, Path("/home/state"), None)
+        self.assertIn("'fresh-eyes'", prompt)
+        self.assertIn("workflow_status", prompt)
 
     def test_environment_and_event_projection_keep_only_permitted_metadata(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -94,6 +213,19 @@ print(json.dumps({'type':'turn.completed','usage':{'input_tokens':10,'output_tok
                 )
             environment = dict(os.environ)
             environment["PATH"] = str(binaries) + os.pathsep + environment["PATH"]
+            proof = root / "synthetic-proof.json"
+            proof.write_text(
+                json.dumps(
+                    {
+                        "status": "passed",
+                        "runtime": str(Path("/bin/true").resolve()),
+                        "model": "gpt-6.1-sol",
+                        "reasoning_effort": "xhigh",
+                        "server_events": ["task_started", "context_supplied"],
+                        "coding": {"mcp_successes": 2, "mcp_failures": 0},
+                    }
+                )
+            )
             result = subprocess.run(
                 [
                     sys.executable,
@@ -110,6 +242,8 @@ print(json.dumps({'type':'turn.completed','usage':{'input_tokens':10,'output_tok
                     "1",
                     "--minutes",
                     ".1",
+                    "--preflight-proof",
+                    str(proof),
                 ],
                 env=environment,
                 capture_output=True,

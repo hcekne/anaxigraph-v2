@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 
@@ -68,7 +68,9 @@ def create_mcp(application: Any) -> FastMCP:
         return application.validate_change(receipts)
 
     @server.tool()
-    def analysis_request(kind: str, scope: list[str] | None = None) -> dict:
+    def analysis_request(
+        kind: Literal["annotate", "patterns", "fresh-eyes"], scope: list[str] | None = None
+    ) -> dict:
         """Prepare an annotation, catalogue-pattern or blind Fresh Eyes worker packet."""
         return application.analysis_request(kind, scope)
 
@@ -86,7 +88,9 @@ def create_mcp(application: Any) -> FastMCP:
 
     @server.tool()
     def workflow_start(
-        kind: str, config: dict[str, Any] | None = None, scope: list[str] | None = None
+        kind: Literal["mapping", "annotate", "patterns", "fresh-eyes"],
+        config: dict[str, Any] | None = None,
+        scope: list[str] | None = None,
     ) -> dict:
         """Run a complete resumable mapping, Patterns or Fresh Eyes workflow in the background."""
         return application.workflow_start(kind, config, scope)

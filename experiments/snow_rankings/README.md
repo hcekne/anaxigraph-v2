@@ -21,6 +21,7 @@ are prepared:
 
 ```bash
 python3 experiments/snow_rankings/run_pair.py --dry-run
+python3 experiments/snow_rankings/run_pair.py --preflight-only
 python3 experiments/snow_rankings/run_pair.py
 ```
 
@@ -29,11 +30,29 @@ minutes each, and the frozen executable at
 `~/.local/state/anaxigraph/experiments/snow-rankings-2026-10-26/runtime/bin/anaxigraph`.
 Every task gets a fresh ephemeral GPT-6.1-Sol/xhigh context with ignored user configuration and
 equal sandbox/tool settings. Only the treatment has an explicitly configured AnaxiGraph MCP server.
+The server's authorized tools are preapproved using the scoped
+`mcp_servers.anaxigraph.default_tools_approval_mode="approve"` setting; global
+`approval_policy="never"` remains unchanged. This is the documented
+[server-specific MCP approval setting](https://learn.chatgpt.com/docs/extend/mcp).
+Before starting either coding arm, the launcher runs the real coding client against a one-file
+fixture. It requires successful `scan` and `prepare_change` results plus independently observed
+`task_started` and `context_supplied` server database events. It saves a bounded proof and server
+evidence database outside the app repos. A failed probe prevents the trial from starting.
+An inspected proof for the same frozen runtime can be reused with `--preflight-proof PATH`.
+Completed MCP events containing `error` or `result.isError` count as failures, and only successful
+`inspect` calls count as consulted context. Attachment and attempted calls do not prove delivery.
+The original pilot's calls were all approval-blocked; its software and evidence are preserved, but
+that pilot cannot estimate AnaxiGraph's effect.
 Later task files are copied immediately before their turn; the nights change is withheld until task4.
 The coordinator runs the shared checker against each app's `run.json` command on assigned localhost
 ports, stops only owned processes and commits/pushes available work. A coding response does not count
 as product completion if external acceptance fails. A single early provider failure may retry within
 the same task deadline; later failures remain recorded. Sandboxing is never silently downgraded.
+Both agents receive the actual twenty-minute budget and UTC deadline. New runs use corrected
+contract checker2; `--assessment-version 1` reproduces the original checker. `--publish-branch`
+selects the remote branch receiving each milestone HEAD, preserving existing app branches during
+replications. `--experiment-id` defaults to the state directory name and also labels server-side
+evidence. A state-local `manifest.json` takes precedence over the original manifest.
 
 Progress and sanitized event metadata live outside the repos under the experiment state directory.
 Per-arm event logs are capped at4MB; full source, command output and model transcripts are discarded.

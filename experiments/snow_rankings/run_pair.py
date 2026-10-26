@@ -15,7 +15,9 @@ import selectors
 import shutil
 import signal
 import socket
+import sqlite3
 import subprocess
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +25,7 @@ from typing import Any
 from urllib.request import urlopen
 
 import acceptance
+import acceptance_v2
 import trial
 
 HERE = Path(__file__).resolve().parent
@@ -72,7 +75,9 @@ def environment(directory: Path) -> dict[str, str]:
     return result
 
 
-def command(root: Path, arm: str, directory: Path, runtime: Path) -> list[str]:
+def command(
+    root: Path, arm: str, directory: Path, runtime: Path, *, experiment_id: str | None = None
+) -> list[str]:
     args = ["codex"]
     for feature in DISABLED:
         args += ["--disable", feature]
@@ -92,10 +97,13 @@ def command(root: Path, arm: str, directory: Path, runtime: Path) -> list[str]:
                 "mcp_servers.anaxigraph.args": json.dumps(["--repo", str(root), "mcp"]),
                 "mcp_servers.anaxigraph.cwd": json.dumps(str(root)),
                 "mcp_servers.anaxigraph.required": "true",
+                "mcp_servers.anaxigraph.default_tools_approval_mode": '"approve"',
                 "mcp_servers.anaxigraph.startup_timeout_sec": "60",
                 "mcp_servers.anaxigraph.tool_timeout_sec": "1100",
                 "mcp_servers.anaxigraph.env.ANAXIGRAPH_EXPERIMENT_ARM": '"treatment"',
-                "mcp_servers.anaxigraph.env.ANAXIGRAPH_EXPERIMENT_ID": '"snow-rankings-2026-10-26"',
+                "mcp_servers.anaxigraph.env.ANAXIGRAPH_EXPERIMENT_ID": json.dumps(
+                    experiment_id or directory.parent.name
+                ),
             }
         )
     for key, value in settings.items():
@@ -196,6 +204,19 @@ def extract(line: bytes) -> dict[str, Any] | None:
         for key in ("status", "exit_code", "server", "tool"):
             if key in item and isinstance(item[key], (str, int)):
                 result[key] = item[key]
+        if item.get("type") == "mcp_tool_call" and result["type"] == "item.completed":
+            reply = item.get("result")
+            failed = (
+                bool(item.get("error"))
+                or (isinstance(reply, dict) and bool(reply.get("isError")))
+                or item.get("status") in {"failed", "cancelled"}
+            )
+            result["mcp_success"] = not failed and reply is not None
+            if not result["mcp_success"]:
+                message = str(item.get("error", "")).casefold()
+                result["mcp_failure_category"] = (
+                    "approval_blocked" if "approval" in message else "tool_error_or_missing_result"
+                )
     if result["type"] in {"error", "turn.failed"}:
         result["error_category"] = "provider_or_runtime_error"
     return result
@@ -210,6 +231,8 @@ def coding(
     deadline: float,
     progress: dict[str, Any],
     save,
+    *,
+    experiment_id: str | None = None,
 ) -> dict[str, Any]:
     usage: dict[str, Any] = {
         "input_tokens": None,
@@ -217,10 +240,11 @@ def coding(
         "cached_input_tokens": None,
     }
     session, status, attempts = None, "failed", 0
+    mcp_successes, mcp_failures = 0, 0
     while time.monotonic() < deadline and attempts < 2:
         attempts += 1
         process = subprocess.Popen(
-            command(root, arm, directory, runtime),
+            command(root, arm, directory, runtime, experiment_id=experiment_id),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -278,7 +302,16 @@ def coding(
                             for name, amount in item["usage"].items():
                                 if type(amount) is int and amount >= 0:
                                     usage[name] = (usage[name] or 0) + amount
-                        if item.get("server") == "anaxigraph" and item.get("tool") == "inspect":
+                        if item.get("server") == "anaxigraph" and "mcp_success" in item:
+                            mcp_successes += int(item["mcp_success"])
+                            mcp_failures += int(not item["mcp_success"])
+                            progress.update(mcp_successes=mcp_successes, mcp_failures=mcp_failures)
+                            save()
+                        if (
+                            item.get("server") == "anaxigraph"
+                            and item.get("tool") == "inspect"
+                            and item.get("mcp_success")
+                        ):
                             trial.record(
                                 directory.parent / "trial.sqlite",
                                 arm,
@@ -313,7 +346,63 @@ def coding(
         if any(v is not None for v in usage.values())
         else None,
         "cost_usd": None,
+        "mcp_successes": mcp_successes,
+        "mcp_failures": mcp_failures,
+        "treatment_delivered": mcp_successes > 0 if arm == "treatment" else None,
     }
+
+
+def preflight(directory: Path, runtime: Path, minutes: float = 3) -> dict[str, Any]:
+    """Use the real coding client and confirm server-side effects, not tool attachment."""
+    directory.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    temporary_root = Path.home() / ".cache/anaxigraph/tmp"
+    temporary_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="snow-mcp-preflight-", dir=temporary_root) as temporary:
+        root = Path(temporary)
+        (root / "probe.py").write_text("def available():\n    return True\n")
+        subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
+        progress = {"task": "mcp-preflight", "model": "gpt-6.1-sol", "reasoning_effort": "xhigh"}
+        result = coding(
+            root,
+            "treatment",
+            directory,
+            runtime,
+            "Use only the supplied anaxigraph MCP tools. Call scan, then prepare_change with task "
+            "'Verify authorized MCP execution'. Do not use shell or edit files. After both calls "
+            "succeed, return a concise confirmation. If a call fails, report that failure honestly.",
+            time.monotonic() + minutes * 60,
+            progress,
+            lambda: atomic(directory / "progress.json", progress),
+        )
+        progress.update(status=result["status"], finished_at=now())
+        atomic(directory / "progress.json", progress)
+        ledger = root / ".anaxigraph-v2/trial.sqlite"
+        kinds: set[str] = set()
+        if ledger.is_file():
+            with sqlite3.connect(f"file:{ledger}?mode=ro", uri=True) as db:
+                kinds = {row[0] for row in db.execute("SELECT kind FROM events")}
+                with sqlite3.connect(directory / "server-evidence.sqlite") as saved:
+                    db.backup(saved)
+        success = (
+            result["status"] == "completed"
+            and result["mcp_successes"] >= 2
+            and not result["mcp_failures"]
+            and {"task_started", "context_supplied"} <= kinds
+        )
+        proof = {
+            "at": now(),
+            "status": "passed" if success else "failed",
+            "runtime": str(runtime),
+            "elapsed_seconds": round(time.monotonic() - started, 2),
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "xhigh",
+            "server_events": sorted(kinds),
+            "coding": result,
+            "basis": "real Codex MCP replies plus independent server-side SQLite evidence",
+        }
+        atomic(directory / "proof.json", proof)
+        return proof
 
 
 def stage(root: Path, index: int) -> None:
@@ -328,7 +417,16 @@ def stage(root: Path, index: int) -> None:
                 stream.write("\nMilestone4 adds" + paragraph)
 
 
-def prompt_for(arm: str, index: int, port: int, directory: Path, previous: dict | None) -> str:
+def prompt_for(
+    arm: str,
+    index: int,
+    port: int,
+    directory: Path,
+    previous: dict | None,
+    *,
+    minutes: float = 20,
+    deadline: str | None = None,
+) -> str:
     text = (
         f"Implement task {index}: read AGENTS.md, SPECIFICATION.md, API_CONTRACT.md, data/seed.json "
         f"and tasks/{TASKS[index - 1]}.md in this checkout. Follow them. Do not inspect other "
@@ -339,7 +437,9 @@ def prompt_for(arm: str, index: int, port: int, directory: Path, previous: dict 
         '{"command":["uv","run",...]}; it must start this app with literal {port} in argv. '
         "Run meaningful tests and preserve prior contracts. Commit your milestone if permitted; "
         "the coordinator can commit/push if Git metadata is sandbox-protected. Stop any server you start. "
-        "Your wall-clock task allocation includes all analysis and tests. End with concise actual "
+        f"Your wall-clock task budget is {minutes:g} minutes, including all analysis and tests. "
+        f"The coordinator stops this task at {deadline or 'the end of that allocation'}; "
+        "prioritize a working tested result before that deadline. End with concise actual "
         "changes/checks/limitations; do not claim unexecuted results."
     )
     if previous:
@@ -354,30 +454,33 @@ def prompt_for(arm: str, index: int, port: int, directory: Path, previous: dict 
         )
         if index in (2, 4):
             text += (
-                " At this milestone, run full mapping, Patterns and Fresh Eyes workflows through "
-                "that MCP service; use the saved results to assess better options, retaining "
+                " At this milestone, run workflows with exact kind values 'mapping', 'patterns', "
+                "and 'fresh-eyes' through that MCP service, then poll workflow_status until each "
+                "finishes or the task deadline approaches. Use saved results to assess better options, retaining "
                 "Fresh Eyes source isolation. Keep all this within your remaining task budget; "
                 "report incomplete workflows honestly rather than claiming they completed."
             )
     return text
 
 
-def commit_and_push(root: Path, index: int) -> dict[str, Any]:
-    result = {"committed": False, "pushed": False}
+def commit_and_push(root: Path, index: int, publish_branch: str = "main") -> dict[str, Any]:
+    result = {"committed": False, "pushed": False, "branch": publish_branch}
     try:
         if git(root, "status", "--porcelain"):
             git(root, "add", "-A")
             git(root, "commit", "-m", f"experiment: record Snow Rankings task {index}")
             result["committed"] = True
         result["revision"] = git(root, "rev-parse", "HEAD")
-        git(root, "push", "origin", "main")
+        git(root, "push", "origin", f"HEAD:refs/heads/{publish_branch}")
         result["pushed"] = True
     except (OSError, subprocess.SubprocessError):
         result["error"] = "Coordinator Git operation failed; local work preserved"
     return result
 
 
-def verify(root: Path, port: int, milestone: int, directory: Path) -> dict[str, Any]:
+def verify(
+    root: Path, port: int, milestone: int, directory: Path, assessment_version: int = 2
+) -> dict[str, Any]:
     path = root / "run.json"
     if not path.is_file() or path.stat().st_size > 16_000:
         return {"status": "failed", "passed": 0, "total": 1, "reason": "Missing bounded run.json"}
@@ -419,7 +522,8 @@ def verify(root: Path, port: int, milestone: int, directory: Path) -> dict[str, 
                         break
             except OSError:
                 time.sleep(0.25)
-        result = acceptance.evaluate(f"http://127.0.0.1:{port}", milestone)
+        assessor = acceptance_v2 if assessment_version == 2 else acceptance
+        result = assessor.evaluate(f"http://127.0.0.1:{port}", milestone)
         atomic(directory / f"acceptance-{milestone}.json", result)
         return {key: result[key] for key in ("status", "passed", "total")}
     finally:
@@ -435,6 +539,8 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     progress = {
         "arm": arm_name,
+        "experiment_id": config.experiment_id,
+        "assessment_version": config.assessment_version,
         "root": str(root),
         "model": "gpt-6.1-sol",
         "reasoning_effort": "xhigh",
@@ -473,10 +579,21 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
                 arm_name,
                 directory,
                 config.runtime,
-                prompt_for(arm_name, index, port, directory, previous),
+                prompt_for(
+                    arm_name,
+                    index,
+                    port,
+                    directory,
+                    previous,
+                    minutes=config.minutes,
+                    deadline=datetime.fromtimestamp(
+                        time.time() + config.minutes * 60, timezone.utc
+                    ).isoformat(),
+                ),
                 started + config.minutes * 60,
                 progress,
                 save,
+                experiment_id=config.experiment_id,
             )
             elapsed = time.monotonic() - started
             trial.record(
@@ -505,7 +622,7 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
             progress["phase"] = "external_acceptance"
             save()
             try:
-                previous = verify(root, port, index, directory)
+                previous = verify(root, port, index, directory, config.assessment_version)
             except (ValueError, OSError, subprocess.SubprocessError):
                 previous = {
                     "status": "failed",
@@ -520,7 +637,7 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
                 "acceptance",
                 {key: previous[key] for key in ("status", "passed", "total")},
             )
-            publication = commit_and_push(root, index)
+            publication = commit_and_push(root, index, config.publish_branch)
             outcome = {
                 "task": task,
                 "coding": result,
@@ -529,6 +646,7 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
                 "publication": publication,
             }
             progress["tasks"].append(outcome)
+            delivered = arm_name == "control" or result["treatment_delivered"]
             trial.record(
                 config.state / "trial.sqlite",
                 arm_name,
@@ -538,7 +656,9 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
                     "starting_revision": revision,
                     "candidate_revision": publication.get("revision"),
                     "status": "completed"
-                    if result["status"] == "completed" and previous["status"] == "passed"
+                    if result["status"] == "completed"
+                    and previous["status"] == "passed"
+                    and delivered
                     else "incomplete",
                     "elapsed_seconds": elapsed,
                     "notes": "See bounded progress and shared acceptance record.",
@@ -548,7 +668,9 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
         progress["status"] = (
             "completed"
             if all(
-                x["coding"]["status"] == "completed" and x["acceptance"]["status"] == "passed"
+                x["coding"]["status"] == "completed"
+                and x["acceptance"]["status"] == "passed"
+                and (arm_name == "control" or x["coding"]["treatment_delivered"])
                 for x in progress["tasks"]
             )
             else "finished_with_failures"
@@ -570,13 +692,37 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--control", type=Path, default=Path.home() / "repos/snow-rankings-control")
     result.add_argument("--minutes", type=float, default=20)
     result.add_argument("--task-limit", type=int, choices=range(1, 5), default=4)
+    result.add_argument("--experiment-id", help="Defaults to the state directory name")
+    result.add_argument(
+        "--assessment-version",
+        type=int,
+        choices=(1, 2),
+        default=2,
+        help="Use corrected contract assessment2;1 reproduces the original pilot",
+    )
+    result.add_argument(
+        "--publish-branch",
+        default="main",
+        help="Push each local milestone HEAD to this remote branch",
+    )
     result.add_argument("--dry-run", action="store_true")
+    result.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="Verify actual authorized AnaxiGraph calls through the coding client",
+    )
+    result.add_argument(
+        "--preflight-proof",
+        type=Path,
+        help="Reuse an independently inspected passing proof from this runtime",
+    )
     return result
 
 
 def main() -> int:
     config = parser().parse_args()
     config.state = config.state.resolve()
+    config.experiment_id = config.experiment_id or config.state.name
     config.runtime = (config.runtime or config.state / "runtime/bin/anaxigraph").resolve()
     if config.minutes <= 0 or config.minutes > 120:
         raise ValueError("Task minutes must be in (0,120]")
@@ -584,11 +730,22 @@ def main() -> int:
         raise ValueError("Codex CLI is unavailable")
     if not config.runtime.is_file() and not config.dry_run:
         raise ValueError("Frozen treatment runtime is unavailable")
+    subprocess.run(
+        ["git", "check-ref-format", "--branch", config.publish_branch],
+        check=True,
+        capture_output=True,
+    )
     if config.dry_run:
         print(
             json.dumps(
                 {
-                    name: command(root, name, config.state / name, config.runtime)
+                    name: command(
+                        root,
+                        name,
+                        config.state / name,
+                        config.runtime,
+                        experiment_id=config.experiment_id,
+                    )
                     for name, root in (("treatment", config.treatment), ("control", config.control))
                 },
                 indent=2,
@@ -596,11 +753,32 @@ def main() -> int:
         )
         return 0
     config.state.mkdir(parents=True, exist_ok=True)
+    if config.preflight_proof:
+        proof = json.loads(config.preflight_proof.read_text())
+        if not (
+            proof.get("status") == "passed"
+            and proof.get("runtime") == str(config.runtime)
+            and proof.get("model") == "gpt-6.1-sol"
+            and proof.get("reasoning_effort") == "xhigh"
+            and {"task_started", "context_supplied"} <= set(proof.get("server_events", []))
+            and proof.get("coding", {}).get("mcp_successes", 0) >= 2
+            and proof.get("coding", {}).get("mcp_failures") == 0
+        ):
+            raise ValueError("Preflight proof does not verify this frozen runtime")
+    else:
+        proof = preflight(config.state / "preflight", config.runtime)
+    atomic(config.state / "preflight.json", proof)
+    if config.preflight_only or proof["status"] != "passed":
+        print(json.dumps(proof))
+        return int(proof["status"] != "passed")
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         jobs = {pool.submit(arm, name, config): name for name in ("treatment", "control")}
         results = {jobs[job]: job.result() for job in concurrent.futures.as_completed(jobs)}
     atomic(config.state / "summary.json", {"finished_at": now(), "arms": results})
-    comparison = trial.compare(config.state / "trial.sqlite", HERE / "manifest.json")
+    manifest = config.state / "manifest.json"
+    comparison = trial.compare(
+        config.state / "trial.sqlite", manifest if manifest.is_file() else HERE / "manifest.json"
+    )
     atomic(config.state / "comparison.json", comparison)
     print(json.dumps({name: value["status"] for name, value in results.items()}))
     return int(any(value["status"] != "completed" for value in results.values()))

@@ -62,6 +62,18 @@ the exact snapshot ID. Missing checks remain unchecked; stale receipts cannot pa
 HTTP client connection while switching its runtime to V2; the dashboard and MCP use one Application.
 Stdio remains available for an agent tied to a specific checkout.
 
+For unattended Codex use of your trusted local AnaxiGraph server, authorize its tools specifically:
+
+```toml
+[mcp_servers.anaxigraph]
+url = "http://127.0.0.1:8766/mcp"
+default_tools_approval_mode = "approve"
+```
+
+This scoped setting is separate from normal command approvals. Without it, a client configured
+to reject approval prompts can attach the server yet reject every tool call. Verify a successful
+`scan` and `prepare_change`, including server-side evidence, before relying on an automated trial.
+
 When replacing an older service with custom source exclusions, pass
 `--exclusions /path/to/exclusions.json` on every CLI/server invocation. The JSON array contains
 repository-relative glob patterns. The same policy applies to scans and live-source checks;
