@@ -32,6 +32,11 @@ def _execution_worker(value: Any, *, fallbacks: bool = False) -> dict[str, Any]:
     if not isinstance(model, str) or len(model) > 150:
         raise ValueError("Execution worker model must be text of at most 150 characters")
     worker = {"provider": value["provider"], "model": model}
+    effort = value.get("reasoning_effort")
+    if effort is not None:
+        if value["provider"] != "codex" or effort not in ("low", "medium", "high", "xhigh"):
+            raise ValueError("Execution reasoning_effort must be a supported Codex reasoning level")
+        worker["reasoning_effort"] = effort
     if fallbacks and "fallbacks" in value:
         choices = value["fallbacks"]
         if not isinstance(choices, list) or len(choices) > 4:
@@ -58,6 +63,11 @@ def _execution(value: Any) -> dict[str, Any]:
         "worker": _execution_worker(value.get("worker")),
         "review_passes": reviewers(value.get("review_passes")),
     }
+
+
+def _validate_execution(value: dict[str, Any]) -> None:
+    if value.get("execution") is not None:
+        _execution(value["execution"])
 
 
 def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -186,6 +196,7 @@ def _annotations(request: dict[str, Any], result: dict[str, Any], graph: Graph) 
     if set(_identities(annotations, "node_id")) != set(request["scope"]):
         raise ValueError("Annotation result has missing, duplicate or unexpected module IDs")
     for annotation in annotations:
+        _validate_execution(annotation)
         _text(annotation.get("overview"), "overview", 320)
         _text(annotation.get("detail"), "detail", 1500)
         _texts(annotation.get("capabilities"), "capabilities", required=True)
@@ -308,6 +319,7 @@ def validate_result(request: dict[str, Any], result: dict[str, Any], graph: Grap
     if not isinstance(result, dict) or len(json.dumps(result, allow_nan=False).encode()) > maximum:
         raise ValueError("Analysis result exceeds its configured batch budget")
     _text(result.get("producer"), "producer", 200)
+    _validate_execution(result)
     kind = request["kind"]
     validators = {"annotate": _annotations, "patterns": _patterns, "fresh-eyes": _fresh_eyes}
     if kind not in validators:
