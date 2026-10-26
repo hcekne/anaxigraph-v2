@@ -48,10 +48,10 @@ def index(
         root, excluded, session.sources if session is not None else None
     )
     if session is not None:
-        session.unchanged = (
-            session.last_graph is not None and session.last_graph.snapshot.id == snapshot.id
-        )
-        if session.unchanged:
+        previous = session.last_graph
+        session.unchanged = False
+        if previous is not None and previous.snapshot.id == snapshot.id:
+            session.unchanged = True
             session.last_scan = {
                 "files_read": session.sources.files_read,
                 "files_reused": session.sources.files_reused,
@@ -59,7 +59,7 @@ def index(
                 "modules_parsed": 0,
                 "modules_resolved": 0,
             }
-            return session.last_graph
+            return previous
     nodes = []
     modules = []
     edges = []

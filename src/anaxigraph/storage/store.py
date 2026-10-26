@@ -181,7 +181,9 @@ class Store:
             db.execute("BEGIN IMMEDIATE")
             old = db.execute("SELECT * FROM baselines WHERE root=?", (root,)).fetchone()
             current = self._current(db, root)
-            selected = snapshot_id or (current["current_id"] if current else None)
+            if current is None:
+                raise ValueError("Baseline must identify a retained snapshot of this checkout")
+            selected = snapshot_id or current["current_id"]
             if (
                 snapshot_id is None
                 and old
@@ -274,7 +276,9 @@ class Store:
         return result
 
     @staticmethod
-    def _annotation(row: sqlite3.Row, candidates: dict[str, list[sqlite3.Row]]) -> dict[str, Any]:
+    def _annotation(
+        row: sqlite3.Row | dict[str, Any], candidates: dict[str, list[sqlite3.Row]]
+    ) -> dict[str, Any]:
         data = json.loads(row["data"]) if isinstance(row["data"], str) else dict(row["data"])
         options = candidates.get(row["id"], [])
         match = next((x for x in options if x["fingerprint"] == row["fingerprint"]), None)
@@ -616,14 +620,20 @@ class Store:
         *,
         review_id: str | None = None,
         include_requests: bool = True,
+        module_ids: tuple[str, ...] | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
+        if module_ids == ():
+            return []
+        if limit is not None and (type(limit) is not int or not 1 <= limit <= 100):
+            raise ValueError("Review limit must be between 1 and 100")
         root = _root(root)
         with self._connection() as db:
             db.execute("BEGIN")
             current = self._current(db, root)
             current_id = current["current_id"] if current else None
             statement = "SELECT * FROM reviews WHERE root=?"
-            parameters = [root]
+            parameters: list[Any] = [root]
             if kind is not None:
                 statement += " AND kind=?"
                 parameters.append(kind)
@@ -632,6 +642,18 @@ class Store:
                 parameters.append(review_id)
             if not include_requests:
                 statement += " AND kind!='request'"
+            if module_ids is not None:
+                placeholders = ",".join("?" for _ in module_ids)
+                statement += (
+                    " AND snapshot_id=? AND EXISTS(SELECT 1 FROM json_each("
+                    "CASE WHEN json_valid(scope_key) THEN scope_key ELSE '{}' END,'$.scope') "
+                    f"AS target WHERE target.value IN ({placeholders}))"
+                )
+                parameters.extend((current_id, *module_ids))
+            statement += " ORDER BY updated_at DESC"
+            if limit is not None:
+                statement += " LIMIT ?"
+                parameters.append(limit)
             return [
                 {
                     "id": row["id"],
@@ -641,7 +663,7 @@ class Store:
                     "created_at": row["created_at"],
                     "status": "current" if row["snapshot_id"] == current_id else "stale",
                 }
-                for row in db.execute(statement + " ORDER BY updated_at DESC", parameters)
+                for row in db.execute(statement, parameters)
             ]
 
     def stats(self, root: str) -> dict[str, Any]:

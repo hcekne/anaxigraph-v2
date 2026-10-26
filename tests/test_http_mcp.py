@@ -74,6 +74,7 @@ def test_source_exclusions_apply_to_mapping_live_checks_and_exports(tmp_path):
     for folder in ("data", ".secrets"):
         (tmp_path / folder / "runtime.py").write_text("def runtime():\n    return 2\n")
     app._require_live(app._current())
+    app.export_record()
     record = json.loads((tmp_path / "anaxigraph" / "record.json").read_text())
     assert not any(path.startswith(("data/", ".secrets/")) for path in record["source"]["files"])
     assert app.analysis_request("annotate", ["service.py"])["scope"] == ["module:service.py"]

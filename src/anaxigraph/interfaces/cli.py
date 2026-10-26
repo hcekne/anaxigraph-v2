@@ -52,7 +52,11 @@ def parser() -> argparse.ArgumentParser:
     ):
         command = commands.add_parser(name, help=help_text)
         _location(command)
-        if name == "inspect":
+        if name == "scan":
+            command.add_argument(
+                "--export", action="store_true", help="Also publish the portable record"
+            )
+        elif name == "inspect":
             command.add_argument("entity_id")
             command.add_argument("--limit", type=int, default=30)
         elif name == "modules":
@@ -118,8 +122,10 @@ def _read_json(path: Path, expected: type) -> Any:
 
 def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     """Keep transport dispatch independent from application implementation."""
-    if args.command in {"scan", "status"}:
-        return getattr(application, args.command)()
+    if args.command == "scan":
+        return application.scan(publish=True) if args.export else application.scan()
+    if args.command == "status":
+        return application.status()
     if args.command == "modules":
         return application.modules(args.sort, args.descending, args.limit, args.offset)
     if args.command == "inspect":

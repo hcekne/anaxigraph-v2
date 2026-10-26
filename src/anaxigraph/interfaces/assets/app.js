@@ -495,7 +495,9 @@ $("#save-workflow-settings").addEventListener("click", () => action($("#save-wor
 for (const operation of ["export", "import"]) {
   $(`#${operation}-record`).addEventListener("click", () => action($(`#${operation}-record`), async () => {
     const result = await api(`/api/record/${operation}`, {});
-    $("#portable-state").textContent = formatJSON(result);
+    const committed = result.committed === true ? "committed" : result.committed === false ? "not committed" : "commit unknown";
+    const pushed = result.pushed === true ? "present in local upstream reference" : result.pushed === false ? "not in upstream reference" : "push status unknown";
+    $("#portable-state").textContent = operation === "export" ? `Record saved (${result.bytes} bytes); ${committed}; ${pushed}.` : result.record_found === false ? "No portable record found in this repository." : `Reused ${result.annotations_imported || 0} annotations and ${result.analyses_imported || 0} analyses; incompatible saved results remain preserved.`;
     await refresh();
     notice(operation === "export" ? "Portable record saved in anaxigraph/. Commit and push it through Git." : "Compatible saved analyses imported into this checkout.");
   }));

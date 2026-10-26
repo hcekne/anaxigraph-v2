@@ -1,0 +1,2 @@
+include quality-budget.json
+recursive-include scripts *.py

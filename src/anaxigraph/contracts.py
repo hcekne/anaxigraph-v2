@@ -91,6 +91,8 @@ class KnowledgeStore(Protocol):
         *,
         review_id: str | None = None,
         include_requests: bool = True,
+        module_ids: tuple[str, ...] | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]: ...
 
     def get_review(

@@ -104,7 +104,7 @@ def _annotation_packet(
     graph: Graph, chosen: list[Node], symbols: list[Node], sources: dict[str, str] | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     ids = {node.id for node in chosen}
-    packet = {
+    packet: dict[str, Any] = {
         "instruction": (
             "Explain behavior concisely: one module overview sentence and short paragraph, "
             "one sentence for EVERY supplied function, capabilities and behavioral contracts. "
@@ -233,7 +233,7 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
         raise ValueError(
             f"Fresh Eyes needs current behavior annotations; missing/stale: {missing[:5]}"
         )
-    requirements = []
+    requirements: list[dict[str, Any]] = []
     for node in chosen:
         annotation = node.data["annotation"]
         for capability in annotation.get("capabilities", []):
@@ -379,7 +379,9 @@ def build_product_request(
 
     if not isinstance(children, list) or not 1 <= len(children) <= 16:
         raise ValueError("Product synthesis needs between one and sixteen child briefs")
-    scope, child_ids, requirements = set(), [], []
+    scope: set[str] = set()
+    child_ids: list[str] = []
+    requirements: list[dict[str, Any]] = []
     mapped = {node.id for node in graph.nodes if node.kind == "module"}
     for child in children:
         request, result = child["request"], child["result"]

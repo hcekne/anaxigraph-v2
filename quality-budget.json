@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "baseline_commit": "dcc1a68173c794fc37d9e83541fd3bb89b6eef2c",
+  "limits": {
+    "production_physical_lines": 7600,
+    "file_physical_lines": 800,
+    "package_data_bytes": 200000,
+    "new_function_complexity": 15
+  },
+  "existing_complexity": {
+    "src/anaxigraph/analysis/guidance.py:_module_edges": 17,
+    "src/anaxigraph/analysis/guidance.py:neighborhood": 18,
+    "src/anaxigraph/analysis/packets.py:_pattern_packet": 26,
+    "src/anaxigraph/analysis/packets.py:build_product_request": 27,
+    "src/anaxigraph/analysis/portable.py:compatible_annotations": 17,
+    "src/anaxigraph/analysis/validation.py:_evidence": 16,
+    "src/anaxigraph/analysis/validation.py:_patterns": 18,
+    "src/anaxigraph/analysis/validation.py:_fresh_eyes": 32,
+    "src/anaxigraph/application/records.py:import_record": 19,
+    "src/anaxigraph/application/reviews.py:submit_analysis": 16,
+    "src/anaxigraph/application/reviews.py:analysis_reconcile": 24,
+    "src/anaxigraph/indexing/__init__.py:index": 22,
+    "src/anaxigraph/indexing/discovery.py:_capture_inputs": 31,
+    "src/anaxigraph/indexing/python.py:_public_surface": 32,
+    "src/anaxigraph/interfaces/cli.py:parser": 16,
+    "src/anaxigraph/interfaces/cli.py:dispatch": 25,
+    "src/anaxigraph/storage/portable.py:build_record": 26,
+    "src/anaxigraph/storage/store.py:Store.pin_baseline": 23,
+    "src/anaxigraph/storage/store.py:Store.save_graph": 21,
+    "src/anaxigraph/workflows/engine.py:_config": 20,
+    "src/anaxigraph/workflows/engine.py:WorkflowRunner._product": 18
+  },
+  "reviewed_changes": {
+    "src/anaxigraph/interfaces/cli.py:parser": {
+      "ceiling": 17,
+      "reason": "Opt-in portable publication and local evidence commands add flat transport cases. Direct argument registration and dispatch are clearer than forwarding helpers introduced only to lower this metric."
+    },
+    "src/anaxigraph/interfaces/cli.py:dispatch": {
+      "ceiling": 27,
+      "reason": "Opt-in portable publication and local evidence commands add flat transport cases. Direct argument registration and dispatch are clearer than forwarding helpers introduced only to lower this metric."
+    }
+  }
+}

@@ -43,7 +43,8 @@ def export_record(app: Application) -> dict[str, Any]:
     token = app._portable_token()
     cached = getattr(app, "_export_cache", None)
     if cached and cached[0] == token:
-        return cached[1] | {"changed": False}
+        # A commit/push can change publication state without touching the record.
+        return cached[1] | {"changed": False} | app.portable_status()
     reviews = []
     for row in app.store.reviews(str(app.root), include_requests=False):
         if row["kind"] == "request":
@@ -62,6 +63,9 @@ def export_record(app: Application) -> dict[str, Any]:
                 }
         reviews.append(row)
     local_bytes = app.store.path.stat().st_size
+    ledger = app.root / ".anaxigraph-v2" / "trial.sqlite"
+    if ledger.is_file():
+        local_bytes += ledger.stat().st_size
     directory = app.root / ".anaxigraph-v2" / "workflows"
     if directory.is_dir() and not directory.is_symlink():
         local_bytes += sum(path.stat().st_size for path in directory.iterdir() if path.is_file())
@@ -115,7 +119,8 @@ def import_record(app: Application) -> dict[str, Any]:
         for row in record["analyses"]
         if row.get("status") == "current" and row.get("source_identity") == source_id
     ]
-    imported, remapped = 0, {}
+    imported = 0
+    remapped: dict[str, str] = {}
     while pending:
         deferred, progress = [], False
         for row in pending:

@@ -363,15 +363,15 @@ def test_workflow_records_each_fallback_review_and_reuse_without_saving_usage_in
     assert application.evidence.events(100)["items"][-1]["payload"]["reused"] is True
 
 
-def test_trial_ledger_failure_does_not_trigger_another_paid_model_attempt(tmp_path):
+def test_trial_ledger_failure_does_not_trigger_another_paid_model_attempt(tmp_path, monkeypatch):
     application = app(tmp_path, count=1)
     calls = []
 
-    class FullLedger:
-        def model_call(self, *args, **kwargs):
-            raise ValueError("Trial storage budget reached")
+    def full_ledger(*args, **kwargs):
+        raise ValueError("Trial storage budget reached")
 
-    application.evidence = FullLedger()
+    # Keep the real recorder/path contract; fail only the exhausted write.
+    monkeypatch.setattr(application.evidence, "model_call", full_ledger)
 
     def provider(request, _worker, **_kwargs):
         calls.append(request["request_id"])

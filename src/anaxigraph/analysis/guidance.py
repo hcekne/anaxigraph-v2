@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections import Counter, deque
 from dataclasses import asdict
 from typing import Any
@@ -106,19 +108,244 @@ def affected_paths(graph: Graph, paths: set[str], depth: int = 2) -> set[str]:
     return found
 
 
-def prepare(graph: Graph, matches: list[dict[str, Any]], task: str) -> dict[str, Any]:
-    modules = {node.id: node for node in graph.nodes if node.kind == "module"}
+def _short(value: Any, maximum: int = 240) -> str:
+    text = value if isinstance(value, str) else ""
+    raw = text.encode("utf-8")
+    return text if len(raw) <= maximum else raw[: maximum - 3].decode("utf-8", "ignore") + "..."
+
+
+def _implementation_owner(node: Node) -> bool:
+    return not (
+        node.path.endswith((".md", ".rst", ".txt", ".json", ".csv"))
+        or node.data.get("parse_status") == "unparsed"
+    )
+
+
+def _references(value: Any, graph: Graph) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [
+        {"path": item["path"], "line": item["line"]}
+        for item in value
+        if isinstance(item, dict)
+        and isinstance(item.get("path"), str)
+        and item.get("path") in graph.snapshot.files
+        and type(item.get("line")) is int
+        and item["line"] > 0
+    ][:2]
+
+
+def _pattern_proposals(row: dict[str, Any], owners: set[str], graph: Graph) -> list[dict[str, Any]]:
+    result = row.get("result", {}).get("result", {})
+    proposals = []
+    for item in result.get("evaluations", []):
+        score = item.get("opportunity")
+        references = _references(item.get("evidence"), graph)
+        if (
+            item.get("module_id") not in owners
+            or type(score) is not int
+            or not 1 <= score <= 3
+            or not isinstance(item.get("proposed_change"), str)
+            or not item["proposed_change"].strip()
+            or not references
+        ):
+            continue
+        proposals.append(
+            {
+                "kind": "pattern",
+                "status": "proposal-needs-source-verification",
+                "review_id": row["id"],
+                "module_id": item["module_id"],
+                "pattern_id": item.get("pattern_id"),
+                "opportunity": score,
+                "current_fit": item.get("current_fit", "unknown"),
+                "suggestion": _short(item["proposed_change"], 360),
+                "pros": [_short(value, 180) for value in item.get("pros", [])[:2]],
+                "cons": [_short(value, 180) for value in item.get("cons", [])[:2]],
+                "simpler_alternative": _short(item.get("alternative")),
+                "evidence": references,
+                "expand": "review:" + row["id"],
+            }
+        )
+    return proposals[:2]
+
+
+def _fresh_proposal(row: dict[str, Any]) -> dict[str, Any] | None:
+    alternatives = row.get("result", {}).get("result", {}).get("alternatives", [])
+    if len(alternatives) != 3:
+        return None
+    return {
+        "kind": "fresh-eyes",
+        "status": "three-unverified-design-options",
+        "review_id": row["id"],
+        "alternatives": [
+            {
+                "name": _short(item.get("name"), 100),
+                "design": _short(item.get("design"), 260),
+                "pros": [_short(value, 140) for value in item.get("pros", [])[:1]],
+                "cons": [_short(value, 140) for value in item.get("cons", [])[:1]],
+            }
+            for item in alternatives
+        ],
+        "expand": "review:" + row["id"],
+    }
+
+
+def _review_proposals(
+    graph: Graph, reviews: list[dict[str, Any]], owners: set[str], task: str
+) -> list[dict[str, Any]]:
+    current = [
+        row
+        for row in reviews
+        if row.get("status") == "current"
+        and row.get("snapshot_id") == graph.snapshot.id
+        and owners.intersection(row.get("result", {}).get("scope", []))
+    ]
+    patterns = [
+        proposal
+        for row in current
+        if row.get("kind") == "patterns"
+        for proposal in _pattern_proposals(row, owners, graph)
+    ][:2]
+    architecture_task = bool(
+        re.search(
+            r"\b(architectur(?:e|al)|design|refactor(?:ing)?|simplify|modularity|maintainability|patterns?)\b",
+            task,
+            re.I,
+        )
+    )
+    if architecture_task:
+        fresh = next(
+            (
+                proposal
+                for row in current
+                if row.get("kind") == "fresh-eyes"
+                and (proposal := _fresh_proposal(row)) is not None
+            ),
+            None,
+        )
+        if fresh is not None:
+            return patterns[:1] + [fresh]
+    return patterns
+
+
+def _coding_steps(
+    graph: Graph,
+    candidates: list[Node],
+    matches: list[dict[str, Any]],
+    contracts: list[dict[str, Any]],
+    tests: list[str],
+    impacted: set[str],
+) -> list[dict[str, Any]]:
+    if not candidates:
+        return [
+            {
+                "kind": "placement",
+                "basis": "insufficient-evidence",
+                "suggestion": "No executable owner was found. Inspect entry points and existing responsibilities before adding a new module.",
+                "evidence": [],
+            }
+        ]
+    owner = candidates[0]
+    by_id = {node.id: node for node in graph.nodes}
+    reusable = next(
+        (
+            by_id[match["id"]]
+            for match in matches
+            if match.get("id") in by_id
+            and by_id[match["id"]].path == owner.path
+            and by_id[match["id"]].kind in {"function", "class", "interface"}
+            and not by_id[match["id"]].name.startswith("_")
+        ),
+        None,
+    )
+    reuse = (
+        f" Check whether {reusable.name} already supplies the requested behavior."
+        if reusable
+        else " Check its existing interface before adding a sibling implementation."
+    )
+    steps = [
+        {
+            "kind": "placement-and-reuse",
+            "basis": "candidate-owner-and-source-observations",
+            "owner": owner.id,
+            "suggestion": _short(
+                f"Start by inspecting {owner.path}.{reuse} Keep a local change unless an independently changing responsibility needs a new boundary.",
+                500,
+            ),
+            "evidence": [{"path": owner.path, "line": reusable.line if reusable else owner.line}],
+        }
+    ]
+    if contracts:
+        contract = next((item for item in contracts if item["owner"] == owner.id), contracts[0])
+        verb = (
+            "Check and preserve the recorded obligation:"
+            if contract["annotation_status"] == "current"
+            else "Verify the recorded obligation before relying on it:"
+        )
+        steps.append(
+            {
+                "kind": "contract",
+                "basis": contract.get("basis", "inferred"),
+                "owner": contract["owner"],
+                "suggestion": _short(f"{verb} {contract['statement']}", 360),
+                "annotation_status": contract["annotation_status"],
+                "evidence": contract.get("evidence", [])[:2],
+            }
+        )
+    consumers = sorted(impacted - {node.path for node in candidates} - set(tests))[:3]
+    steps.append(
+        {
+            "kind": "compatibility-and-tests",
+            "basis": "heuristic-backed-by-observed-consumers",
+            "suggestion": "Keep existing consumer-facing behavior stable; add a regression for the requested change and run the related checks. Observed test references do not prove coverage.",
+            "consumers": consumers,
+            "tests": tests[:4],
+            "evidence": [],
+        }
+    )
+    return steps
+
+
+def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
+    """Keep the default expansion small; original source/reviews remain inspectable."""
+    collections = [
+        brief["implementation_advice"]["review_proposals"],
+        brief["reuse_candidates"],
+        brief["contracts"],
+        brief["affected_paths"],
+        brief["tests"],
+        brief["likely_owners"],
+        brief["implementation_advice"]["steps"],
+    ]
+    while len(json.dumps(brief, ensure_ascii=False, indent=2).encode()) > 7000:
+        collection = next((items for items in collections if items), None)
+        if collection is None:
+            break
+        if collection is brief["contracts"]:
+            brief["contract_overflow"] += 1
+        collection.pop()
+        brief["context_truncated"] = True
+    return brief
+
+
+def _candidates(modules: dict[str, Node], matches: list[dict[str, Any]]) -> list[Node]:
     by_path = {node.path: node for node in modules.values()}
     candidates = list(
         {
             match["path"]: by_path[match["path"]]
             for match in matches
-            if match.get("path") in by_path
+            if match.get("path") in by_path and _implementation_owner(by_path[match["path"]])
         }.values()
     )
-    paths = {node.path for node in candidates}
-    impacted = affected_paths(graph, paths)
-    contracts = []
+    candidates.sort(
+        key=lambda node: bool(node.data.get("is_test") or node.path.startswith(("tests/", "test/")))
+    )
+    return candidates
+
+
+def _contracts(modules: dict[str, Node], impacted: set[str]) -> list[dict[str, Any]]:
+    contracts: list[dict[str, Any]] = []
     for node in modules.values():
         if node.path in impacted:
             contracts.extend(
@@ -129,36 +356,84 @@ def prepare(graph: Graph, matches: list[dict[str, Any]], task: str) -> dict[str,
                 }
                 for contract in node.data.get("annotation", {}).get("contracts", [])
             )
+    return contracts
+
+
+def _reuse_briefs(matches: list[dict[str, Any]], paths: set[str]) -> list[dict[str, Any]]:
+    return [
+        {
+            key: _short(match[key], 220) if key in {"name", "overview"} else match[key]
+            for key in ("id", "name", "path", "overview", "annotation_status")
+            if key in match
+        }
+        for match in matches[:8]
+        if match.get("path") in paths
+    ]
+
+
+def _contract_brief(contract: dict[str, Any], graph: Graph) -> dict[str, Any]:
+    statement = _short(contract.get("statement"), 360)
+    return {
+        key: contract[key] for key in ("owner", "basis", "annotation_status") if key in contract
+    } | {
+        "statement": statement,
+        "statement_truncated": contract.get("statement") != statement,
+        "evidence": _references(contract.get("evidence"), graph),
+    }
+
+
+def prepare(
+    graph: Graph,
+    matches: list[dict[str, Any]],
+    task: str,
+    reviews: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    modules = {node.id: node for node in graph.nodes if node.kind == "module"}
+    candidates = _candidates(modules, matches)
+    paths = {node.path for node in candidates}
+    impacted = affected_paths(graph, paths)
+    contracts = _contracts(modules, impacted)
     tests = [
         node.path
         for node in modules.values()
         if node.path in impacted and (node.data.get("is_test") or node.path.startswith("tests/"))
     ]
-    return {
-        "task": task,
+    proposals = _review_proposals(graph, reviews or [], {node.id for node in candidates}, task)
+    brief: dict[str, Any] = {
+        "task": _short(task, 1200),
         "snapshot_id": graph.snapshot.id,
         "likely_owners": [
             {
                 "id": n.id,
                 "path": n.path,
-                "overview": n.data.get("annotation", {}).get("overview"),
+                "overview": _short(n.data.get("annotation", {}).get("overview"), 180),
                 "annotation_status": n.data.get("annotation_status", "missing"),
             }
             for n in candidates
         ],
-        "reuse_candidates": matches[:20],
-        "contracts": contracts[:30],
-        "contract_overflow": max(0, len(contracts) - 30),
+        "reuse_candidates": _reuse_briefs(matches, paths),
+        "contracts": [_contract_brief(contract, graph) for contract in contracts[:6]],
+        "contract_overflow": max(0, len(contracts) - 6),
         "affected_paths": sorted(impacted)[:50],
         "affected_total": len(impacted),
         "tests": sorted(set(tests))[:20],
         "tests_total": len(set(tests)),
+        "implementation_advice": {
+            "steps": _coding_steps(graph, candidates, matches, contracts, tests, impacted),
+            "review_proposals": proposals,
+            "review_scope": "At most two owner-scoped proposals; expand saved reviews for other options. A proposal is not an instruction to rewrite.",
+        },
         "uncertainty": [
             "Placement is ranked evidence, not accepted architectural intent.",
             "Dynamic references and unparsed languages can hide consumers.",
             "Tests are associated by observed references; no tests were executed.",
         ],
     }
+    if not proposals:
+        brief["uncertainty"].append("No current owner-scoped review supports a pattern change.")
+    if brief["task"] != task:
+        brief["task_truncated"] = True
+    return _fit_brief(brief)
 
 
 def structural_findings(graph: Graph) -> list[dict[str, Any]]:
@@ -168,7 +443,7 @@ def structural_findings(graph: Graph) -> list[dict[str, Any]]:
     incoming = Counter(
         target
         for source, target in {
-            (owners.get(edge.source), module_ids.get(owners.get(edge.target)))
+            (owners.get(edge.source), module_ids.get(owners.get(edge.target, "")))
             for edge in graph.edges
             if edge.resolution == "resolved" and owners.get(edge.source) != owners.get(edge.target)
         }

@@ -78,10 +78,19 @@ def _git(root: Path, *args: str) -> bytes | None:
         return None
 
 
+def _portable_file(parts: tuple[str, ...]) -> bool:
+    return parts in {("anaxigraph", "record.json"), ("anaxigraph", "config.json")} or (
+        len(parts) == 2
+        and parts[0] == "anaxigraph"
+        and parts[1].startswith(".record-")
+        and parts[1].endswith(".tmp")
+    )
+
+
 def _excluded(path: str, patterns: tuple[str, ...]) -> bool:
     parts = Path(path).parts
-    if not parts or parts[0] == "anaxigraph":
-        return True  # The Git-carried portable record, not a source package under src/.
+    if not parts or _portable_file(parts):
+        return True
     if any(part in EXCLUDED_DIRS or part.endswith(".egg-info") for part in parts):
         return True
     if any(path.endswith(suffix) for suffix in EXCLUDED_SUFFIXES):
@@ -118,8 +127,40 @@ def _paths(listing: bytes | None) -> list[str]:
     return [os.fsdecode(path) for path in (listing or b"").split(b"\0") if path]
 
 
+def _legacy_record_patterns(root: Path) -> tuple[str, ...]:
+    """Recognize old generated partitions without hiding a same-named package.
+
+    Legacy marker files are tiny. Large current records do not need decoding:
+    their one reserved JSON path is already excluded above. Python/JS source
+    under these directories remains eligible even alongside legacy metadata.
+    """
+    marker = _regular_input(root, "anaxigraph/record.json")
+    if marker is None or marker.stat().st_size > 4096:
+        return ()
+    try:
+        with marker.open("rb") as stream:
+            raw = stream.read(4097)
+        if len(raw) > 4096:
+            return ()
+        value = json.loads(raw)
+    except (OSError, ValueError, UnicodeError):
+        return ()
+    if not isinstance(value, dict) or value.get("format") not in {
+        "anaxigraph-record-v2",
+        "anaxigraph-record-v3",
+        "anaxigraph-record-v4",
+    }:
+        return ()
+    generated = tuple(
+        f"anaxigraph/{directory}/*{suffix}"
+        for directory in ("mapping", "analyses", "views")
+        for suffix in (".json", ".jsonl", ".gz", ".xz", ".md", ".html", ".svg", ".txt")
+    )
+    return ("anaxigraph/manifest.json", *generated)
+
+
 def _walk_files(root: Path, excluded: tuple[str, ...]) -> list[str]:
-    candidates = []
+    candidates: list[str] = []
     for directory, dirs, files in os.walk(root, followlinks=False):
         relative = Path(directory).relative_to(root)
         dirs[:] = [name for name in dirs if not _excluded((relative / name).as_posix(), excluded)]
@@ -229,6 +270,7 @@ def _capture_inputs(
         signature = _signature(root, relative) if cache is not None else None
         saved = cache.entries.get(relative) if cache is not None else None
         if saved is not None and signature == saved[0]:
+            assert cache is not None  # A saved entry can only come from this cache.
             _, fingerprint, source, errors = saved
             if fingerprint is None:
                 binary_count += 1
@@ -303,6 +345,8 @@ def discover(
     if not root.is_dir():
         raise ValueError("Repository root must be a directory")
     diagnostics: list[str] = []
+    configured_exclusions = excluded
+    excluded = tuple(sorted(set(excluded) | set(_legacy_record_patterns(root))))
     candidates, revision, dirty = _inventory(root, excluded, diagnostics)
     files, contents = _capture_inputs(root, candidates, excluded, diagnostics, cache)
     identity = {
@@ -310,7 +354,7 @@ def discover(
         "revision": revision,
         "dirty": dirty,
         "files": files,
-        "excluded": sorted(excluded),
+        "excluded": sorted(configured_exclusions),
         "indexer": INDEX_VERSION,
     }
     snapshot_id = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
@@ -318,7 +362,7 @@ def discover(
         Snapshot(
             id=snapshot_id,
             root=str(root),
-            revision=identity["revision"],
+            revision=revision,
             dirty=dirty,
             files=files,
             created_at=datetime.now(timezone.utc).isoformat(),

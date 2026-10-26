@@ -46,6 +46,8 @@ class Application:
             experiment_id=os.environ.get("ANAXIGRAPH_EXPERIMENT_ID"),
         )
         self._graph_cache: tuple[tuple[int, ...], Graph] | None = None
+        self._export_cache: tuple[tuple[Any, ...], dict[str, Any]] | None = None
+        self._import_cache: tuple[Any, ...] | None = None
 
     def _current(self) -> Graph:
         token = self.store.knowledge_token(str(self.root))
@@ -84,7 +86,9 @@ class Application:
                 "Checkout changed after mapping; scan again before saving or validating"
             )
 
-    def scan(self) -> dict[str, Any]:
+    def scan(self, publish: bool = False) -> dict[str, Any]:
+        if type(publish) is not bool:
+            raise ValueError("publish must be a boolean")
         started = time.monotonic()
         graph = self.indexer.scan()
         # Avoid publishing a captured graph after a concurrent edit.
@@ -94,16 +98,28 @@ class Application:
             or self.store.stats(str(self.root))["snapshot_id"] != graph.snapshot.id
         ):
             self.store.save_graph(graph)
-        imported = self.import_record()
-        exported = self.export_record()
+        try:
+            imported = self.import_record()
+        except ValueError as error:
+            # An incompatible saved record must not prevent structural indexing.
+            # Explicit publication still rejects it and preserves the original.
+            if publish:
+                raise
+            self._require_live(graph)
+            imported = {"record_found": True, "compatible": False, "issue": str(error)}
+        exported = self.export_record() if publish else None
+        status = self.status()
+        portable = status["portable"]
         return {
-            **self.status(),
+            **status,
             "elapsed_seconds": round(time.monotonic() - started, 4),
             "mapped_locally": True,
-            "record_exported": exported["record_exported"],
+            "record_exported": exported is not None,
             "portable_import": imported,
-            "portable_bytes": exported["bytes"],
-            "committed_pushed": False,
+            "portable_bytes": portable["bytes"],
+            "committed": portable["committed"],
+            "pushed": portable["pushed"],
+            "committed_pushed": portable["committed_pushed"],
             "indexing": self.indexer.last_scan,
         }
 
@@ -157,7 +173,7 @@ class Application:
         nodes.sort(
             key=lambda n: n.path if key == "path" else n.data.get(key, 0), reverse=descending
         )
-        items = []
+        items: list[dict[str, Any]] = []
         for node in nodes[offset : offset + limit]:
             data = {
                 key: node.data[key]
@@ -263,7 +279,17 @@ class Application:
             revision=graph.snapshot.revision,
             continue_task=continue_task,
         )
-        result = prepare(graph, matches, task) | {
+        matched_paths = {match["path"] for match in matches}
+        owner_ids = tuple(
+            node.id for node in graph.nodes if node.kind == "module" and node.path in matched_paths
+        )
+        review_rows = [
+            self._review_state(row, graph)
+            for row in self.store.reviews(
+                str(self.root), include_requests=False, module_ids=owner_ids, limit=6
+            )
+        ]
+        result = prepare(graph, matches, task, reviews=review_rows) | {
             "baseline_id": pinned,
             "baseline_basis": "pinned-change-baseline",
             "task_key": task_key,

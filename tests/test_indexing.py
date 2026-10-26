@@ -87,6 +87,7 @@ def test_git_exclusions_cache_and_unchanged_scans_keep_identity(tmp_path):
     assert first.snapshot.dirty is False
     write(tmp_path, "runtime/huge.py", "not parsed")
     write(tmp_path, ".anaxigraph-v2/index.db", "cache")
+    write(tmp_path, "anaxigraph/record.json", '{"format":"anaxigraph-record-v3"}')
     write(tmp_path, "anaxigraph/manifest.json", "portable")
     second = index(tmp_path)
     assert second.snapshot.id == first.snapshot.id

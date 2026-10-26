@@ -28,6 +28,7 @@ flowchart TB
     Storage <--> App
     Analysis <--> App
     App <--> Execution[Resumable model workflow execution]
+    App <--> Evidence[Bounded local task and usage evidence]
     Analysis --> Execution
     App <--> Interfaces[CLI / MCP / HTTP and dashboard]
     Interfaces <--> Agents[Coding agents and independent reviewers]
@@ -83,8 +84,8 @@ source observations; contracts distinguish declared evidence from inference. Rev
 
 The returned blind request contains opaque requirement IDs, behavior statements and the response
 contract. Source, module identities, symbols, dependency topology and prior recommendations are
-excluded. Module IDs, source paths and distinctive or capitalized symbol identities are rejected;
-common lowercase verbs are allowed as ordinary prose unless explicitly written as code. Functional statements
+excluded. Module IDs, source paths and code-shaped identities such as snake_case, CamelCase,
+dotted/backticked names and calls are rejected. Ordinary English words remain usable. Functional statements
 still require judgment: the validator cannot prove a sentence contains no conceptual implementation
 assumption, that all product requirements were extracted, or that three descriptions are genuinely
 different architectures.

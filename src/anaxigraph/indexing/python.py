@@ -7,7 +7,7 @@ import hashlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from anaxigraph.contracts import Edge, Node
 
@@ -51,7 +51,7 @@ def _public_surface(body: list[ast.stmt], exports: set[str] | None = None) -> li
     This is an interface identity, not proof of behavioral equivalence. The full
     syntax digest remains available to disclose dependency implementation edits.
     """
-    surface = []
+    surface: list[tuple[Any, ...]] = []
     for item in body:
         name = getattr(item, "name", "")
         public = bool(name) and (
@@ -97,7 +97,7 @@ def _public_surface(body: list[ast.stmt], exports: set[str] | None = None) -> li
             if names:
                 surface.append(("binding", ",".join(names), ast.dump(item)))
         elif isinstance(item, (ast.Import, ast.ImportFrom)):
-            names = [
+            aliases = [
                 (alias.name, alias.asname)
                 for alias in item.names
                 if (
@@ -106,11 +106,11 @@ def _public_surface(body: list[ast.stmt], exports: set[str] | None = None) -> li
                     else not (alias.asname or alias.name).startswith("_")
                 )
             ]
-            if names:
+            if aliases:
                 surface.append(
                     (
                         "import",
-                        repr(names),
+                        repr(aliases),
                         getattr(item, "module", None),
                         getattr(item, "level", 0),
                     )
@@ -125,7 +125,7 @@ def interface_fingerprint(tree: ast.Module) -> str:
             targets = item.targets if isinstance(item, ast.Assign) else [item.target]
             if any(isinstance(target, ast.Name) and target.id == "__all__" for target in targets):
                 try:
-                    declared = ast.literal_eval(item.value)
+                    declared = ast.literal_eval(item.value) if item.value is not None else None
                     if isinstance(declared, (list, tuple)) and all(
                         isinstance(name, str) for name in declared
                     ):

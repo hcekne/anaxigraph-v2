@@ -30,7 +30,7 @@ KINDS = {
     "patterns": "patterns",
     "fresh-eyes": "fresh-eyes",
 }
-DEFAULTS = {
+DEFAULTS: dict[str, Any] = {
     "workers": 8,
     "timeout_seconds": 600,
     "stages": {
@@ -149,7 +149,14 @@ class WorkflowRunner:
         run["updated_at"] = time.time()
         self._write(self._path(run["id"]), run)
 
-    def _summary(self, run: dict[str, Any]) -> dict[str, Any]:
+    def _publication(self) -> dict[str, Any]:
+        method = getattr(self.application, "portable_status", None)
+        return method() if callable(method) else {}
+
+    def _summary(
+        self, run: dict[str, Any], publication: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        publication = self._publication() if publication is None else publication
         batches = run["batches"]
         active = sum(batch["status"] == "running" for batch in batches)
         status = run["status"]
@@ -185,7 +192,9 @@ class WorkflowRunner:
             "export_error": run.get("export_error"),
             "evidence_error": run.get("evidence_error"),
             "record_exported": run.get("record_exported", False),
-            "committed_pushed": False,
+            "committed": publication.get("committed"),
+            "pushed": publication.get("pushed"),
+            "committed_pushed": publication.get("committed_pushed"),
         }
 
     def _process_alive(self, run: dict[str, Any]) -> bool:
@@ -213,7 +222,8 @@ class WorkflowRunner:
                 self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
             )
             runs = [json.loads(p.read_text()) for p in paths if p.name != "settings.json"]
-            return {"items": [self._summary(run) for run in runs], "total": len(runs)}
+            publication = self._publication()
+            return {"items": [self._summary(run, publication) for run in runs], "total": len(runs)}
 
     def start(
         self,
@@ -236,7 +246,7 @@ class WorkflowRunner:
             )
             for old in paths[11:]:
                 old.unlink()
-            run = {
+            run: dict[str, Any] = {
                 "id": uuid.uuid4().hex,
                 "kind": KINDS[kind],
                 "scope": scope,

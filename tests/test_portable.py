@@ -78,7 +78,8 @@ def test_new_path_reuses_compatible_annotations_and_saved_reviews(tmp_path):
     }
     original.submit_analysis(request["request_id"], result)
     exported = original.export_record()
-    assert exported["files"] == 1 and exported["committed_pushed"] is False
+    # This fixture is not a Git checkout: publication state is unknown, not false.
+    assert exported["files"] == 1 and exported["committed_pushed"] is None
     target = clone(original, tmp_path)
     target.scan()  # Automatically read the Git-carried record after local indexing.
     assert target.status()["annotations"]["current"] == 1

@@ -173,7 +173,7 @@ Fresh CLI processes start with cold caches.
 
 ## Carry understanding through Git
 
-After a scan or workflow, the target repository contains **`anaxigraph/record.json`**. It carries
+After an explicit export or full workflow, the target repository contains **`anaxigraph/record.json`**. It carries
 concise module/function understanding, saved analyses, input identities and provenance. It contains
 no source bodies, SQL database, deterministic dependency graph or search cache. Commit and push
 `anaxigraph/` with your normal Git workflow. Another clone builds its local structural index and
@@ -184,11 +184,17 @@ their subsystem lineage. Unchanged exports are byte-stable and create no additio
 ```bash
 uv run anaxigraph export --repo /path/to/repo
 uv run anaxigraph import --repo /path/to/repo
+uv run anaxigraph scan --export --repo /path/to/repo
 ```
 
 Manual submissions save locally; export explicitly after a manual session. Full workflows export
 at completion or failure, preserving accepted batches. Mapping, exporting and committing/pushing
-are separate states: AnaxiGraph never reports a Git push merely because it wrote a record.
+are separate states. Status measures the record against the local Git commit and configured
+remote-tracking reference, explicitly reporting unknowns and that no remote was contacted. Ordinary
+scans update the local index and may reuse an existing record; they do not create one automatically.
+Source packages named `anaxigraph` remain indexable alongside recognized portable artifacts.
+Ignore `.anaxigraph-v2/` in Git for local caches and trial state; track `anaxigraph/` when you
+explicitly publish portable understanding.
 
 Local state lives in `.anaxigraph-v2/knowledge.sqlite`: current and previous graphs plus one pinned
 change baseline, canonical annotations and compressed review packets. Current batch results are
@@ -221,6 +227,8 @@ From this folder:
 uv sync --locked --extra dev
 uv run pytest
 uv run ruff check src tests
+uv run mypy
+uv run python scripts/quality.py
 uv build
 ```
 

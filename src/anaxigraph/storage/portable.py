@@ -9,7 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import uuid
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -108,11 +110,28 @@ def _analysis_key(row: dict[str, Any]) -> str:
     ).hexdigest()
 
 
-def build_record(
-    graph: Graph, reviews: list[dict[str, Any]], existing: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    source_id = content_identity(graph.snapshot.files)
-    module_ids = {n.id for n in graph.nodes if n.kind == "module"}
+def _annotation_meaning(annotation: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in annotation.items()
+        if key not in {"source_snapshot", "request_id", "provenance"}
+    }
+
+
+def _same_analysis(previous: dict[str, Any], current: dict[str, Any]) -> bool:
+    old, new = previous["body"], current["body"]
+    return bool(
+        current["status"] == "current"
+        and previous.get("source_identity") == current["source_identity"]
+        and new.get("input_identity")
+        and old.get("input_identity") == new["input_identity"]
+        and old.get("result") == new.get("result")
+        and [child["result_digest"] for child in old.get("children", [])]
+        == [child["result_digest"] for child in new.get("children", [])]
+    )
+
+
+def _module_records(graph: Graph, existing: dict[str, Any], module_ids: set[str]) -> dict[str, Any]:
     modules = {
         row["id"]: row | {"status": "stale"}
         for row in (existing or {}).get("modules", [])
@@ -122,15 +141,28 @@ def build_record(
         annotation = node.data.get("annotation")
         if node.kind != "module" or not annotation:
             continue
-        modules[node.id] = {
+        current: dict[str, Any] = {
             "id": node.id,
             "path": node.path,
             "fingerprint": node.data.get("annotation_fingerprint", graph.snapshot.files[node.path]),
             "status": node.data.get("annotation_status", "unknown"),
-            "annotation": {
-                key: value for key, value in annotation.items() if key in ANNOTATION_FIELDS
-            },
+            "annotation": {key: annotation[key] for key in annotation.keys() & ANNOTATION_FIELDS},
         }
+        previous = modules.get(node.id)
+        if (
+            previous
+            and previous["fingerprint"] == current["fingerprint"]
+            and _annotation_meaning(previous["annotation"])
+            == _annotation_meaning(current["annotation"])
+        ):
+            current = previous | {"status": current["status"]}
+        modules[node.id] = current
+    return modules
+
+
+def _retained_analyses(
+    existing: dict[str, Any], module_ids: set[str], source_id: str
+) -> dict[str, Any]:
     # Preserve saved findings across cache retention and subsequent incompatible scans.
     # Never restore an excluded/removed module's historical material as current scope.
     analyses: dict[str, dict[str, Any]] = {}
@@ -142,6 +174,14 @@ def build_record(
             if row.get("source_identity") != source_id:
                 row = row | {"status": "stale"}
             analyses[_analysis_key(row)] = row
+    return analyses
+
+
+def _analysis_records(
+    reviews: list[dict[str, Any]], existing: dict[str, Any], module_ids: set[str], source_id: str
+) -> dict[str, Any]:
+    analyses = _retained_analyses(existing, module_ids, source_id)
+    canonical_ids: dict[str, str] = {}
     for review in reviews:
         if review["kind"] == "request":
             continue
@@ -159,14 +199,51 @@ def build_record(
         }
         key = _analysis_key(item)
         prior = analyses.get(key)
+        if prior and _same_analysis(prior, item):
+            item = prior | {"status": item["status"]}
         if prior and prior.get("id") == item["id"] and item["source_identity"] is None:
             item["source_identity"] = prior.get("source_identity")
         analyses[key] = item
+        canonical_ids[review["id"]] = item["id"]
+    for key, item in analyses.items():
+        body = item["body"]
+        if body.get("children"):
+            analyses[key] = item | {
+                "body": body
+                | {
+                    "children": [
+                        child
+                        | {
+                            "request_id": canonical_ids.get(
+                                child["request_id"], child["request_id"]
+                            )
+                        }
+                        for child in body["children"]
+                    ]
+                }
+            }
+    return analyses
+
+
+def build_record(
+    graph: Graph, reviews: list[dict[str, Any]], existing: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    existing = existing or {}
+    source_id = content_identity(graph.snapshot.files)
+    module_ids = {node.id for node in graph.nodes if node.kind == "module"}
+    modules = _module_records(graph, existing, module_ids)
+    analyses = _analysis_records(reviews, existing, module_ids, source_id)
+    previous_source = (existing or {}).get("source", {})
+    revision = (
+        previous_source.get("revision")
+        if previous_source.get("identity") == source_id
+        else graph.snapshot.revision
+    )
     return {
         "format": FORMAT,
         "source": {
             "identity": source_id,
-            "revision": graph.snapshot.revision,
+            "revision": revision,
             "files": dict(sorted(graph.snapshot.files.items())),
         },
         "modules": sorted(modules.values(), key=lambda row: row["path"]),
@@ -226,7 +303,7 @@ def write_record(
         "files": 1,
         "changed": changed,
         "record_exported": True,
-        "committed_pushed": False,
+        **_publication_status(root, path),
     }
 
 
@@ -237,5 +314,79 @@ def record_status(root: Path) -> dict[str, Any]:
         "exists": path.is_file(),
         "bytes": path.stat().st_size if path.is_file() else 0,
         "files": int(path.is_file()),
-        "committed_pushed": "not_checked",
+        **_publication_status(root, path),
+    }
+
+
+def _git(root: Path, *arguments: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *arguments], capture_output=True, text=True, timeout=3
+        )
+        return result.stdout.rstrip("\r\n") if result.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+@lru_cache(maxsize=32)
+def _record_blob(root: str, path: str, signature: tuple[int, ...]) -> str | None:
+    # Ref changes are measured each call; only a file's verified byte hash is reused.
+    value = _git(Path(root), "hash-object", "--no-filters", "--", path)
+    try:
+        actual = Path(path).stat()
+    except OSError:
+        return None
+    after = (actual.st_dev, actual.st_ino, actual.st_size, actual.st_mtime_ns, actual.st_ctime_ns)
+    return value if signature == after else None
+
+
+def _publication_status(root: Path, path: Path) -> dict[str, Any]:
+    """Measure the current record against Git and disclose the local-ref proof.
+
+    This performs no fetch or push. A matching remote-tracking ref is useful
+    last-known evidence, not a claim that the remote was contacted just now.
+    """
+    result: dict[str, Any] = {
+        "tracked": None,
+        "committed": None,
+        "pushed": None,
+        "committed_pushed": None,
+        "publication": {"basis": "unavailable", "remote_contacted": False},
+    }
+    prefix = _git(root, "rev-parse", "--show-prefix")
+    if prefix is None:
+        return result
+    relative = "anaxigraph/record.json"
+    tracked = _git(root, "ls-files", "--error-unmatch", "--", relative) is not None
+    result["tracked"] = tracked
+    if not path.is_file():
+        return result | {"committed": False, "committed_pushed": False}
+    state = path.stat()
+    signature = (state.st_dev, state.st_ino, state.st_size, state.st_mtime_ns, state.st_ctime_ns)
+    blob = _record_blob(str(root), str(path), signature)
+    if blob is None:
+        return result
+    head_blob = _git(root, "rev-parse", "--verify", f"HEAD:{prefix}{relative}")
+    committed = blob == head_blob
+    upstream = _git(root, "rev-parse", "--symbolic-full-name", "@{upstream}")
+    result.update(committed=committed, committed_pushed=False if not committed else None)
+    result["publication"] = {"basis": "local_commit", "remote_contacted": False}
+    if upstream is None or not upstream.startswith("refs/remotes/"):
+        return result
+    if _git(root, "rev-parse", "--verify", f"{upstream}^{{commit}}") is None:
+        return result
+    upstream_blob = _git(root, "rev-parse", "--verify", f"{upstream}:{prefix}{relative}")
+    reachable = _git(root, "merge-base", "--is-ancestor", "HEAD", upstream) is not None
+    matches = blob == upstream_blob
+    pushed = committed and reachable and matches
+    return result | {
+        "pushed": pushed,
+        "committed_pushed": committed and pushed,
+        "publication": {
+            "basis": "local_tracking_ref",
+            "remote_contacted": False,
+            "upstream_ref": upstream,
+            "head_in_upstream": reachable,
+            "record_in_upstream": matches,
+        },
     }

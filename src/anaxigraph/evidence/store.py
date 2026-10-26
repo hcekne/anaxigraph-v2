@@ -15,7 +15,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 from anaxigraph.evidence.usage import FIELDS
 
@@ -54,7 +54,7 @@ def _bounded(value: Any, depth: int = 0) -> None:
         if isinstance(value, dict):
             if any(not isinstance(key, str) or key.lower() in FORBIDDEN for key in value):
                 raise ValueError("Evidence must not contain source, transcripts or credentials")
-            values = value.values()
+            values: Iterable[Any] = value.values()
         else:
             values = value
         for item in values:
