@@ -1,0 +1,51 @@
+{
+  "status": "passed",
+  "verified_at": "2026-10-26T14:35:01.895067+00:00",
+  "runtime_commit": "efb1dcb2963aeb84e6e632c4bec1e5f542fd96f8",
+  "basis": "Real GPT-6.1-Sol CLI responses on a stable two-module synthetic source fixture; this verifies execution and persistence, not recommendation quality or Snow Rankings completion.",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "xhigh",
+  "timeout_seconds": null,
+  "workflows": {
+    "mapping": {
+      "status": "completed",
+      "wall_seconds": 58.621,
+      "declared_modules": 2,
+      "reconciliation": "completed"
+    },
+    "patterns": {
+      "status": "completed",
+      "wall_seconds": 565.666,
+      "declared_modules": 2,
+      "reconciliation": "completed"
+    },
+    "fresh-eyes": {
+      "status": "completed",
+      "wall_seconds": 267.057,
+      "declared_modules": 2,
+      "reconciliation": "completed"
+    }
+  },
+  "pattern_pairs": {
+    "evaluated": 266,
+    "expected": 266
+  },
+  "fresh_eyes": {
+    "alternatives": 3,
+    "product_reconciliation_completed": true,
+    "source_blind": true
+  },
+  "git_only_publication": {
+    "annotations_current": 2,
+    "analyses_rebound": 4,
+    "canonical_bytes_unchanged": true,
+    "portable_bytes": 164056,
+    "portable_sha256": "4beeb0f440b2bc265ad3f6143aac01e89cc35767e619a37513bd7072eb81b4e6",
+    "additional_model_calls": 0
+  },
+  "billed_cost_usd": null,
+  "limitations": [
+    "Python/PYI syntax coverage; JavaScript is fingerprinted but not parsed.",
+    "The two-module fixture does not establish architectural benefit or whole-application performance."
+  ]
+}
