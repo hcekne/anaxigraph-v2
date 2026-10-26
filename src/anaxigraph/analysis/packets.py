@@ -42,6 +42,24 @@ def _annotation_current(node: Node) -> bool:
     return bool(node.data.get("annotation")) and node.data.get("annotation_status") == "current"
 
 
+def _batches(selected: list[Node], size: int, kind: str) -> list[list[str]]:
+    # Marker modules still belong to the covered scope, without needing a design
+    # of imaginary behavior when they happen to fall into a batch on their own.
+    inert = (
+        {node.id for node in selected if node.data.get("inert_module") is True}
+        if kind == "fresh-eyes"
+        else set()
+    )
+    ids = [node.id for node in selected if node.id not in inert]
+    batches = [ids[i : i + size] for i in range(0, len(ids), size)]
+    if inert:
+        if batches:
+            batches[0].extend(sorted(inert))
+        else:
+            batches.append(sorted(inert))
+    return batches
+
+
 def plan_scopes(
     graph: Graph,
     kind: str,
@@ -64,7 +82,7 @@ def plan_scopes(
     selected = _scope(graph, scope or [n.id for n in graph.nodes if n.kind == "module"], kind)
     if kind == "annotate" and not include_current:
         selected = [node for node in selected if not _annotation_current(node)]
-    return [[node.id for node in selected[i : i + size]] for i in range(0, len(selected), size)]
+    return _batches(selected, size, kind)
 
 
 def _check_behaviors(graph: Graph, behaviors: list[str]) -> None:
@@ -104,6 +122,7 @@ def _annotation_packet(
     graph: Graph, chosen: list[Node], symbols: list[Node], sources: dict[str, str] | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     ids = {node.id for node in chosen}
+    inert = all(node.data.get("inert_module") is True for node in chosen)
     packet: dict[str, Any] = {
         "instruction": (
             "Explain behavior concisely: one module overview sentence and short paragraph, "
@@ -111,7 +130,10 @@ def _annotation_packet(
             "Use source evidence for claims; distinguish declared from inferred obligations. "
             "Capabilities must describe observable behavior without implementation names, source "
             "paths or current module boundaries, for later blind design. Do not duplicate "
-            "signatures or invent guarantees. List uncertainty."
+            "signatures or invent guarantees. List uncertainty. Modules observed as inert_module "
+            "contain only documentation, comments or pass statements: describe their marker role "
+            "honestly and return capabilities: [], functions: [] and contracts: [], never null "
+            "or invented application behavior. Other modules require observable capabilities."
         ),
         "modules": [asdict(node) for node in chosen],
         "functions": [asdict(node) for node in symbols],
@@ -130,9 +152,13 @@ def _annotation_packet(
                 "node_id": "module ID",
                 "overview": "sentence",
                 "detail": "short paragraph",
-                "capabilities": ["behavior"],
-                "functions": [{"node_id": "function ID", "overview": "sentence"}],
-                "contracts": [
+                "capabilities": [] if inert else ["behavior"],
+                "functions": [{"node_id": "function ID", "overview": "sentence"}]
+                if symbols
+                else [],
+                "contracts": []
+                if inert
+                else [
                     {
                         "statement": "obligation",
                         "basis": "declared|inferred",
@@ -235,6 +261,8 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
         )
     requirements: list[dict[str, Any]] = []
     for node in chosen:
+        if node.data.get("inert_module") is True:
+            continue
         annotation = node.data["annotation"]
         for capability in annotation.get("capabilities", []):
             requirements.append({"id": f"R{len(requirements) + 1}", "behavior": capability})
@@ -412,8 +440,8 @@ def build_product_request(
             requirements.append({"id": f"R{len(requirements) + 1}", "behavior": behavior})
     _check_behaviors(graph, [item["behavior"] for item in requirements])
     # Reuse the blind design contract, not the source-aware module packet.
-    exemplar = next(n for n in graph.nodes if n.id in scope and n.kind == "module")
-    packet, schema = _fresh_packet(graph, [exemplar])
+    covered = [n for n in graph.nodes if n.id in scope and n.kind == "module"]
+    packet, schema = _fresh_packet(graph, covered)
     packet["requirements"] = requirements
     packet["level"] = "product"
     packet["instruction"] += (

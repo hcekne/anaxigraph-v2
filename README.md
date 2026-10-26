@@ -91,6 +91,8 @@ field blank) to wait without an elapsed deadline. Output/storage limits still ap
 can explicitly set `reasoning_effort` to `low`, `medium`, `high` or `xhigh`; the dashboard exposes the
 same choice. The evidence ledger distinguishes that requested CLI setting from an unverified
 provider default. Claude workers do not accept this Codex-specific setting.
+Modules containing only documentation, comments or `pass` are observed as inert: their annotations
+can have empty capabilities, and Fresh Eyes retains their coverage without inventing requirements.
 
 The same workflows are available to coding agents through MCP and the CLI:
 

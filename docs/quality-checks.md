@@ -11,7 +11,7 @@ separately. The production budget counts every physical Python, JavaScript, CSS 
 data is reported separately and has its own byte budget. Tests and experiment code are visible in
 the report rather than folded into the production count or omitted from the accounting.
 
-The explicit limits in `quality-budget.json` are 7,700 production lines, 800 lines per
+The explicit limits in `quality-budget.json` are 7,750 production lines, 800 lines per
 production file and 200,000 bytes of package JSON data. New Python functions have a decision-score
 ceiling of 15. Existing functions above that value have named limits equal to their measured debt,
 so they cannot silently become more complex. The score is one plus branch, boolean and comprehension
@@ -28,6 +28,8 @@ The production allowance increased from 7,600 to 7,700 for explicit unlimited mo
 per-worker Codex reasoning choices and honest evidence of those choices. The dashboard preserves
 these settings, rather than turning a blank deadline into zero or dropping a configured reasoning
 effort. Timeout validation has one reviewed optional-value branch; finite timeouts remain checked.
+Another 50 lines permit observed inert-module classification, honest empty capability lists and
+Fresh Eyes coverage that preserves marker modules without fabricating functional requirements.
 
 When a check fails, simplify the change or deliberately revise the relevant budget with an
 explanation of the required behavior and tradeoff. CI never rewrites the baseline or raises a limit.

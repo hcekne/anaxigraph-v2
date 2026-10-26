@@ -140,6 +140,18 @@ def interface_fingerprint(tree: ast.Module) -> str:
     return hashlib.sha256(repr(value).encode()).hexdigest()
 
 
+def _inert_module(tree: ast.Module) -> bool:
+    return all(
+        isinstance(statement, ast.Pass)
+        or (
+            isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Constant)
+            and isinstance(statement.value.value, str)
+        )
+        for statement in tree.body
+    )
+
+
 @dataclass
 class Module:
     path: str
@@ -197,6 +209,7 @@ def parse_module(
             f"{path}: {type(exc).__name__}: {exc}",
         )
     module = Module(path, tree, name, origin, {name, ".".join(parts)})
+    data["inert_module"] = _inert_module(tree)
     # A dependency's comments, whitespace and source locations do not change its
     # semantics. Preserve behavior-sensitive invalidation without fanning out model
     # calls for byte-only edits. Docstrings and function bodies remain meaningful.

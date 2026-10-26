@@ -189,6 +189,15 @@ def _identities(value: Any, field: str) -> list[str]:
     return [item[field] for item in value]
 
 
+def _capabilities(annotation: dict[str, Any], graph: Graph) -> None:
+    module = next(node for node in graph.nodes if node.id == annotation["node_id"])
+    _texts(
+        annotation.get("capabilities"),
+        "capabilities",
+        required=module.data.get("inert_module") is not True,
+    )
+
+
 def _annotations(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> None:
     annotations = result.get("annotations")
     if not isinstance(annotations, list) or len(annotations) != len(request["scope"]):
@@ -199,7 +208,7 @@ def _annotations(request: dict[str, Any], result: dict[str, Any], graph: Graph) 
         _validate_execution(annotation)
         _text(annotation.get("overview"), "overview", 320)
         _text(annotation.get("detail"), "detail", 1500)
-        _texts(annotation.get("capabilities"), "capabilities", required=True)
+        _capabilities(annotation, graph)
         _texts(annotation.get("uncertainty"), "uncertainty")
         functions = annotation.get("functions")
         expected = set(request["function_ids"][annotation["node_id"]])
