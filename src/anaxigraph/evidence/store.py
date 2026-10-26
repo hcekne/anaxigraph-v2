@@ -25,7 +25,7 @@ ALLOWED = set(
         "entity_id entity_ids operation files findings_count status notes receipts provider model stage "
         "elapsed_seconds request_id reused attempt input_tokens output_tokens cached_input_tokens "
         "cache_write_input_tokens uncached_input_tokens reasoning_output_tokens total_tokens cost_usd "
-        "usage_source cost_source run_id experiment_id arm metrics starting_commit candidate_commit "
+        "usage_source cost_source reasoning_effort reasoning_effort_basis run_id experiment_id arm metrics starting_commit candidate_commit "
         "check passed failed unchecked stale reported_passed outcome phase error_kind checks duration_seconds"
     ).split()
 )
@@ -250,6 +250,7 @@ class Evidence:
         request_id: str | None = None,
         reused: bool = False,
         attempt: int = 1,
+        reasoning_effort: str | None = None,
     ) -> dict | None:
         usage = usage or {}
         if (
@@ -275,6 +276,10 @@ class Evidence:
                 "request_id": request_id,
                 "reused": reused,
                 "attempt": attempt,
+                "reasoning_effort": reasoning_effort,
+                "reasoning_effort_basis": "explicit-cli-config"
+                if reasoning_effort is not None
+                else "provider-default-unverified",
                 **allowed_usage,
             },
         )

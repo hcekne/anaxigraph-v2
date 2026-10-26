@@ -98,10 +98,24 @@ def _verified(provider: str) -> None:
         raise ValueError("Model provider must be codex or claude")
 
 
-def _command(provider: str, model: str, directory: Path) -> tuple[list[str], Path | None]:
+def reasoning_effort(worker: dict[str, Any]) -> str | None:
+    effort = worker.get("reasoning_effort")
+    if effort is not None and (
+        worker.get("provider", "codex") != "codex"
+        or effort not in ("low", "medium", "high", "xhigh")
+    ):
+        raise ValueError("reasoning_effort is low, medium, high or xhigh for Codex workers only")
+    return effort
+
+
+def _command(
+    provider: str, model: str, directory: Path, effort: str | None = None
+) -> tuple[list[str], Path | None]:
     if provider == "codex":
         command = ["codex"]
         command.extend(part for feature in NO_TOOLS for part in ("--disable", feature))
+        if effort is not None:
+            command.extend(["--config", f"model_reasoning_effort={json.dumps(effort)}"])
         command.extend(
             [
                 "--config",
@@ -173,8 +187,8 @@ def _result(text: str) -> dict[str, Any]:
     return value
 
 
-def _wait(process: subprocess.Popen, paths: list[Path], timeout: int) -> None:
-    deadline = time.monotonic() + timeout
+def _wait(process: subprocess.Popen, paths: list[Path], timeout: int | None) -> None:
+    deadline = time.monotonic() + timeout if timeout is not None else None
     try:
         while True:
             used = sum(path.stat().st_size for path in paths if path.exists())
@@ -185,7 +199,7 @@ def _wait(process: subprocess.Popen, paths: list[Path], timeout: int) -> None:
                 raise ValueError("Model output exceeded the bounded worker response budget")
             if process.poll() is not None:
                 break
-            if time.monotonic() > deadline:
+            if deadline is not None and time.monotonic() > deadline:
                 raise ValueError(f"Model call exceeded {timeout} seconds")
             time.sleep(0.1)
     finally:
@@ -204,10 +218,11 @@ def execute(
     request: dict[str, Any],
     worker: dict[str, Any],
     *,
-    timeout: int = 600,
+    timeout: int | None = 600,
     draft: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     provider, model = worker.get("provider", "codex"), worker.get("model", "")
+    effort = reasoning_effort(worker)
     model = model or configured_model(provider)
     _verified(provider)
     # Deliver only the blind public envelope, never a server's scope/source metadata.
@@ -231,7 +246,7 @@ def execute(
         environment.pop(key, None)
     with tempfile.TemporaryDirectory(prefix="anaxigraph-worker-") as temporary:
         directory = Path(temporary)
-        command, result_path = _command(provider, model, directory)
+        command, result_path = _command(provider, model, directory, effort)
         prompt_path, output_path = directory / "input.json", directory / "stdout.log"
         prompt_path.write_text(
             instruction + json.dumps(packet, ensure_ascii=False), encoding="utf-8"

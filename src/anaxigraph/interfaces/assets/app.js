@@ -386,7 +386,7 @@ const workflowStatuses = new Map();
 function renderModelSettings(config) {
   workflowSettings = config;
   $("#workflow-workers").value = config.workers;
-  $("#workflow-timeout").value = config.timeout_seconds;
+  $("#workflow-timeout").value = config.timeout_seconds ?? "";
   const parent = $("#stage-models");
   parent.replaceChildren();
   for (const [kind, label] of Object.entries(stageLabels)) {
@@ -407,13 +407,25 @@ function renderModelSettings(config) {
     model.value = config.stages[kind].model || "";
     model.placeholder = "CLI configured default";
     modelLabel.append(model);
+    const effortLabel = textElement("label", `${label} Codex reasoning`);
+    const effort = document.createElement("select");
+    effort.id = `effort-${kind}`;
+    for (const value of ["", "low", "medium", "high", "xhigh"]) {
+      const option = textElement("option", value || "Provider default (unverified)");
+      option.value = value;
+      effort.append(option);
+    }
+    effort.value = config.stages[kind].reasoning_effort || "";
+    effort.disabled = provider.value !== "codex";
+    provider.addEventListener("change", () => { effort.disabled = provider.value !== "codex"; });
+    effortLabel.append(effort);
     const fallbackLabel = textElement("label", "Stronger fallback models, in order");
     const fallback = document.createElement("input");
     fallback.id = `fallback-${kind}`;
     fallback.value = (config.stages[kind].fallbacks || []).map((x) => x.provider === config.stages[kind].provider ? x.model : `${x.provider}:${x.model}`).join(", ");
     fallback.placeholder = "model, claude:other-model";
     fallbackLabel.append(fallback);
-    group.append(providerLabel, modelLabel, fallbackLabel);
+    group.append(providerLabel, modelLabel, effortLabel, fallbackLabel);
     parent.append(group);
   }
   for (const provider of ["codex", "claude"]) {
@@ -425,17 +437,26 @@ function renderModelSettings(config) {
 
 function readWorkflowSettings() {
   if (!workflowSettings) throw new Error("Model settings are still loading.");
-  const config = { workers: Number($("#workflow-workers").value), timeout_seconds: Number($("#workflow-timeout").value), stages: {}, review_passes: [] };
+  const timeout = $("#workflow-timeout").value.trim();
+  const config = { workers: Number($("#workflow-workers").value), timeout_seconds: timeout === "" ? null : Number(timeout), stages: {}, review_passes: [] };
   for (const kind of Object.keys(stageLabels)) {
     const provider = $(`#provider-${kind}`).value;
     config.stages[kind] = { provider, model: $(`#model-${kind}`).value.trim(), fallbacks: $(`#fallback-${kind}`).value.split(",").map((x) => x.trim()).filter(Boolean).map((model) => {
       const separator = model.indexOf(":");
       const selected = separator > 0 ? model.slice(0, separator) : "";
-      return ["codex", "claude"].includes(selected) ? { provider: selected, model: model.slice(separator + 1) } : { provider, model };
+      const worker = ["codex", "claude"].includes(selected) ? { provider: selected, model: model.slice(separator + 1) } : { provider, model };
+      const previous = (workflowSettings.stages[kind].fallbacks || []).find((x) => x.provider === worker.provider && x.model === worker.model);
+      return { ...previous, ...worker };
     }) };
+    const effort = $(`#effort-${kind}`).value;
+    if (provider === "codex" && effort) config.stages[kind].reasoning_effort = effort;
   }
   for (const provider of ["codex", "claude"]) {
-    if ($(`#review-${provider}-enabled`).checked) config.review_passes.push({ provider, model: $(`#review-${provider}-model`).value.trim() });
+    if ($(`#review-${provider}-enabled`).checked) {
+      const model = $(`#review-${provider}-model`).value.trim();
+      const previous = workflowSettings.review_passes.find((x) => x.provider === provider && x.model === model);
+      config.review_passes.push({ ...previous, provider, model });
+    }
   }
   return config;
 }

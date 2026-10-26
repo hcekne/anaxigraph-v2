@@ -86,6 +86,11 @@ buttons execute the workflows. Choose Codex or Claude and a model for each stage
 (1–100), optional stronger fallbacks and ordered review passes. Installed provider CLIs must already
 be authenticated. A blank model uses the local CLI's selected default. Independent batches run in
 parallel; enabled OpenAI and Claude review passes remain ordered within each batch.
+The default model-call deadline is 600 seconds. Set `timeout_seconds` to `null` (leave the dashboard
+field blank) to wait without an elapsed deadline. Output/storage limits still apply. Codex workers
+can explicitly set `reasoning_effort` to `low`, `medium`, `high` or `xhigh`; the dashboard exposes the
+same choice. The evidence ledger distinguishes that requested CLI setting from an unverified
+provider default. Claude workers do not accept this Codex-specific setting.
 
 The same workflows are available to coding agents through MCP and the CLI:
 

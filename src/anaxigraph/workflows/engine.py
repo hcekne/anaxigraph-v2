@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from anaxigraph.analysis.packets import plan_scopes
-from anaxigraph.workflows.providers import configured_model, execute
+from anaxigraph.workflows.providers import configured_model, execute, reasoning_effort
 
 _MUTEX = threading.RLock()
 _RUNNING: dict[tuple[str, str], threading.Thread] = {}
@@ -47,7 +47,11 @@ def _worker(value: Any) -> dict[str, Any]:
     model = value.get("model", "")
     if not isinstance(model, str) or len(model) > 150:
         raise ValueError("model must be a CLI model name, or blank for its configured default")
-    return {"provider": value.get("provider", "codex"), "model": model}
+    selected = {"provider": value.get("provider", "codex"), "model": model}
+    effort = reasoning_effort(value)
+    if effort is not None:
+        selected["reasoning_effort"] = effort
+    return selected
 
 
 def _selected_worker(value: dict[str, Any]) -> dict[str, Any]:
@@ -78,8 +82,9 @@ def _config(value: dict[str, Any] | None) -> dict[str, Any]:
             }
     if type(config["workers"]) is not int or not 1 <= config["workers"] <= 100:
         raise ValueError("workers must be between 1 and 100")
-    if type(config["timeout_seconds"]) is not int or not 30 <= config["timeout_seconds"] <= 3600:
-        raise ValueError("timeout_seconds must be between 30 and 3600")
+    timeout = config["timeout_seconds"]
+    if timeout is not None and (type(timeout) is not int or not 30 <= timeout <= 3600):
+        raise ValueError("timeout_seconds must be null for no deadline, or between 30 and 3600")
     passes = config["review_passes"]
     if not isinstance(passes, list) or len(passes) > 4:
         raise ValueError("Select at most four ordered review passes")
@@ -497,6 +502,7 @@ class WorkflowRunner:
                 request_id=request["request_id"],
                 reused=reused,
                 attempt=batch["attempts"],
+                reasoning_effort=worker.get("reasoning_effort"),
             )
         except (ValueError, OSError) as error:
             # Do not pay for another model call because the separate ledger is full.

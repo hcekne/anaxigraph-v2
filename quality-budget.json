@@ -2,7 +2,7 @@
   "version": 1,
   "baseline_commit": "dcc1a68173c794fc37d9e83541fd3bb89b6eef2c",
   "limits": {
-    "production_physical_lines": 7600,
+    "production_physical_lines": 7700,
     "file_physical_lines": 800,
     "package_data_bytes": 200000,
     "new_function_complexity": 15
@@ -31,6 +31,10 @@
     "src/anaxigraph/workflows/engine.py:WorkflowRunner._product": 18
   },
   "reviewed_changes": {
+    "src/anaxigraph/workflows/engine.py:_config": {
+      "ceiling": 21,
+      "reason": "An explicit null model-call deadline adds one optional-value branch while retaining finite timeout validation. The setting must survive saved configuration and dashboard round trips."
+    },
     "src/anaxigraph/interfaces/cli.py:parser": {
       "ceiling": 17,
       "reason": "Opt-in portable publication and local evidence commands add flat transport cases. Direct argument registration and dispatch are clearer than forwarding helpers introduced only to lower this metric."

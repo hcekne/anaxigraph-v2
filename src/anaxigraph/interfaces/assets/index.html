@@ -75,7 +75,7 @@
         <p class="section-note">Each stage uses the model you choose. A blank model uses that CLI's configured default. Installed Codex or Claude CLI authentication is required.</p>
         <div class="model-settings">
           <label>Parallel workers<input id="workflow-workers" type="number" min="1" max="100" value="8"></label>
-          <label>Seconds per model call<input id="workflow-timeout" type="number" min="30" max="3600" value="600"></label>
+          <label>Seconds per model call (blank means no deadline)<input id="workflow-timeout" type="number" min="30" max="3600" value="600" placeholder="No deadline"></label>
         </div>
         <div id="stage-models" class="model-settings"></div>
         <details><summary>Ordered review passes</summary><p class="section-note">Independent batches run in parallel. Within each batch, enabled review passes run in this order.</p>

@@ -247,6 +247,7 @@ else:
     assert not list(pathlib.Path.cwd().glob('*.py'))
     assert '--ignore-user-config' in sys.argv and '--ignore-rules' in sys.argv
     assert '--sandbox' in sys.argv and 'read-only' in sys.argv
+    assert 'model_reasoning_effort="xhigh"' in sys.argv
     assert 'CODEX_THREAD_ID' not in os.environ
     payload = sys.stdin.read()
     assert 'BEHAVIOR ONLY' in payload and 'secret.py' not in payload
@@ -266,7 +267,11 @@ else:
         "response_schema": {},
         "scope": ["secret.py"],
     }
-    result = execute(request, {"provider": "codex", "model": "fixture"})
+    result = execute(
+        request,
+        {"provider": "codex", "model": "fixture", "reasoning_effort": "xhigh"},
+        timeout=None,
+    )
     assert result["producer"] == "synthetic-executable"
     assert result["_anaxigraph_usage"]["input_tokens"] == 101
     assert result["_anaxigraph_usage"]["output_tokens"] == 7
