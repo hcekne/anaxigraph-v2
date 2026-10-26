@@ -9,6 +9,8 @@ from typing import Any
 from anaxigraph.analysis.validation import validate_result
 from anaxigraph.contracts import Graph
 
+from .behavior import annotation_behavior_problems
+
 ANNOTATION_CONTRACT_VERSION = "behavior-v2"
 
 
@@ -66,6 +68,10 @@ def compatible_annotations(
             continue
         if node.data.get("annotation_status") == "current":
             skipped.append({"id": identity, "reason": "current local understanding preserved"})
+            continue
+        problem = annotation_behavior_problems(graph, [annotation])
+        if problem:
+            skipped.append({"id": identity, "reason": next(iter(problem.values()))})
             continue
         request = {
             "kind": "annotate",

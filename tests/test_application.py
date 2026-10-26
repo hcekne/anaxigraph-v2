@@ -332,7 +332,7 @@ def test_fresh_eyes_packet_is_blind_and_keeps_all_behavior_requirements(app: App
 
 
 @pytest.mark.parametrize("field", ["capabilities", "contracts"])
-def test_fresh_eyes_rejects_source_path_leakage_in_functional_statements(
+def test_annotation_submission_rejects_source_path_leakage_in_behavior_fields(
     app: Application, field: str
 ) -> None:
     request = app.analysis_request("annotate", ["service.py", "persistence.py"])
@@ -341,11 +341,10 @@ def test_fresh_eyes_rejects_source_path_leakage_in_functional_statements(
         result["annotations"][0][field] = ["Use service.py to create invoices."]
     else:
         result["annotations"][0][field][0]["statement"] = "Preserve service.py internal behavior."
-    app.submit_analysis(request["request_id"], result)
     with pytest.raises(
         ValueError, match="(?i)path|implementation|blind|functional|source identity"
     ):
-        app.analysis_request("fresh-eyes")
+        app.submit_analysis(request["request_id"], result)
 
 
 @pytest.mark.parametrize(

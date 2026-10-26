@@ -7,6 +7,7 @@ from typing import Any
 
 from anaxigraph.contracts import Graph
 
+from .behavior import check_annotation_behaviors
 from .packets import DEFAULT_RESULT_BYTES, _check_behavior
 
 
@@ -231,6 +232,7 @@ def _annotations(request: dict[str, Any], result: dict[str, Any], graph: Graph) 
             }:
                 raise ValueError("Contracts must distinguish declared from inferred basis")
             _evidence(contract.get("evidence"), graph, required=True)
+    check_annotation_behaviors(graph, annotations)
 
 
 def _patterns(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> None:

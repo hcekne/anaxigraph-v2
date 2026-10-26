@@ -20,7 +20,7 @@ from anaxigraph.application.context import (
     context_fingerprints,
     dependency_implementation_fingerprints,
 )
-from anaxigraph.contracts import Graph
+from anaxigraph.contracts import Graph, Node
 from anaxigraph.indexing import capture_sources
 
 if TYPE_CHECKING:
@@ -46,6 +46,18 @@ def analysis_request(
         # Do not hand the blind designer a scope envelope containing module IDs.
         return {key: request[key] for key in ("request_id", "kind", "packet", "response_schema")}
     return {key: value for key, value in request.items() if key != "function_ids"}
+
+
+def _annotation_cache_data(node: Node, annotation: dict[str, Any], fingerprint: str) -> dict:
+    data = dict(node.data)
+    data.pop("annotation_stale_reason", None)
+    return data | {
+        "annotation": annotation,
+        "annotation_status": "current",
+        "annotation_fingerprint": fingerprint,
+        "dependency_implementation_changed": False,
+        "behavioral_validation": "not_independently_verified",
+    }
 
 
 def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -> dict[str, Any]:
@@ -107,14 +119,9 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
             nodes = tuple(
                 replace(
                     node,
-                    data=node.data
-                    | {
-                        "annotation": updated[node.id],
-                        "annotation_status": "current",
-                        "annotation_fingerprint": graph.snapshot.files[node.path],
-                        "dependency_implementation_changed": False,
-                        "behavioral_validation": "not_independently_verified",
-                    },
+                    data=_annotation_cache_data(
+                        node, updated[node.id], graph.snapshot.files[node.path]
+                    ),
                 )
                 if node.id in updated
                 else node

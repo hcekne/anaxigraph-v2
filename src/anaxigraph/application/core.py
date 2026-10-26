@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from anaxigraph import __version__
+from anaxigraph.analysis.behavior import annotation_behavior_problems
 from anaxigraph.analysis.changes import change_review
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
@@ -58,6 +59,7 @@ class Application:
             raise ValueError("No map for this checkout; run scan first")
         contexts = context_fingerprints(graph)
         implementations = dependency_implementation_fingerprints(graph)
+        behavior_problems = annotation_behavior_problems(graph)
         nodes = []
         for node in graph.nodes:
             data = dict(node.data)
@@ -67,6 +69,9 @@ class Application:
                 or annotation.get("annotation_contract") != ANNOTATION_CONTRACT_VERSION
             ):
                 data["annotation_status"] = "stale"
+            if node.id in behavior_problems:
+                data["annotation_status"] = "stale"
+                data["annotation_stale_reason"] = behavior_problems[node.id]
             if annotation and node.kind == "module":
                 prior = annotation.get("dependency_implementation_fingerprint")
                 data["dependency_implementation_changed"] = (
@@ -183,6 +188,7 @@ class Application:
                     "parse_status",
                     "is_test",
                     "annotation_status",
+                    "annotation_stale_reason",
                     "dependency_implementation_changed",
                     "behavioral_validation",
                 )

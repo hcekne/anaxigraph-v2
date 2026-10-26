@@ -93,6 +93,8 @@ same choice. The evidence ledger distinguishes that requested CLI setting from a
 provider default. Claude workers do not accept this Codex-specific setting.
 Modules containing only documentation, comments or `pass` are observed as inert: their annotations
 can have empty capabilities, and Fresh Eyes retains their coverage without inventing requirements.
+Capability and contract statements must be behavior-only; source references belong in separate
+evidence fields. Older briefs that leak implementation identities are marked stale individually.
 
 The same workflows are available to coding agents through MCP and the CLI:
 

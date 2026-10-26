@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from dataclasses import asdict
 from importlib.resources import files
 from typing import Any
 
 from anaxigraph.contracts import Graph, Node
+
+from .behavior import check_behaviors as _check_behaviors
 
 KINDS = {"annotate", "patterns", "fresh-eyes"}
 DEFAULT_PACKET_BYTES = 2_000_000
@@ -85,35 +86,6 @@ def plan_scopes(
     return _batches(selected, size, kind)
 
 
-def _check_behaviors(graph: Graph, behaviors: list[str]) -> None:
-    identities = {node.id for node in graph.nodes}
-    identities.update(node.path for node in graph.nodes if node.kind == "module")
-    # A dictionary word does not become an implementation leak because a function
-    # happens to use it. Reject distinctive identifier spelling, or explicit code
-    # notation for ordinary words, without maintaining an English allowlist.
-    code_names = set()
-    for node in graph.nodes:
-        if node.kind == "external":
-            continue
-        if "_" in node.name or re.search(r"[a-z0-9][A-Z]|[A-Z]{2}[a-z]|\.", node.name):
-            identities.add(node.name)
-        code_names.add(node.name)
-    # Compile one matcher per packet instead of one regex per symbol per
-    # requirement. That distinction matters when thousands of symbols are mapped.
-    alternatives = "|".join(re.escape(token) for token in sorted(identities) if token)
-    literal = re.compile(r"(?<!\w)(?:" + alternatives + r")(?!\w)")
-    names = "(?:" + "|".join(re.escape(name) for name in sorted(code_names)) + ")"
-    code = re.compile(
-        r"`" + names + r"`|(?<!\w)" + names + r"(?=\(|\.[A-Za-z_])"
-        r"|(?<!\w)[A-Za-z_]\w*\." + names + r"(?!\w)"
-    )
-    for behavior in behaviors:
-        if literal.search(behavior) or (code_names and code.search(behavior)):
-            raise ValueError(
-                "Functional statement contains source identity; rewrite it as behavior before Fresh Eyes"
-            )
-
-
 def _check_behavior(graph: Graph, behavior: str) -> None:
     _check_behaviors(graph, [behavior])
 
@@ -128,8 +100,10 @@ def _annotation_packet(
             "Explain behavior concisely: one module overview sentence and short paragraph, "
             "one sentence for EVERY supplied function, capabilities and behavioral contracts. "
             "Use source evidence for claims; distinguish declared from inferred obligations. "
-            "Capabilities must describe observable behavior without implementation names, source "
-            "paths or current module boundaries, for later blind design. Do not duplicate "
+            "Capabilities AND contract statements must describe observable behavior without "
+            "implementation names, internal classes/methods, source paths or current module "
+            "boundaries, for later blind design. Keep source references only in the separate "
+            "evidence field, never the contract statement. Do not duplicate "
             "signatures or invent guarantees. List uncertainty. Modules observed as inert_module "
             "contain only documentation, comments or pass statements: describe their marker role "
             "honestly and return capabilities: [], functions: [] and contracts: [], never null "
@@ -160,7 +134,7 @@ def _annotation_packet(
                 if inert
                 else [
                     {
-                        "statement": "obligation",
+                        "statement": "observable obligation without source identities",
                         "basis": "declared|inferred",
                         "evidence": [{"path": "relative path", "line": 1}],
                     }
