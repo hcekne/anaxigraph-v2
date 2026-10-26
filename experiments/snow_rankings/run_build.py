@@ -409,17 +409,44 @@ async def analyse(config, client, entry, save):
 
 async def coder(config, entry, save, *, review=False):
     directory = config.state / ("review" if review else "coding") / f"task-{entry['index']:02}"
-    result = await asyncio.to_thread(
-        coding,
-        config.repo,
-        directory,
-        config.mcp_url,
-        prompt_for(
+    attempt = 0
+    while True:
+        attempt += 1
+        entry["coding_attempt"] = attempt
+        prompt = prompt_for(
             entry["index"], config.app_port, directory, entry.get("acceptance"), review=review
-        ),
-        entry,
-        save,
-    )
+        )
+        if attempt > 1 or run_pair.git(config.repo, "status", "--porcelain"):
+            prompt += (
+                "\nContinue the existing saved and uncommitted implementation. A previous session "
+                "may have ended before completing this milestone. Inspect the current files and "
+                "preserve useful work; finish the task and checks rather than starting over."
+            )
+        result = await asyncio.to_thread(
+            coding, config.repo, directory, config.mcp_url, prompt, entry, save
+        )
+        record_coding(config, entry, result, review=review)
+        if result["status"] == "completed" and result["mcp_successes"]:
+            return result
+        if result["status"] == "completed":
+            raise RuntimeError("Coding completed without verified AnaxiGraph access")
+        entry.setdefault("session_failures", []).append(
+            {
+                "session_id": result["session_id"],
+                "status": result["status"],
+                "elapsed_seconds": result["elapsed_seconds"],
+                "kind": "provider_or_runtime_failure",
+            }
+        )
+        entry["session_failures"] = entry["session_failures"][-20:]
+        entry["status"] = "retrying_provider"
+        save()
+        # A transport/capacity failure must not discard work or end the build.
+        # This is retry backoff, not a development or model deadline.
+        await asyncio.sleep(min(60, 5 * attempt))
+
+
+def record_coding(config, entry, result, *, review=False):
     trial.record(
         config.state / "trial.sqlite",
         "treatment",
@@ -444,9 +471,6 @@ async def coder(config, entry, save, *, review=False):
             "notes": "analysis review" if review else "development",
         },
     )
-    if result["status"] != "completed" or not result["mcp_successes"]:
-        raise RuntimeError("Coding did not complete with verified AnaxiGraph access")
-    return result
 
 
 async def verify_and_repair(config, client, progress, entry, save):
@@ -648,6 +672,8 @@ async def main_async(config):
             if config.preflight_only:
                 print(json.dumps(proof))
                 return 0
+            progress.pop("error", None)
+            progress.pop("error_type", None)
             progress.update(status="running", phase="starting")
             save()
             await build(config, client, progress, save)

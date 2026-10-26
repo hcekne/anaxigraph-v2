@@ -81,6 +81,32 @@ class FakeWorkflows:
 
 
 class BuildWorkflowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_provider_failure_retries_same_model_and_preserves_saved_work(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            saved = root / "saved.py"
+            saved.write_text("preserve this implementation\n")
+            config = SimpleNamespace(
+                repo=root, state=root, app_port=18783, mcp_url="http://127.0.0.1:18782/mcp"
+            )
+            entry = {"index": 2, "task": "02-ranking"}
+            failed = {"status": "failed", "session_id": "interrupted", "elapsed_seconds": 7}
+            completed = {"status": "completed", "mcp_successes": 3}
+            with (
+                patch.object(run_build, "coding", side_effect=[failed, completed]) as coding,
+                patch.object(run_build, "record_coding") as recorded,
+                patch.object(run_build.run_pair, "git", return_value=" M saved.py"),
+                patch.object(run_build.asyncio, "sleep", AsyncMock()) as backoff,
+            ):
+                result = await run_build.coder(config, entry, lambda: None)
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(coding.call_count, 2)
+            self.assertEqual(recorded.call_count, 2)
+            self.assertIn("preserve useful work", coding.call_args.args[3])
+            self.assertEqual(saved.read_text(), "preserve this implementation\n")
+            self.assertEqual(entry["coding_attempt"], 2)
+            backoff.assert_awaited_once()
+
     async def test_analysis_rejects_successful_but_partial_scope(self):
         client = FakeWorkflows([{"snapshot": {"id": "stable"}, "modules": 3}])
         partial = {
