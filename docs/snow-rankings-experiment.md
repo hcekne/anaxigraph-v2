@@ -80,6 +80,26 @@ not automatic definitions of quality.
 
 ## Interpretation and limitations
 
+### First pilot invalidation on 26 October 2026
+
+The first pilot (`snow-rankings-2026-10-26`) cannot estimate AnaxiGraph's effect. All 31 terminal
+treatment MCP calls failed at the approval boundary; no working map, preparation, inspection or
+review result was delivered. The frozen treatment reports the error as “MCP tool call requires
+approval, but approval policy is never.” Assignment and server attachment did not establish use.
+
+Both implementations completed four coding tasks. Their original as-run scores remain preserved;
+separate version2 adjudication of the exact frozen commits passes 4/4, 8/8, 8/8 and 9/9 checks for
+each arm. Those results establish the scoped product behavior, not better architecture or a benefit,
+harm or absence of effect from a working AnaxiGraph. The original failed checker summaries also
+reached both agents before correction and remain a limitation.
+
+The original ledger retains eight false-positive `context_consulted` rows generated from four failed
+inspect calls. The original launch-verification count also counted terminal events as though they
+proved delivery. The separate `pilot-invalidation.json` record in the first pilot's state directory
+invalidates those interpretations without deleting data and hashes the preserved original artifacts.
+The corrected rerun uses separate `snow-rankings-verified-2026-10-26` state; its evidence must not be
+merged with this pilot. Tool-effect analysis requires verified successful delivery in that new run.
+
 This is one exploratory matched pair, not proof of a general causal effect. Different stochastic
 trajectories, developer interventions, model/provider changes and unequal analysis resources can
 explain differences. The setup must expose those differences rather than proclaiming a winner.
