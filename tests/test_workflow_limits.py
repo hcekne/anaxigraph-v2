@@ -39,7 +39,11 @@ def test_unlimited_configuration_round_trips_and_reaches_worker_and_evidence(tmp
     assert observed == [
         ({"provider": "codex", "model": "fixture", "reasoning_effort": "xhigh"}, None)
     ]
-    event = application.evidence.events()["items"][-1]["payload"]
+    event = next(
+        row["payload"]
+        for row in application.evidence.events()["items"]
+        if row["kind"] == "model_call"
+    )
     assert event["reasoning_effort"] == "xhigh"
     assert event["reasoning_effort_basis"] == "explicit-cli-config"
 

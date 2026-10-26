@@ -490,7 +490,9 @@ async function refreshWorkflows() {
     progress.setAttribute("aria-label", `${run.completed_batches} of ${run.total_batches} batches complete`);
     card.append(progress, textElement("p", `${run.completed_batches}/${run.total_batches} batches complete · ${run.active_workers} active workers · ${Math.round(run.elapsed_seconds)} seconds elapsed`, "section-note"));
     if (run.error) card.append(textElement("p", run.error, "run-error"));
+    if (run.batch_retries || run.failed_attempts) card.append(textElement("p", `${run.batch_retries || 0} batch retries · ${run.failed_attempts || 0} failed attempts recorded${run.attempt_history_complete ? "" : " · earlier failure details unavailable"}.`, "section-note"));
     for (const failure of run.failures || []) card.append(textElement("p", `Batch ${failure.batch_id}: ${failure.error}`, "run-error"));
+    for (const failure of run.attempt_failures || []) card.append(textElement("p", `Earlier attempt ${failure.attempt}, batch ${failure.batch_id} (${failure.phase}): ${failure.error}`, "run-error"));
     if (run.reconciliation) card.append(textElement("p", `Final reconciliation: ${run.reconciliation.status}. ${run.record_exported ? "Portable record saved." : "Results saved locally."}`));
     parent.append(card);
     running ||= ["running", "queued"].includes(run.status);

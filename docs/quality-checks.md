@@ -11,7 +11,7 @@ separately. The production budget counts every physical Python, JavaScript, CSS 
 data is reported separately and has its own byte budget. Tests and experiment code are visible in
 the report rather than folded into the production count or omitted from the accounting.
 
-The explicit limits in `quality-budget.json` are 7,900 production lines, 800 lines per
+The explicit limits in `quality-budget.json` are 8,000 production lines, 800 lines per
 production file and 200,000 bytes of package JSON data. New Python functions have a decision-score
 ceiling of 15. Existing functions above that value have named limits equal to their measured debt,
 so they cannot silently become more complex. The score is one plus branch, boolean and comprehension
@@ -36,6 +36,9 @@ One reviewed portable-import branch preserves safe entries when another brief re
 Another 50 lines record a bounded resource-context identity for portable analyses, so unrelated
 documentation changes can reuse exactly matching scoped inputs while changed opaque resources or
 cited obligations still invalidate them. The import guard has one reviewed compatibility branch.
+Another 100 lines retain bounded workflow attempt failures and distinguish successful provider
+transport from accepted analysis. Each batch keeps three sanitized failure details plus its cumulative
+count; status reports retries even after success, while older missing failure history stays unknown.
 
 When a check fails, simplify the change or deliberately revise the relevant budget with an
 explanation of the required behavior and tradeoff. CI never rewrites the baseline or raises a limit.

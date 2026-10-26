@@ -98,6 +98,10 @@ evidence fields. Older briefs that leak implementation identities are marked sta
 Portable analyses can survive unrelated documentation or Python changes when their rebuilt scoped
 inputs match exactly. Seed data, configuration, frontend resources and cited documents remain guarded;
 older records without that resource-context proof require a complete source match.
+Workflow status retains batch attempts, retries and recent failure details after a later success.
+`failed_attempts` counts recorded failures, including fallback candidates; it can exceed batch attempts.
+When `attempt_history_complete` is false, older failure details are unknown. Provider `model_call`
+completion and `analysis_result` acceptance/rejection are separate evidence events.
 
 The same workflows are available to coding agents through MCP and the CLI:
 

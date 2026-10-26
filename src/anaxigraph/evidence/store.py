@@ -26,7 +26,7 @@ ALLOWED = set(
         "elapsed_seconds request_id reused attempt input_tokens output_tokens cached_input_tokens "
         "cache_write_input_tokens uncached_input_tokens reasoning_output_tokens total_tokens cost_usd "
         "usage_source cost_source reasoning_effort reasoning_effort_basis run_id experiment_id arm metrics starting_commit candidate_commit "
-        "check passed failed unchecked stale reported_passed outcome phase error_kind checks duration_seconds"
+        "check passed failed unchecked stale reported_passed outcome phase error_kind checks duration_seconds batch_id"
     ).split()
 )
 FORBIDDEN = set(
@@ -271,6 +271,7 @@ class Evidence:
                 "provider": provider,
                 "model": model,
                 "stage": stage,
+                "phase": "provider",
                 "status": status,
                 "elapsed_seconds": elapsed_seconds,
                 "request_id": request_id,

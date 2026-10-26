@@ -92,6 +92,36 @@ def _config(value: dict[str, Any] | None) -> dict[str, Any]:
     return config
 
 
+def _failure_message(error: Exception, phase: str) -> str:
+    message = f"{phase} failed ({type(error).__name__})"
+    if phase == "validation" and isinstance(error, ValueError):
+        message = (str(error)[:2000].splitlines() or [message])[0]
+    return re.sub(
+        r"(?i)(?:api[_-]?key|password|token|secret)\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|\S+)",
+        "[redacted]",
+        message,
+    )[:200]
+
+
+def _attempt_summary(run: dict[str, Any]) -> dict[str, Any]:
+    """Count recorded failures, including fallback candidates, without inventing old history."""
+    batches = run["batches"]
+    failures = [
+        {"batch_id": batch["id"], **failure}
+        for batch in batches
+        for failure in batch.get("attempt_failures", [])
+    ]
+    count = sum(batch.get("failure_count", 0) for batch in batches)
+    return {
+        "batch_attempts": sum(batch["attempts"] for batch in batches),
+        "batch_retries": sum(max(0, batch["attempts"] - 1) for batch in batches),
+        "failed_attempts": count,
+        "attempt_history_complete": run.get("attempt_history_version") == 1,
+        "attempt_failures": sorted(failures, key=lambda failure: failure["at"], reverse=True)[:10],
+        "attempt_failures_truncated": count > min(len(failures), 10),
+    }
+
+
 class WorkflowRunner:
     def __init__(self, application: Any, provider: Callable = execute) -> None:
         self.application, self.provider = application, provider
@@ -200,6 +230,7 @@ class WorkflowRunner:
             "committed": publication.get("committed"),
             "pushed": publication.get("pushed"),
             "committed_pushed": publication.get("committed_pushed"),
+            **_attempt_summary(run),
         }
 
     def _process_alive(self, run: dict[str, Any]) -> bool:
@@ -261,6 +292,7 @@ class WorkflowRunner:
                 "started_at": time.time(),
                 "batches": [],
                 "stages_planned": [],
+                "attempt_history_version": 1,
                 "pid": os.getpid(),
             }
             self._save(run)
@@ -400,6 +432,7 @@ class WorkflowRunner:
             batch["status"], batch["attempts"] = "running", batch["attempts"] + 1
             batch.pop("error", None)
             self._save(run)
+        phase, recorded = "request", False
         try:
             request = (
                 self.application.analysis_product_request(batch["children"])
@@ -424,10 +457,12 @@ class WorkflowRunner:
             candidates = [_worker(selected), *selected.get("fallbacks", [])]
             last_error = None
             for candidate in candidates:
+                phase = "provider"
                 try:
                     result = self._call(run, batch, request, candidate)
                     for reviewer in reviewers:
                         result = self._call(run, batch, request, reviewer, draft=result)
+                    phase = "validation"
                     execution = {
                         "pipeline": pipeline,
                         "worker": candidate,
@@ -437,18 +472,67 @@ class WorkflowRunner:
                     for annotation in result.get("annotations", []):
                         annotation["execution"] = execution
                     self.application.submit_analysis(request["request_id"], result)
+                    self._record_result(run, batch, request, candidate, "accepted")
+                    recorded = False
                     break
                 except Exception as error:
+                    recorded = True
+                    self._record_failure(run, batch, error, phase)
+                    if phase == "validation":
+                        self._record_result(run, batch, request, candidate, "rejected", error)
                     last_error = error
             else:
                 raise ValueError(str(last_error))
+            phase = "progress"
             with _MUTEX:
                 batch["status"] = "completed"
                 self._save(run)
         except Exception as error:
+            if not recorded:
+                self._record_failure(run, batch, error, phase)
             with _MUTEX:
-                batch["status"], batch["error"] = "failed", str(error)[:500]
+                batch["status"], batch["error"] = "failed", _failure_message(error, phase)
                 self._save(run)
+
+    def _record_failure(self, run, batch, error, phase):
+        with _MUTEX:
+            batch["failure_count"] = batch.get("failure_count", 0) + 1
+            batch["attempt_failures"] = (
+                batch.get("attempt_failures", [])
+                + [
+                    {
+                        "attempt": batch["attempts"],
+                        "phase": phase,
+                        "error": _failure_message(error, phase),
+                        "at": time.time(),
+                    }
+                ]
+            )[-3:]
+            self._save(run)
+
+    def _record_result(self, run, batch, request, worker, status, error=None):
+        evidence = getattr(self.application, "evidence", None)
+        if evidence is None:
+            return
+        try:
+            evidence.record(
+                "analysis_result",
+                {
+                    "run_id": run["id"],
+                    "batch_id": batch["id"],
+                    "attempt": batch["attempts"],
+                    "request_id": request["request_id"],
+                    "stage": request["kind"],
+                    "provider": worker["provider"],
+                    "model": worker["model"],
+                    "status": status,
+                    "phase": "validation",
+                    "notes": _failure_message(error, "validation") if error else None,
+                },
+            )
+        except (ValueError, OSError) as failure:
+            with _MUTEX:
+                run["evidence_error"] = str(failure)[:300]
 
     def _call(self, run, batch, request, worker, *, draft=None):
         started = time.monotonic()
@@ -460,7 +544,15 @@ class WorkflowRunner:
                 **({"draft": draft} if draft is not None else {}),
             )
         except Exception:
-            self._record_call(run, batch, request, worker, "failed", time.monotonic() - started)
+            self._record_call(
+                run,
+                batch,
+                request,
+                worker,
+                "failed",
+                time.monotonic() - started,
+                review=draft is not None,
+            )
             raise
         usage = result.pop("_anaxigraph_usage", None)
         self._record_call(
