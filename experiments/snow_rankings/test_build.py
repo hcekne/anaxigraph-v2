@@ -108,7 +108,9 @@ class BuildWorkflowTests(unittest.IsolatedAsyncioTestCase):
             backoff.assert_awaited_once()
 
     async def test_analysis_rejects_successful_but_partial_scope(self):
-        client = FakeWorkflows([{"snapshot": {"id": "stable"}, "modules": 3}])
+        client = FakeWorkflows(
+            [{"snapshot": {"id": "stable"}, "modules": 3, "annotations": {"current": 3}}]
+        )
         partial = {
             "status": "completed",
             "reconciliation": {"status": "completed", "declared_modules": 2},
@@ -118,6 +120,31 @@ class BuildWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 await run_build.analyse(
                     SimpleNamespace(poll_seconds=0), client, {"task": "fixture"}, lambda: None
                 )
+
+    async def test_stale_behavior_briefs_reopen_previously_completed_mapping(self):
+        client = FakeWorkflows(
+            [{"snapshot": {"id": "stable"}, "modules": 10, "annotations": {"current": 6}}]
+        )
+        entry = {
+            "task": "fixture",
+            "snapshot_id": "stable",
+            "workflows": {
+                "mapping": {"run_id": "old-map", "status": "completed"},
+                "patterns": {"run_id": "old-patterns", "status": "completed"},
+            },
+        }
+
+        async def reopened(_client, kind, progress, _save, **_options):
+            self.assertEqual(kind, "mapping")
+            self.assertEqual(progress["workflows"], {})
+            raise RuntimeError("New mapping requested for the four stale briefs")
+
+        with patch.object(run_build, "run_workflow", reopened):
+            with self.assertRaisesRegex(RuntimeError, "four stale briefs"):
+                await run_build.analyse(
+                    SimpleNamespace(poll_seconds=0), client, entry, lambda: None
+                )
+        self.assertEqual(set(entry["superseded_runs"]), {"old-map", "old-patterns"})
 
     async def test_failed_acceptance_gets_a_repair_before_analysis(self):
         with tempfile.TemporaryDirectory() as temporary:

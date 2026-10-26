@@ -374,7 +374,11 @@ def prompt_for(index, port, directory, previous=None, *, review=False):
 async def analyse(config, client, entry, save):
     initial = await client.call("scan", {})
     snapshot = initial["snapshot"]["id"]
-    if entry.get("snapshot_id") not in (None, snapshot):
+    saved_mapping = entry.get("workflows", {}).get("mapping", {})
+    needs_mapping = initial["annotations"]["current"] != initial["modules"]
+    if entry.get("snapshot_id") not in (None, snapshot) or (
+        needs_mapping and saved_mapping.get("status") == "completed"
+    ):
         entry.setdefault("superseded_runs", []).extend(
             value["run_id"] for value in entry.get("workflows", {}).values()
         )
