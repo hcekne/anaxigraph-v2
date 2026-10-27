@@ -6,6 +6,17 @@ from anaxigraph.analysis.architecture import LENSES
 from anaxigraph.analysis.packets import plan_scopes
 
 
+def review_choices(run, kind):
+    choices = run["config"]["review_passes"]
+    if kind == "architecture" and not choices and "architecture-review" in run["config"]["stages"]:
+        return [run["config"]["stages"]["architecture-review"]]
+    return choices
+
+
+def applied_reviewers(kind, result, reviewers):
+    return reviewers if kind != "architecture" or result.get("findings") else []
+
+
 def plan_scouts(runner, run):
     for scope in plan_scopes(runner.application._current(), "architecture", run["scope"]):
         for lens in LENSES:

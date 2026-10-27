@@ -16,20 +16,28 @@ LENSES = {
     "boundaries": (
         "Find responsibilities that could change independently behind smaller public contracts. "
         "Look across the supplied files for useful component seams, private-data access, mixed "
-        "ownership and accidental coupling. Name what stays private and what consumers need."
+        "ownership and accidental coupling. Name what stays private and what consumers need. "
+        "Check existing public exports and facades before proposing another boundary: an unresolved "
+        "reference or re-export is not evidence of illegal private access."
     ),
     "packages": (
         "Find cohesive capabilities worth developing as standalone importable tools. Compare "
         "keeping them in place, a local package, a separately versioned distribution in this "
         "workspace and a package maintained in a separate repository. Consider reusable behavior, "
         "independent agent context, release ownership and domain/data ties. Separation need not "
-        "introduce a service or network call. Reject extraction when its costs outweigh benefits."
+        "introduce a service or network call. First establish which members already form a package "
+        "and what package_context actually declares. An already isolated, versioned library may "
+        "need no extraction; propose only an additional concrete benefit. A root project version "
+        "does not prove every internal component has its own distribution or release lifecycle. "
+        "Reject extraction when its costs outweigh benefits."
     ),
     "verification": (
         "Find obstacles to independent component development and verification: neighbor-dependent "
         "fixtures, shared mutable resources, missing public-contract checks or overly broad test "
         "setup. Propose a concrete local verification seam and the consumer/shared checks still "
-        "needed. Test links alone do not establish test isolation or a complete CI selection."
+        "needed. Empty observed test links do not mean tests are absent. Without supplied evidence "
+        "of an actual verification obstacle, report unknown rather than assert missing tests, "
+        "missing isolation or a need to add an already available check."
     ),
 }
 PLACEMENTS = (
@@ -157,13 +165,27 @@ def architecture_packet(
     packet = {
         "lens": lens,
         "assignment": LENSES[lens],
+        "finding_review_policy": (
+            "When reviewing a supplied draft, independently challenge its findings. Require a "
+            "concrete incremental benefit and source evidence. Remove recommendations that "
+            "repeat existing boundaries or rely only on missing test edges. Correct assessments "
+            "to keep or unknown as appropriate, and return the complete same response contract."
+        ),
         "instruction": (
             "Perform ONLY the assigned architectural search. These source neighborhoods are "
             "provisional groups, not boundaries to preserve. Consider every supplied module and "
             "return one assessment each: finding, keep or unknown. Return zero to three useful "
-            "findings, without no-change essays or a quota for extractions. Findings must name "
+            "findings, without no-change essays or a quota for extractions. Establish the current "
+            "boundary and declared packaging before judging change. Findings must name "
             "member modules, a published behavioral contract, private implementation, dependencies, "
-            "costs, evidence and a checkable next step. Compare in-place with the proposed option. "
+            "costs, evidence and a checkable next step. The next_step must state a concrete "
+            "incremental change beyond what already exists, not simply describe a good pattern "
+            "the code already implements. Proactive opportunities are welcome; existing behavior, "
+            "contracts or packaging must not be presented as new improvements. If the alleged "
+            "gap itself is unestablished, assess unknown and record the missing evidence instead "
+            "of assigning a speculative material rewrite. A supplied draft is a hypothesis: reject "
+            "or downgrade findings that repeat existing design or infer absence from missing "
+            "references. Compare in-place with the proposed option. "
             "For the packages lens compare ALL of in-place, local-package, workspace-distribution "
             "and separate-repository, even when recommending another option. Follow output_limits. "
             "Priority 1 is optional, 2 is material, and 3 is highly important; use keep when no "

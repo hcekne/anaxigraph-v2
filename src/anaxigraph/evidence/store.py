@@ -213,6 +213,7 @@ class Evidence:
             db.execute("BEGIN IMMEDIATE")
             existing = self._get(db, "active_task")
             if existing and (continue_task or self._get(db, "active_task_key") == key):
+                self._set(db, "active_task_key", key)
                 return existing
             identity = uuid.uuid4().hex
             self._append(db, "task_started", payload | {"task_id": identity}, identity)

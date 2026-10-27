@@ -27,7 +27,12 @@ from anaxigraph.workflows.progress import (
     timing_summary,
 )
 from anaxigraph.workflows.providers import configured_model, execute, reasoning_effort
-from anaxigraph.workflows.scouts import plan_scouts, review_workflow
+from anaxigraph.workflows.scouts import (
+    applied_reviewers,
+    plan_scouts,
+    review_choices,
+    review_workflow,
+)
 
 _MUTEX = threading.RLock()
 _RUNNING: dict[tuple[str, str], threading.Thread] = {}
@@ -63,6 +68,12 @@ DEFAULTS: dict[str, Any] = {
                 {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "xhigh"}
             ],
         },
+        "architecture-review": {
+            "provider": "codex",
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "medium",
+            "fallbacks": [],
+        },
         "fresh-eyes": {"provider": "codex", "model": "", "fallbacks": []},
     },
     "review_passes": [],
@@ -93,11 +104,15 @@ def _stage_choices(stages: Any) -> dict[str, Any]:
         raise ValueError("stages must map analysis names to model choices")
     selected = deepcopy(DEFAULTS["stages"])
     for name, choice in stages.items():
-        if name not in KINDS and name != "pattern-screen":
+        if name not in KINDS and name not in {"pattern-screen", "architecture-review"}:
             raise ValueError("Unknown model stage")
         fallbacks = choice.get("fallbacks", []) if isinstance(choice, dict) else []
         if not isinstance(fallbacks, list) or len(fallbacks) > 4:
             raise ValueError("Select at most four progressively stronger fallback workers")
+        if name == "architecture-review" and fallbacks:
+            raise ValueError(
+                "Architecture finding review uses one worker; configure ordered review_passes for multiple reviewers"
+            )
         selected[KINDS.get(name, name)] = _worker(choice) | {
             "fallbacks": [_worker(x) for x in fallbacks]
         }
@@ -527,7 +542,7 @@ class WorkflowRunner:
             selected = _selected_worker(choice) | {
                 "fallbacks": [_selected_worker(x) for x in choice.get("fallbacks", [])]
             }
-            reviewers = [_selected_worker(x) for x in run["config"]["review_passes"]]
+            reviewers = [_selected_worker(x) for x in review_choices(run, batch["kind"])]
             pipeline = {"worker": selected, "review_passes": reviewers}
             if self.application.analysis_saved(request["request_id"], pipeline):
                 self._record_call(run, batch, request, selected, "reused", 0, reused=True)
@@ -541,13 +556,14 @@ class WorkflowRunner:
                 phase = "provider"
                 try:
                     result = self._call(run, batch, request, candidate)
-                    for reviewer in reviewers:
+                    executed = applied_reviewers(request["kind"], result, reviewers)
+                    for reviewer in executed:
                         result = self._call(run, batch, request, reviewer, draft=result)
                     phase = "validation"
                     execution = {
                         "pipeline": pipeline,
                         "worker": candidate,
-                        "review_passes": reviewers,
+                        "review_passes": executed,
                     }
                     result["execution"] = execution
                     for annotation in result.get("annotations", []):

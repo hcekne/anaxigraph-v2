@@ -24,9 +24,14 @@ blind Fresh Eyes. Do not create a second agent framework or automatically turn p
 | `verification` | Find smaller behavior/contract test contexts. Identify shared state, infrastructure and missing evidence that could extend the verification scope. |
 
 Each lens is a separate provider job, not three headings in one generic review. Defaults use
-Luna/low, then Sol/medium after provider or validation failure. Model overrides, ordered review
-passes and unlimited timeout settings remain available. Failure escalation does not establish
-independent semantic verification of every valid response.
+Luna/low, then Sol/medium after provider or validation failure. A positive scout draft also receives
+a focused Sol/medium review before acceptance; keep/unknown-only drafts skip that call. This second
+worker challenges the incremental benefit and evidence, removing redundant boundaries or claims
+based only on missing test edges. Explicit ordered review passes replace the default reviewer.
+Model choices and unlimited timeout settings remain configurable. Review is still a model judgment,
+not proof of correctness. Its policy is fingerprinted with the request, while execution provenance
+distinguishes configured reviewers from those actually called. Legacy saved runs retain their
+configured review pipeline.
 
 Groups contain up to eight production modules, provisionally grouped by directory, with bounded
 neighbor behavior, public surfaces, observed test links and source relationships. These scheduling
@@ -116,9 +121,11 @@ A new task or mismatching baseline cannot inherit old apparent follow-through.
 
 ## Costs and limits
 
-The production allowance increases from 9,100 to 10,100 physical lines for scoped contracts and
+The production allowance increases from 9,100 to 10,150 physical lines for scoped contracts and
 validators, package declarations, shared-runner orchestration, identity handling and plan/UI
 follow-through. Existing provider execution, SQLite, export/import, retries and timings are reused.
+The final 50-line allowance covers conditional strong review after a real negative control
+exposed a redundant package recommendation from the cheap scout.
 No complexity ceiling is raised. Tests and experiment code remain separately reported.
 The earlier 83.1-second mapping/Patterns measurement predates the mandatory scouts; it is not a
 measurement of this larger workload.

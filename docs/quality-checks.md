@@ -11,7 +11,7 @@ separately. The production budget counts every physical Python, JavaScript, CSS 
 data is reported separately and has its own byte budget. Tests and experiment code are visible in
 the report rather than folded into the production count or omitted from the accounting.
 
-The explicit limits in `quality-budget.json` are 10,100 production lines, 800 lines per
+The explicit limits in `quality-budget.json` are 10,150 production lines, 800 lines per
 production file and 200,000 bytes of package JSON data. New Python functions have a decision-score
 ceiling of 15. Existing functions above that value have named limits equal to their measured debt,
 so they cannot silently become more complex. The score is one plus branch, boolean and comprehension
@@ -50,6 +50,10 @@ The next 1,000-line allowance implements mandatory architectural scouts, declare
 facts, explicit plan dispositions and the shared UI/API. Existing execution and persistence are
 reused; no function-complexity ceiling is raised. See the
 [scout decision](change-request-architecture-scouts.md) for behavior and enforcement limits.
+Another 50 lines permit conditional strong review of positive scout findings. A live negative
+control exposed a redundant packaging recommendation, so positives now need a second judgment;
+keep/unknown outcomes skip that call. This reuses the existing draft-review pipeline and records
+configured policy separately from reviewers actually called.
 
 When a check fails, simplify the change or deliberately revise the relevant budget with an
 explanation of the required behavior and tradeoff. CI never rewrites the baseline or raises a limit.

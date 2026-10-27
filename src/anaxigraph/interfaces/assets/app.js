@@ -411,7 +411,7 @@ async function refresh() {
   }
 }
 
-const stageLabels = { annotate: "Mapping", "pattern-screen": "Fast pattern screening", architecture: "Component architecture scouts", patterns: "Detailed pattern review", "fresh-eyes": "Fresh Eyes" };
+const stageLabels = { annotate: "Mapping", "pattern-screen": "Fast pattern screening", architecture: "Component architecture scouts", "architecture-review": "Architecture finding review", patterns: "Detailed pattern review", "fresh-eyes": "Fresh Eyes" };
 const lensLabels = { boundaries: "Component boundaries", packages: "Standalone packages or repos", verification: "Independent verification" };
 let workflowSettings = null;
 let workflowTimer = null;
@@ -460,6 +460,7 @@ function renderModelSettings(config) {
     fallback.value = (config.stages[kind].fallbacks || []).map((x) => x.provider === config.stages[kind].provider ? x.model : `${x.provider}:${x.model}`).join(", ");
     fallback.placeholder = "model, claude:other-model";
     fallbackLabel.append(fallback);
+    fallbackLabel.hidden = kind === "architecture-review";
     group.append(providerLabel, modelLabel, effortLabel, fallbackLabel);
     parent.append(group);
   }

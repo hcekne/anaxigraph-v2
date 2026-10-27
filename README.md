@@ -101,6 +101,9 @@ The dashboard's **Run full mapping**, **Run full pattern analysis**, **Run full 
 and **Run full Fresh Eyes** buttons execute the workflows. New defaults use **Luna/low** for mapping,
 architectural scouts and ID-only pattern
 screening, **Sol/medium** for shortlisted detailed reviews, and a pool of **32** independent workers.
+Positive architectural findings receive a separate Sol/medium review by default; keep/unknown-only
+scout drafts skip it. The architecture finding review model is configurable; explicit ordered review
+passes replace its default. Recording an adopt decision still does not verify implementation.
 Existing explicit model selections remain unchanged. Choose Codex or Claude and a model for each stage, parallel workers
 (1–100), optional stronger fallbacks and ordered review passes. Installed provider CLIs must already
 be authenticated. A blank model uses the local CLI's selected default. Independent batches run in

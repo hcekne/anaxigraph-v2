@@ -151,3 +151,25 @@ def test_truncated_material_scope_is_not_reported_as_fully_decided():
     result = decide([], [], truncated=True)
     assert result["status"] == "scope_incomplete"
     assert result["implementation_status"] == "unverified"
+
+
+def test_refined_task_explicitly_continued_keeps_plan_followthrough(application):
+    result = application.assess_plan("change produce", ["pkg/a.py"])
+    identity = result["architecture"]["requirements"][0]["proposal_id"]
+    decided = application.assess_plan(
+        "change produce",
+        ["pkg/a.py"],
+        [
+            {
+                "proposal_id": identity,
+                "decision": "defer",
+                "reason": "Preserve the current boundary for this task.",
+            }
+        ],
+    )
+    initial = application.trial_evidence()["summary"]["active_task_id"]
+    continued = application.prepare_change("refined produce task", continue_task=True)
+    repeated = application.prepare_change("refined produce task")
+    assert continued["baseline_id"] == repeated["baseline_id"] == decided["brief"]["baseline_id"]
+    assert continued["task_id"] == repeated["task_id"] == initial
+    assert application.validate_change()["architecture"]["status"] == "decisions_recorded"
