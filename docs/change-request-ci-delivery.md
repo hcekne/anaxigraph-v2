@@ -34,7 +34,9 @@ Pattern run also includes one root CI/CD review alongside the three component sc
 screening. Old saved runs retain their original protocol.
 
 The dedicated worker receives bounded declarations: GitHub Actions triggers, jobs, `needs`,
-conditions, matrices, commands, working directories, concurrency and cache settings. Local reusable
+conditions, output mappings, step IDs, literal path-filter rules, matrices, commands, working
+directories, concurrency and cache settings. Literal filter YAML is parsed into bounded groups and
+rules; dynamic or invalid filters remain unknown. Local reusable
 workflows and composite actions are followed within the fingerprinted checkout. Root package-script
 commands and literal local script paths/fingerprints expose existing selectors without executing
 or copying their bodies. Remote actions/workflows and dynamic expressions stay opaque. Environment
@@ -62,8 +64,11 @@ recommendations identify:
 - Required checks to retain and practical next actions.
 - Source evidence and uncertainty, including missing duration measurements.
 
-Positive recommendations cite every named pipeline within captured line bounds. Strong review
-challenges existing optimizations and unsupported claims. This validates coverage and provenance;
+Positive recommendations cite every named pipeline within captured line bounds. Structural facts
+can justify conditional opportunities before timings or independence are proven; recommendations
+must name those prerequisites and retain existing checks until validated. Missing measurements
+cannot support claimed savings, but do not automatically veto useful design candidates. Strong
+review challenges existing optimizations and unsupported claims. This validates coverage and provenance;
 it does not prove recommendation quality, equivalent assurance or executed checks.
 
 Capture limits are explicit: up to 16 primary configurations, eight local references, 64 KiB source
@@ -164,6 +169,13 @@ CI configuration or unresolved ownership. Both `prepare_change` and `assess_plan
 saved CI advice; test selection comes from authored task inputs, never the two-level source map.
 
 ## Qualification and limits
+
+Initial live probes exposed two failures despite accepted result contracts: selector filter rules
+and output mappings were missing from the packet, and reviewers rejected conditional structural
+opportunities because timings or scope proofs were absent. The reader now includes those selector
+facts, and the prompts distinguish a candidate with validation prerequisites from a measured saving
+or permission to skip checks. Fresh live qualification is required after these changes; a valid
+unknown-only result does not by itself establish useful architectural advice.
 
 Historical mapping/Pattern timings in earlier change requests predate this root CI/CD review. They
 are not measurements of this expanded protocol. New qualification must distinguish deterministic

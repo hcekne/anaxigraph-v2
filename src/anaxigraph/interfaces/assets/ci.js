@@ -37,7 +37,7 @@ window.AnaxiGraphCI = (() => {
       const card = view.textElement("article", "", "alternative-card");
       card.append(view.textElement("h4", target.id), view.textElement("p", target.command || "Declared target"));
       addList(card, "Why this check is included", target.reasons || []);
-      card.append(view.textElement("p", target.cache_eligible ? "Input fingerprint available for trusted cache validation; no cache hit is claimed." : target.cache_reason || "No reusable test result has been established.", "section-note"));
+      card.append(view.textElement("p", target.cache_eligible ? "Input fingerprint available for trusted cache validation; no cache hit is claimed." : "No reusable check result has been established.", "section-note"));
       parent.append(card);
     }
     if (result.uncovered_paths?.length) addList(parent, "Paths needing ownership or broader checks", result.uncovered_paths);

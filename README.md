@@ -223,7 +223,8 @@ prompt inputs separately from structural readiness.
   high-level Mermaid diagram. Internal workers have tool access disabled. An externally supplied
   agent remains responsible for honoring its packet's isolation requirements. The service cannot
   prove architectural novelty; it retains all alternatives and separates later source-aware comparison.
-- **CI/CD:** inspect captured GitHub Actions jobs, dependencies, conditions, matrices, commands,
+- **CI/CD:** inspect captured GitHub Actions jobs, dependencies, conditions, output mappings,
+  literal path-filter rules, matrices, commands,
   caches and local reusable workflows/actions, alongside declared task policy and inferred component
   context. Return at most three actionable recommendations with a fast path, widening conditions,
   cache strategy, parallelism, deployment checks, retained obligations and next steps. Captured

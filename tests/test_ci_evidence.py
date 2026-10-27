@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from anaxigraph.analysis.delivery import capture_coverage
 from anaxigraph.indexing import index
 from anaxigraph.indexing.ci_evidence import (
     MAX_BYTES,
@@ -240,3 +241,77 @@ def test_bounded_commands_matrices_and_step_counts_report_incomplete_capture(tmp
     assert job["steps_truncated"] is True
     assert len(job["steps"]) == 20
     assert len(job["steps"][0]["run"]) == 300
+
+
+def test_literal_path_filter_groups_step_ids_and_job_outputs_are_preserved(tmp_path):
+    patterns = "".join(f"              - 'packages/render/part{i:02}/**'\n" for i in range(40))
+    source = (
+        """on: pull_request
+jobs:
+  changes:
+    outputs:
+      render: ${{ steps.paths.outputs.render }}
+      calculate: ${{ steps.paths.outputs.calculate }}
+    steps:
+      - id: paths
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            render:
+"""
+        + patterns
+        + """            calculate:
+              - 'packages/calculate/**'
+              - added|modified: 'contracts/calculate.json'
+            shared:
+              - 'uv.lock'
+              - '!docs/**'
+  render:
+    needs: changes
+    if: needs.changes.outputs.render == 'true'
+    steps:
+      - run: uv run pytest tests/render
+"""
+    )
+    files = write(tmp_path, {".github/workflows/ci.yml": source})
+    context = capture_ci_evidence(tmp_path, files)
+    pipeline = context["pipelines"][0]
+    job = pipeline["jobs"][0]
+    filters = job["steps"][0]["with"]["filters"]
+    assert job["steps"][0]["id"] == "paths"
+    assert job["outputs"]["render"] == "${{ steps.paths.outputs.render }}"
+    assert filters["status"] == "parsed" and filters["truncated"] is False
+    assert len(filters["rules"]["render"]) == 40
+    assert filters["rules"]["calculate"][1] == {"added|modified": "contracts/calculate.json"}
+    assert filters["rules"]["shared"] == ["uv.lock", "!docs/**"]
+    assert pipeline["values_truncated"] is False
+    assert capture_coverage(context)["partial_evidence"] is False
+
+
+@pytest.mark.parametrize(
+    "literal, expected",
+    [
+        ("${{ inputs.filter_rules }}", "unknown"),
+        ("invalid: [", "unknown"),
+        ("cycle: &loop [*loop]", "unknown"),
+        ("files: [" + ",".join(f"'part{i}/**'" for i in range(101)) + "]", "parsed"),
+    ],
+)
+def test_dynamic_invalid_or_bounded_filter_projection_marks_partial_evidence(
+    tmp_path, literal, expected
+):
+    source = (
+        "jobs:\n  check:\n    steps:\n      - uses: dorny/paths-filter@v3\n        with:\n          filters: |\n            "
+        + literal
+        + "\n"
+    )
+    files = write(tmp_path, {".github/workflows/ci.yml": source})
+    context = capture_ci_evidence(tmp_path, files)
+    pipeline = context["pipelines"][0]
+    assert pipeline["status"] == "parsed"
+    filters = pipeline["jobs"][0]["steps"][0]["with"]["filters"]
+    assert filters["status"] == expected
+    assert capture_coverage(context)["partial_evidence"] is True
+    if expected == "parsed":
+        assert filters["truncated"] is True
+        assert len(filters["rules"]["files"]) == 100

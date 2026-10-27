@@ -51,23 +51,33 @@ def redacted_command(text: str) -> str:
     return _safe(text)
 
 
-def _guard(root: Node) -> bool:
-    pending: list[tuple[Node, int, frozenset[int]]] = [(root, 0, frozenset())]
+def _guard(root: Node, limit: int = 20) -> bool:
+    pending: list[tuple[Node, int, frozenset[int], bool]] = [(root, 0, frozenset(), False)]
     visited, truncated = 0, False
     while pending:
-        node, depth, ancestors = pending.pop()
+        node, depth, ancestors, literal_filter = pending.pop()
         visited += 1
         if id(node) in ancestors or depth > 30 or visited > 10_000:
             raise ValueError("YAML nesting, alias cycle or node budget exceeded")
         children = (
-            [part for pair in node.value for part in pair]
+            [
+                (part, literal)
+                for key, value in node.value
+                for part, literal in ((key, False), (value, key.value == "filters"))
+            ]
             if isinstance(node, MappingNode)
-            else node.value
+            else [(child, False) for child in node.value]
             if isinstance(node, SequenceNode)
             else []
         )
-        truncated |= len(children) > 20 or (isinstance(node, ScalarNode) and len(node.value) > 300)
-        pending.extend((child, depth + 1, ancestors | {id(node)}) for child in children)
+        truncated |= (
+            len(node.value) > limit
+            if isinstance(node, (MappingNode, SequenceNode))
+            else (len(node.value) > 300 and not literal_filter)
+        )
+        pending.extend(
+            (child, depth + 1, ancestors | {id(node)}, literal) for child, literal in children
+        )
     return truncated
 
 
@@ -86,14 +96,14 @@ def _scalar(node: Node | None, default: str = "") -> str:
     return _safe(node.value) if isinstance(node, ScalarNode) else default
 
 
-def _value(node: Node | None) -> Any:
+def _value(node: Node | None, limit: int = 20) -> Any:
     if isinstance(node, ScalarNode):
         return _safe(node.value)
     if isinstance(node, SequenceNode):
-        return [_value(child) for child in node.value[:20]]
+        return [_value(child, limit) for child in node.value[:limit]]
     return {
-        key: _value(value)
-        for key, value in list(_mapping(node).items())[:20]
+        key: _value(value, limit)
+        for key, value in list(_mapping(node).items())[:limit]
         if key not in {"env", "secrets"} and not _SENSITIVE.search(key)
     }
 
@@ -107,13 +117,36 @@ def _working_directory(data: dict[str, Node], fallback: str = ".") -> str:
     return _scalar(run.get("working-directory"), fallback)
 
 
+def _filters(node: Node) -> dict:
+    """Preserve literal path-selector groups rather than a truncated YAML string."""
+    if not isinstance(node, ScalarNode) or "${{" in node.value:
+        return {"status": "unknown", "reason": "Filter input is not a literal YAML declaration."}
+    try:
+        rules = yaml.compose(node.value, Loader=yaml.BaseLoader)
+        if not isinstance(rules, MappingNode):
+            raise ValueError("Filter groups must be a mapping")
+        truncated = _guard(rules, limit=100)
+        return {
+            "status": "parsed",
+            "rules": _value(rules, limit=100),
+            "truncated": truncated,
+            "groups_total": len(rules.value),
+            "line": node.start_mark.line + 1,
+        }
+    except (yaml.YAMLError, ValueError, RecursionError):
+        return {
+            "status": "unknown",
+            "reason": "Filter YAML exceeds safety or supported-shape bounds.",
+        }
+
+
 def _steps(node: Node | None, directory: str) -> list[dict]:
     result = []
     for child in _sequence(node)[:MAX_STEPS]:
         step = _mapping(child)
         fields = {
             key: _value(step[key])
-            for key in ("uses", "run", "if", "continue-on-error")
+            for key in ("id", "uses", "run", "if", "continue-on-error")
             if key in step
         }
         allowed = {
@@ -131,6 +164,13 @@ def _steps(node: Node | None, directory: str) -> list[dict]:
             for key, value in _mapping(step.get("with")).items()
             if key in allowed
         }
+        inputs = _mapping(step.get("with"))
+        if "filters" in inputs:
+            projected = _filters(inputs["filters"])
+            fields["with"]["filters"] = projected
+            fields["inputs_partial"] = projected["status"] != "parsed" or projected.get(
+                "truncated", False
+            )
         result.append(
             fields
             | {
@@ -162,10 +202,12 @@ def _job(identity: str, node: Node, directory: str) -> dict:
             "concurrency",
             "environment",
             "uses",
+            "outputs",
         )
         if key in data
     }
     steps = _sequence(data.get("steps"))
+    captured_steps = _steps(data.get("steps"), directory)
     return fields | {
         "id": identity,
         "line": node.start_mark.line + 1,
@@ -173,7 +215,8 @@ def _job(identity: str, node: Node, directory: str) -> dict:
         "needs_dynamic": any("${{" in item for item in dependencies),
         "needs_truncated": len(_sequence(needs)) > MAX_JOBS,
         "working_directory": directory,
-        "steps": _steps(data.get("steps"), directory),
+        "steps": captured_steps,
+        "inputs_partial": any(step.get("inputs_partial") for step in captured_steps),
         "steps_total": len(steps),
         "steps_truncated": len(steps) > MAX_STEPS,
     }
@@ -201,12 +244,14 @@ def _parse(path: str, source: str) -> dict:
             ],
         }
     runs = _mapping(data.get("runs"))
+    steps = _steps(runs.get("steps"), ".")
     return {
         "status": "parsed",
         "kind": "local-action",
         "using": _scalar(runs.get("using")),
         "values_truncated": truncated,
-        "steps": _steps(runs.get("steps"), "."),
+        "steps": steps,
+        "inputs_partial": any(step.get("inputs_partial") for step in steps),
         "steps_total": len(_sequence(runs.get("steps"))),
         "steps_truncated": len(_sequence(runs.get("steps"))) > MAX_STEPS,
     }

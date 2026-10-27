@@ -44,9 +44,14 @@ def delivery_packet(graph: Graph, context: dict) -> tuple[dict, dict]:
         "delivery_context": context,
         "finding_review_policy": (
             "Independently challenge every draft finding against the captured declarations. "
-            "Remove already implemented improvements, invented bottlenecks or unsupported timing "
-            "claims. Require actionable safety conditions and retained obligations. Correct "
-            "assessments to keep/unknown when evidence is insufficient; return the same contract."
+            "Remove already implemented improvements, invented bottlenecks and unsupported measured "
+            "savings. Retain legitimate conditional optimization candidates backed by structural "
+            "facts, with explicit measurements, ownership validation and retained checks as "
+            "preconditions; absent timings or branch-protection details alone do not invalidate "
+            "such a candidate. Require actionable safety conditions and retained obligations. "
+            "When deleting or changing recommendations, update assessments too: the union of "
+            "recommendation pipeline_ids must equal exactly the IDs assessed finding. Return "
+            "the complete same contract; no recommendation means no finding assessment."
         ),
         "instruction": (
             "Act only as a CI/CD architecture specialist. Assess EVERY pipeline ID exactly once "
@@ -64,8 +69,15 @@ def delivery_packet(graph: Graph, context: dict) -> tuple[dict, dict]:
             "proposing work; require evidence for each named pipeline. Keep required status "
             "checks reporting on skipped paths; never recommend silently dropping required "
             "checks. Keep isolation, security, release gates and correctness checks. Missing "
-            "declarations/timings must remain unknown with concrete steps to measure or unblock "
-            "them, not invented commands/durations/savings. External actions and dynamic "
+            "declarations/timings must remain unknown, but must not suppress useful conditional "
+            "design candidates supported by observed structure. Separate candidate opportunities "
+            "requiring measurement or scope validation from verified bottlenecks, measured savings "
+            "or permission to skip checks. For example, serial component test commands can justify "
+            "investigating isolated parallel/scoped targets before independence or speedup is proven: "
+            "state concrete preconditions and next steps, retaining existing checks until validated. "
+            "Do not invent commands, durations or savings, and do not force a findings quota. "
+            "The union of recommendation pipeline_ids must equal exactly finding assessment IDs; "
+            "keep/unknown IDs must not occur in recommendations. External actions and dynamic "
             "expressions remain opaque unless supplied. Timings are observations only when "
             "explicitly attributed; summed job time is not wall-clock critical-path time. "
             "Advice and proposed checks have not been executed and do not authorize skipping CI. "
@@ -246,11 +258,12 @@ def capture_coverage(context: dict) -> dict:
 
 
 def _partial_item(item: dict) -> bool:
-    flags = ("jobs_truncated", "steps_truncated", "values_truncated")
+    flags = ("jobs_truncated", "steps_truncated", "values_truncated", "inputs_partial")
     if item.get("status") in {"unknown", "unsupported"} or any(item.get(key) for key in flags):
         return True
     return any(
-        job.get("steps_truncated") or job.get("needs_truncated") for job in item.get("jobs", [])
+        job.get("steps_truncated") or job.get("needs_truncated") or job.get("inputs_partial")
+        for job in item.get("jobs", [])
     )
 
 
