@@ -409,6 +409,7 @@ def prepare(
     matches: list[dict[str, Any]],
     task: str,
     reviews: list[dict[str, Any]] | None = None,
+    delivery_advice: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     modules = {node.id: node for node in graph.nodes if node.kind == "module"}
     candidates = _candidates(modules, matches)
@@ -426,6 +427,7 @@ def prepare(
     brief: dict[str, Any] = {
         "task": _short(task, 1200),
         "snapshot_id": graph.snapshot.id,
+        "delivery": delivery_advice,
         "likely_owners": [
             {
                 "id": n.id,

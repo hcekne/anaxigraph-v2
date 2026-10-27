@@ -160,7 +160,7 @@ form button, #submit-analysis { margin-top: .8rem; }
 .workflow-card small { display:block; margin-top:10px; color:var(--muted); }
 .model-settings { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:16px; margin:16px 0; }
 .model-settings label { display:flex; flex-direction:column; gap:8px; }
-.model-settings input, .model-settings select, #architecture-decisions select { width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:9px; background:var(--surface); color:inherit; }
+.model-settings input, .model-settings select, #architecture-decisions select, #ci-cadence { width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:9px; background:var(--surface); color:inherit; }
 .model-settings input[type=checkbox] { width:auto; margin-right:6px; }
 .record-actions { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0; }
 .run-card { padding:18px 0; border-top:1px solid var(--line); }

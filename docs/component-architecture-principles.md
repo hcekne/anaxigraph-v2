@@ -12,9 +12,11 @@ The subsequent [architecture scout implementation](change-request-architecture-s
 these principles into mandatory focused jobs, including standalone libraries in separate repos,
 and explicit dispositions during plan assessment.
 The charter and agent change guidance express this policy. The subsequent scouts make focused
-review jobs mandatory in new Pattern workflows. Component declarations, complete resource-aware
-impact analysis and automatic CI selection remain proposed capabilities below; the scouts do not
-implement those capabilities or remove project CI checks.
+review jobs mandatory in new Pattern workflows. The subsequent
+[CI/CD review and declared-input planner](change-request-ci-delivery.md) add a root pipeline review
+to new Pattern runs and turn accepted task inputs into an explainable check plan. Full component
+declarations and complete resource-aware impact analysis remain proposed capabilities below.
+Neither review nor planning removes project CI checks or executes them.
 
 ## The house story
 
@@ -170,16 +172,24 @@ These are advisory observations. The current impact neighborhood follows resolve
 references for **two levels**; its test list is not a complete test plan. Python globals, attributes,
 dynamic dispatch, shared resources and unparsed languages can hide relationships. AnaxiGraph does
 not yet declare architectural components, model all build inputs, run project tests or generate a
-verified CI selection. A structural node without callers is not established dead code.
+verified CI selection from the source graph. The separate `ci-plan` operation uses the repository's
+authored `anaxigraph/ci-policy.json`: declared inputs, shared inputs, data consumers and retained
+obligations determine its selection. Unknown ownership stays incomplete. The CI/CD workflow reads
+actual pipeline declarations and reviews a fast path, widening, caching, parallelism and deployment
+checks. It runs without semantic mapping and keeps missing timings and opaque scripts explicit.
+Revisit that design after changes to components, shared inputs or delivery configuration.
+A structural node without callers is not established dead code.
 
-The new advice does not add model calls or require rewriting an existing application into packages.
+Guidance from structural facts and the charter is deterministic; running architecture and CI/CD
+reviews uses the configured model workers. Neither requires rewriting an application into packages.
 Changed charter text changes the inputs of future reviews that use it; saved results and provenance
 remain available, but old-prompt results are not silently presented as new-prompt reviews. No full
 re-analysis is started merely to publish this principle.
 
-## Proposed next capability: explain a component's change scope
+## Continue improving component change scope
 
-Start with a compact optional declaration of meaningful components, reusing existing workspace,
+The CI task policy now declares executable verification inputs. Extend it with a compact optional
+declaration of meaningful components, reusing existing workspace,
 package and test configuration where practical. This is a proposed metadata contract, not an
 accepted new file format:
 

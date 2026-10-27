@@ -85,6 +85,14 @@ def export_record(app: Application) -> dict[str, Any]:
     return result
 
 
+def _compatible_candidate(row: dict, source_id: str, contexts) -> bool:
+    return row.get("status") == "current" and (
+        row.get("kind") == "delivery"
+        or row.get("source_identity") == source_id
+        or row.get("analysis_context") == contexts(row.get("body", {}).get("scope", []))
+    )
+
+
 def import_record(app: Application) -> dict[str, Any]:
     token = app._portable_token()
     if getattr(app, "_import_cache", None) == token:
@@ -116,15 +124,7 @@ def import_record(app: Application) -> dict[str, Any]:
     graph = app._current()
     source_id = content_identity(graph.snapshot.files)
     contexts = analysis_contexts(graph)
-    pending = [
-        row
-        for row in record["analyses"]
-        if row.get("status") == "current"
-        and (
-            row.get("source_identity") == source_id
-            or row.get("analysis_context") == contexts(row.get("body", {}).get("scope", []))
-        )
-    ]
+    pending = [row for row in record["analyses"] if _compatible_candidate(row, source_id, contexts)]
     imported = 0
     remapped: dict[str, str] = {}
     while pending:

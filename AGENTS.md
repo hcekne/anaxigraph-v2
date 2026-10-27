@@ -30,7 +30,10 @@ Use `docs/component-architecture-principles.md`: components are independent unit
 verification, usually composed in process. Behavioral contracts and shared resources determine
 impact; unchanged signatures and bounded test-reference lists do not establish complete CI scope.
 New Pattern runs include mandatory architecture scouts for boundaries, standalone packages/repos
-and independent verification. Preserve their per-lens coverage and portable identities. Material
+and independent verification, plus one root CI/CD review. Preserve their coverage and portable
+identities. Use `docs/change-request-ci-delivery.md`: re-evaluate CI with architectural, shared-input
+or pipeline changes; `ci-plan` follows authored task inputs and never silently skips required checks.
+Material
 plan findings need explicit adopt/defer/reject reasons; decisions never prove implementation.
 
 The maintainer selected a clean slate and selective MVP capabilities. Do not treat every legacy

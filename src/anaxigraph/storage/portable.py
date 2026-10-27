@@ -151,6 +151,14 @@ def _analysis_key(row: dict[str, Any]) -> str:
                 "level": body.get("request_options", {}).get("level"),
                 "saved_id": row.get("id") if row.get("explicitly_saved") else None,
                 **(
+                    {
+                        "pipeline_paths": body.get("request_options", {}).get("pipeline_paths")
+                        or None
+                    }
+                    if row.get("kind") == "delivery"
+                    else {}
+                ),
+                **(
                     {"lens": body.get("request_options", {}).get("lens")}
                     if row.get("kind") == "architecture"
                     else {}

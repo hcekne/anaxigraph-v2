@@ -18,7 +18,7 @@ from anaxigraph.analysis.charter import module_facts
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
 from anaxigraph.application import architecture as component_architecture
-from anaxigraph.application import records, reviews
+from anaxigraph.application import delivery, records, reviews
 from anaxigraph.application.context import (
     _bounds,
     context_fingerprints,
@@ -314,7 +314,9 @@ class Application:
                 + component_architecture.owner_reviews(self, graph, owner_ids)
             }.values()
         )
-        result = prepare(graph, matches, task, reviews=review_rows) | {
+        result = prepare(
+            graph, matches, task, reviews=review_rows, delivery_advice=delivery.advice(self, graph)
+        ) | {
             "baseline_id": pinned,
             "baseline_basis": "pinned-change-baseline",
             "task_key": task_key,
@@ -365,6 +367,7 @@ class Application:
             if architecture["status"] in {"decision_required", "scope_incomplete"}
             else "advisory",
             "architecture": architecture,
+            "proposed_ci_plan": delivery.advisory(self, changed_paths=files),
             "scope": "Placement and lexical reuse evidence; behavioral plan correctness is unresolved.",
         }
 
@@ -397,6 +400,9 @@ class Application:
         }
 
         result["architecture"] = component_architecture.followthrough(self, selected)
+        result["ci_plan"] = delivery.advisory(
+            self, base_snapshot_id=baseline_id or stats.get("pinned_snapshot_id")
+        )
         self.evidence.outcome(
             "validation_reported",
             graph.snapshot.id,
@@ -404,6 +410,24 @@ class Application:
             "Supplied checks and structural comparison; not independent correctness proof.",
         )
         return result
+
+    def ci_plan(
+        self,
+        *,
+        base_ref: str | None = None,
+        base_snapshot_id: str | None = None,
+        changed_paths: list[str] | None = None,
+        cadence: str = "change",
+        runtime_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return delivery.plan(
+            self,
+            base_ref=base_ref,
+            base_snapshot_id=base_snapshot_id,
+            changed_paths=changed_paths,
+            cadence=cadence,
+            runtime_context=runtime_context,
+        )
 
     def trial_evidence(self, limit: int = 50, offset: int = 0) -> dict[str, Any]:
         return {"summary": self.evidence.summary(), "events": self.evidence.events(limit, offset)}

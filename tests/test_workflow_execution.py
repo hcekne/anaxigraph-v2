@@ -26,7 +26,7 @@ def configuration():
         "timeout_seconds": None,
         "stages": {
             kind: deepcopy(worker)
-            for kind in ("annotate", "patterns", "architecture", "fresh-eyes")
+            for kind in ("annotate", "patterns", "architecture", "delivery", "fresh-eyes")
         },
         "review_passes": [reviewer],
     }
@@ -73,7 +73,7 @@ def test_identical_reasoning_pipeline_reuses_saved_and_portable_results(tmp_path
         assert execution["pipeline"]["worker"]["reasoning_effort"] == "xhigh"
         assert execution["pipeline"]["worker"]["fallbacks"][0]["reasoning_effort"] == "high"
         assert execution["pipeline"]["review_passes"][0]["reasoning_effort"] == "medium"
-        if analysis_kind == "architecture":
+        if analysis_kind in {"architecture", "delivery"}:
             assert execution["review_passes"] == []  # keep results skip stronger review
         else:
             assert execution["review_passes"][0]["reasoning_effort"] == "medium"

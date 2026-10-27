@@ -74,6 +74,8 @@ def reconcile_patterns(
 
 def review_summary(row: dict[str, Any]) -> str:
     result = row["result"].get("result", {})
+    if row["kind"] == "delivery":
+        return f"CI/CD review; {len(result['assessments'])} pipelines accounted for; {len(result['recommendations'])} recommendations."
     if row["kind"] == "architecture":
         return f"{result['lens']} scout; {len(result['assessments'])} modules accounted for; {len(result['findings'])} proposals."
     if row["kind"] == "fresh-eyes":

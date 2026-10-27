@@ -37,6 +37,7 @@ jobs:
           uv run mypy
           uv run python scripts/quality.py
           node --check src/anaxigraph/interfaces/assets/app.js
+          node --check src/anaxigraph/interfaces/assets/ci.js
       - name: Build the standalone V2 package
         run: uv build
       - name: Exercise the installed wheel through uvx
@@ -47,6 +48,8 @@ jobs:
           uvx --from dist/*.whl anaxigraph scan --repo "${RUNNER_TEMP}/v2-fixture"
           uvx --from dist/*.whl anaxigraph request patterns --repo "${RUNNER_TEMP}/v2-fixture" > "${RUNNER_TEMP}/v2-pattern-task.json"
           python -c 'import json,os,pathlib; p=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"v2-pattern-task.json").read_text()); assert len(p["packet"]["catalogue"]) == 133'
+          uvx --from dist/*.whl anaxigraph request delivery --repo "${RUNNER_TEMP}/v2-fixture" > "${RUNNER_TEMP}/v2-delivery-task.json"
+          python -c 'import json,os,pathlib; p=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"v2-delivery-task.json").read_text()); assert p["scope"] == [] and p["packet"]["pipeline_ids"] == ["project"]'
       - uses: actions/upload-artifact@v6
         with:
           name: anaxigraph-v2-${{ matrix.python }}

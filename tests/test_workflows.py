@@ -60,6 +60,16 @@ def answer(request):
             "findings": [],
             "uncertainty": [],
         }
+    if kind == "delivery":
+        return {
+            "producer": "synthetic-workflow-fixture",
+            "assessments": [
+                {"pipeline_id": identity, "outcome": "unknown"}
+                for identity in packet["pipeline_ids"]
+            ],
+            "recommendations": [],
+            "uncertainty": ["Synthetic output does not establish CI/CD quality."],
+        }
     if kind == "patterns":
         return {
             "producer": "synthetic-workflow-fixture",
@@ -220,7 +230,7 @@ def test_patterns_and_blind_hierarchical_design_are_saved_and_reused(tmp_path):
     previous = calls.copy()
     repeated = runner.start("patterns", {"pattern_mode": "exhaustive"}, background=False)
     assert repeated["status"] == "completed", repeated
-    assert repeated["reused_batches"] == 5
+    assert repeated["reused_batches"] == 6
     assert calls == previous
     fresh = runner.start("fresh-eyes", background=False)
     assert fresh["status"] == "completed", fresh

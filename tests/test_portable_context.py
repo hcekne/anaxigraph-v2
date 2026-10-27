@@ -89,7 +89,7 @@ def clone(original, tmp_path):
     return Application(root)
 
 
-@pytest.mark.parametrize("kind,review_count", [("patterns", 4), ("fresh-eyes", 2)])
+@pytest.mark.parametrize("kind,review_count", [("patterns", 5), ("fresh-eyes", 2)])
 def test_doc_only_commit_and_fresh_clone_reuse_without_calls_and_keep_provenance(
     tmp_path, kind, review_count
 ):
@@ -101,7 +101,11 @@ def test_doc_only_commit_and_fresh_clone_reuse_without_calls_and_keep_provenance
     original.export_record()
     analyses = json.loads(record.read_text())["analyses"]
     if kind == "patterns":
-        assert Counter(row["kind"] for row in analyses) == {"patterns": 1, "architecture": 3}
+        assert Counter(row["kind"] for row in analyses) == {
+            "patterns": 1,
+            "architecture": 3,
+            "delivery": 1,
+        }
         assert {
             row["body"]["request_options"]["lens"]
             for row in analyses
@@ -145,12 +149,12 @@ def test_changed_opaque_behavioral_resource_blocks_reuse(tmp_path, kind, path):
     count = len(calls)
     imported = target.scan()["portable_import"]
     assert imported["annotations_imported"] == 1
-    assert imported["analyses_imported"] == 0
+    assert imported["analyses_imported"] == (1 if kind == "patterns" else 0)
     assert target.reviews(kind)["total"] == 0
     assert len(calls) == count
 
 
-@pytest.mark.parametrize("kind,review_count", [("patterns", 4), ("fresh-eyes", 2)])
+@pytest.mark.parametrize("kind,review_count", [("patterns", 5), ("fresh-eyes", 2)])
 @pytest.mark.parametrize("path,compatible", [("unit0.py", False), ("unit1.py", True)])
 def test_python_changes_are_checked_by_exact_scoped_input(
     tmp_path, kind, review_count, path, compatible
@@ -161,7 +165,9 @@ def test_python_changes_are_checked_by_exact_scoped_input(
     source.write_text(source.read_text().replace("return", "return 10 +"))
     count = len(calls)
     imported = target.scan()["portable_import"]
-    assert imported["analyses_imported"] == (review_count if compatible else 0)
+    assert imported["analyses_imported"] == (
+        review_count if compatible else int(kind == "patterns")
+    )
     if compatible:
         repeated = WorkflowRunner(target, provider).start(
             kind, CONFIG, ["unit0.py"], background=False
@@ -176,7 +182,7 @@ def test_cited_document_is_guarded_from_annotation_evidence(tmp_path, kind):
     target = clone(original, tmp_path)
     (target.root / "POLICY.md").write_text("Changed admission and validation obligations.\n")
     imported = target.scan()["portable_import"]
-    assert imported["analyses_imported"] == 0
+    assert imported["analyses_imported"] == (1 if kind == "patterns" else 0)
 
 
 def test_document_cited_only_outside_the_review_scope_does_not_invalidate_it(tmp_path):
@@ -194,7 +200,7 @@ def test_document_cited_only_outside_the_review_scope_does_not_invalidate_it(tmp
     original.export_record()
     target = clone(original, tmp_path)
     (target.root / "POLICY.md").write_text("Changed obligations for an unrelated responsibility.\n")
-    assert target.scan()["portable_import"]["analyses_imported"] == 4
+    assert target.scan()["portable_import"]["analyses_imported"] == 5
     count = len(calls)
     repeated = WorkflowRunner(target, provider).start(
         "patterns", CONFIG, ["unit0.py"], background=False
@@ -215,10 +221,10 @@ def test_legacy_context_is_backfilled_only_after_global_match(tmp_path, changed)
     if changed:
         (target.root / "review.md").write_text("A later review document.\n")
     imported = target.scan()["portable_import"]
-    assert imported["analyses_imported"] == (0 if changed else 4)
+    assert imported["analyses_imported"] == (1 if changed else 5)
     target.export_record()
     rows = json.loads((target.root / "anaxigraph/record.json").read_text())["analyses"]
     if changed:
-        assert all(row.get("analysis_context") is None for row in rows)
+        assert all(row.get("analysis_context") is None for row in rows if row["kind"] != "delivery")
     else:
         assert all(len(row["analysis_context"]) == 64 for row in rows)

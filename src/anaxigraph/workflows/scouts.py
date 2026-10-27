@@ -1,4 +1,4 @@
-"""Schedule focused architecture lenses using the existing resumable batch engine."""
+"""Schedule independent architecture and CI reviews using the resumable batch engine."""
 
 from __future__ import annotations
 
@@ -8,13 +8,15 @@ from anaxigraph.analysis.packets import plan_scopes
 
 def review_choices(run, kind):
     choices = run["config"]["review_passes"]
-    if kind == "architecture" and not choices and "architecture-review" in run["config"]["stages"]:
-        return [run["config"]["stages"]["architecture-review"]]
+    stage = f"{kind}-review"
+    if kind in {"architecture", "delivery"} and not choices and stage in run["config"]["stages"]:
+        return [run["config"]["stages"][stage]]
     return choices
 
 
 def applied_reviewers(kind, result, reviewers):
-    return reviewers if kind != "architecture" or result.get("findings") else []
+    field = {"architecture": "findings", "delivery": "recommendations"}.get(kind)
+    return reviewers if field is None or result.get(field) else []
 
 
 def plan_scouts(runner, run):
@@ -34,16 +36,23 @@ def plan_scouts(runner, run):
 
 def _stages(run):
     kind = run["kind"]
+    if kind == "delivery":
+        return ["delivery"]
     scouts = kind == "architecture" or (
         kind == "patterns" and run.get("architecture_scouts_version") == 1
     )
     stages: list[str | tuple[str, ...]] = ["annotate"]
     if kind == "patterns":
         screened = run["config"].get("pattern_mode") == "screened"
+        discovery = []
         if scouts:
-            stages.append(("architecture", "pattern-screen") if screened else "architecture")
-        elif screened:
-            stages.append("pattern-screen")
+            discovery.append("architecture")
+        if run.get("delivery_review_version") == 1:
+            discovery.append("delivery")
+        if screened:
+            discovery.append("pattern-screen")
+        if discovery:
+            stages.append(tuple(discovery))
         stages.append("patterns")
     elif kind != "annotate":
         stages.append(kind)
@@ -75,21 +84,13 @@ def _reconcile(runner, run):
     if kind == "fresh-eyes":
         runner._product(run)
     review_ids = _review_ids(run)
-    architecture = None
-    if kind == "architecture" or (
-        kind == "patterns" and run.get("architecture_scouts_version") == 1
-    ):
-        architecture = runner.application.analysis_reconcile(
-            "architecture",
-            [b["request_id"] for b in run["batches"] if b["kind"] == "architecture"],
-            run["scope"],
-        )
+    reports = _component_reports(runner, run)
     reconciliation = (
-        architecture
-        if kind == "architecture"
+        reports[kind]
+        if kind in reports
         else runner.application.analysis_reconcile(
             kind,
-            _review_ids(run, ("annotate", "architecture")),
+            _review_ids(run, ("annotate", "architecture", "delivery")),
             run["scope"],
         )
     )
@@ -98,7 +99,22 @@ def _reconcile(runner, run):
         "status": "completed",
         "phase": "Final reconciliation",
         "review_ids": review_ids,
-        "message": "Validated batches form one current map; all declared scopes are accounted for.",
+        "message": "Validated batches account for the declared analysis scope; this does not report executed project checks.",
     }
-    if kind == "patterns" and architecture is not None:
-        run["reconciliation"]["architecture"] = architecture
+    if kind == "patterns":
+        run["reconciliation"].update(reports)
+
+
+def _component_reports(runner, run):
+    reports = {}
+    for kind, marker in (
+        ("architecture", "architecture_scouts_version"),
+        ("delivery", "delivery_review_version"),
+    ):
+        if run["kind"] == kind or (run["kind"] == "patterns" and run.get(marker) == 1):
+            reports[kind] = runner.application.analysis_reconcile(
+                kind,
+                [batch["request_id"] for batch in run["batches"] if batch["kind"] == kind],
+                [] if kind == "delivery" else run["scope"],
+            )
+    return reports

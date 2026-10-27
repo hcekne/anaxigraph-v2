@@ -54,7 +54,8 @@ def test_screened_workflow_shortlists_skips_empty_and_records_models_tokens_and_
     calls = []
 
     def provider(request, worker, **_kwargs):
-        calls.append((request["kind"], request["packet"]["modules"][0]["path"], dict(worker)))
+        modules = request["packet"].get("modules", [])
+        calls.append((request["kind"], modules[0]["path"] if modules else "", dict(worker)))
         time.sleep(0.002)
         result = answer(request)
         if request["kind"] == "pattern-screen":
@@ -83,6 +84,7 @@ def test_screened_workflow_shortlists_skips_empty_and_records_models_tokens_and_
         "pattern-screen",
         "patterns",
         "architecture",
+        "delivery",
     }
     assert all(not path.startswith("tests/") and path != "__init__.py" for _, path, _ in calls)
     assert all(
@@ -110,7 +112,7 @@ def test_screened_workflow_shortlists_skips_empty_and_records_models_tokens_and_
     before = len(calls)
     repeated = runner.start("patterns", background=False)
     assert repeated["status"] == "completed", repeated
-    assert repeated["reused_batches"] == 8
+    assert repeated["reused_batches"] == 9
     assert len(calls) == before
     assert repeated["model_usage"] == []
     assert all(
@@ -124,7 +126,8 @@ def test_failed_screen_resumes_only_failed_batch_with_cumulative_attempt_time(tm
     calls = []
 
     def provider(request, worker, **_kwargs):
-        module = request["packet"]["modules"][0]["id"]
+        modules = request["packet"].get("modules", [])
+        module = modules[0]["id"] if modules else "repository"
         calls.append((request["kind"], module))
         time.sleep(0.002)
         if failing and request["kind"] == "pattern-screen" and module.endswith("unit1.py"):
@@ -182,20 +185,24 @@ def test_parallel_module_pool_respects_explicit_worker_bound(tmp_path):
     assert maximum == 2
 
 
-def test_no_eligible_production_modules_finishes_without_paid_calls(tmp_path):
+def test_no_eligible_production_modules_still_reviews_repository_ci_once(tmp_path):
     (tmp_path / "__init__.py").write_text("pass\n")
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "test_only.py").write_text("def test_case():\n    return 1\n")
     application = Application(tmp_path)
 
-    def provider(*_args, **_kwargs):
-        raise AssertionError("No worker should run for an empty default scope")
+    calls = []
+
+    def provider(request, *_args, **_kwargs):
+        calls.append(request["kind"])
+        return answer(request)
 
     result = WorkflowRunner(application, provider).start("patterns", background=False)
     assert result["status"] == "completed", result
     assert result["reconciliation"]["mode"] == "empty"
-    assert result["total_batches"] == 0
+    assert result["total_batches"] == 1
+    assert calls == ["delivery"]
 
 
 def test_legacy_exhaustive_run_resumes_its_original_all_module_scope(tmp_path):
@@ -223,8 +230,12 @@ def test_legacy_exhaustive_run_resumes_its_original_all_module_scope(tmp_path):
     legacy = json.loads(path.read_text())
     legacy["config"].pop("pattern_mode")
     legacy.pop("architecture_scouts_version")
-    legacy["batches"] = [batch for batch in legacy["batches"] if batch["kind"] != "architecture"]
+    legacy.pop("delivery_review_version")
+    legacy["batches"] = [
+        batch for batch in legacy["batches"] if batch["kind"] not in {"architecture", "delivery"}
+    ]
     legacy["stages_planned"].remove("architecture")
+    legacy["stages_planned"].remove("delivery")
     legacy["scope"] = None
     path.write_text(json.dumps(legacy))
     failed = False

@@ -18,7 +18,8 @@ def test_scoped_screen_and_detail_reuse_does_not_need_a_portable_record(tmp_path
     scout_scopes = []
 
     def provider(request, *_args, **_kwargs):
-        calls[(request["kind"], request["packet"]["modules"][0]["path"])] += 1
+        modules = request["packet"].get("modules", [])
+        calls[(request["kind"], modules[0]["path"] if modules else "")] += 1
         if request["kind"] == "architecture":
             scout_scopes.append(tuple(request["scope"]))
         if request["kind"] == "pattern-screen":
@@ -40,7 +41,13 @@ def test_scoped_screen_and_detail_reuse_does_not_need_a_portable_record(tmp_path
     kinds = Counter()
     for (kind, _path), count in calls.items():
         kinds[kind] += count
-    assert kinds == {"annotate": 2, "pattern-screen": 2, "patterns": 2, "architecture": 3}
+    assert kinds == {
+        "annotate": 2,
+        "pattern-screen": 2,
+        "patterns": 2,
+        "architecture": 3,
+        "delivery": 1,
+    }
     calls.clear()
     unchanged = runner.start("patterns", background=False)
     assert unchanged["status"] == "completed", unchanged

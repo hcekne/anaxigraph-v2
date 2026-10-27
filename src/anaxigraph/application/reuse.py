@@ -29,7 +29,7 @@ def _compatible_context(app: Any, graph: Graph, row: dict[str, Any], scope: list
 
 
 def reuse_analysis(app: Any, request: dict[str, Any], pipeline: dict[str, Any] | None) -> bool:
-    if request["kind"] not in {"pattern-screen", "patterns", "architecture"}:
+    if request["kind"] not in {"pattern-screen", "patterns", "architecture", "delivery"}:
         return False
     row = app.store.find_review(
         str(app.root),
@@ -47,7 +47,7 @@ def reuse_analysis(app: Any, request: dict[str, Any], pipeline: dict[str, Any] |
     if pipeline is not None and result.get("execution", {}).get("pipeline") != pipeline:
         return False
     graph = app._current()
-    if not _compatible_context(app, graph, row, request["scope"]):
+    if request["kind"] != "delivery" and not _compatible_context(app, graph, row, request["scope"]):
         return False
     try:
         validate_result(request, result, graph)

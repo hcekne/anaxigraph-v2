@@ -173,7 +173,8 @@ def test_repairing_four_briefs_reuses_six_unchanged_xhigh_pattern_reviews(tmp_pa
     calls = []
 
     def provider(request, *_args, **_kwargs):
-        calls.append((request["kind"], request["packet"]["modules"][0]["path"]))
+        modules = request["packet"].get("modules", [])
+        calls.append((request["kind"], modules[0]["path"] if modules else ""))
         return result_for(request) if request["kind"] == "annotate" else answer(request)
 
     runner = WorkflowRunner(app, provider)
@@ -183,8 +184,9 @@ def test_repairing_four_briefs_reuses_six_unchanged_xhigh_pattern_reviews(tmp_pa
     assert Counter(batch["kind"] for batch in timings if batch["reused"]) == {
         "patterns": 6,
         "architecture": 3,
+        "delivery": 1,
     }
-    assert result["reused_batches"] == 9
+    assert result["reused_batches"] == 10
     assert result["reconciliation"]["evaluated_pairs"] == 1330
     assert {path for kind, path in calls if kind == "annotate"} == set(LEAKS)
     assert {path for kind, path in calls if kind == "patterns"} == set(LEAKS)
@@ -213,10 +215,10 @@ def test_repairing_four_briefs_reuses_six_unchanged_xhigh_pattern_reviews(tmp_pa
     cloned = Application(root)
     imported = cloned.scan()["portable_import"]
     assert imported["annotations_imported"] == 10
-    assert imported["analyses_imported"] == 16  # ten detailed reviews, two three-lens groups
+    assert imported["analyses_imported"] == 17  # ten details, two three-lens groups, root CI
     repeated = WorkflowRunner(cloned, provider).start("patterns", CONFIG, background=False)
     assert repeated["status"] == "completed", repeated
-    assert repeated["reused_batches"] == 16
+    assert repeated["reused_batches"] == 17
     assert len(calls) == 11
 
 

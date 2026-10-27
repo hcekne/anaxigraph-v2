@@ -18,6 +18,8 @@ def create_mcp(application: Any) -> FastMCP:
             "adopt, defer or reject each material proposal with a reason. Dispositions do not prove implementation. "
             "Run complete model workflows using workflow_start; inspect progress with workflow_status. "
             "Pattern workflows include boundary, standalone-package and independent-verification scouts. "
+            "They also review CI/CD configuration. Use ci for pipeline review without semantic mapping; "
+            "ci_plan selects declared checks for an explicit change, not from heuristic impact links. "
             "Use architecture for those searches alone; assess_plan records explicit proposal decisions. "
             "Explicit request/submit packets remain available for independent agents. "
             "Fresh Eyes packets are implementation-blind; do not add source context to that task."
@@ -76,13 +78,32 @@ def create_mcp(application: Any) -> FastMCP:
         return application.validate_change(receipts)
 
     @server.tool()
+    def ci_plan(
+        base_ref: str | None = None,
+        base_snapshot_id: str | None = None,
+        changed_paths: list[str] | None = None,
+        cadence: Literal["change", "release", "scheduled"] = "change",
+        runtime_context: dict[str, Any] | None = None,
+    ) -> dict:
+        """Explain selected checks from declared task inputs, ordering and data dependencies."""
+        return application.ci_plan(
+            base_ref=base_ref,
+            base_snapshot_id=base_snapshot_id,
+            changed_paths=changed_paths,
+            cadence=cadence,
+            runtime_context=runtime_context,
+        )
+
+    @server.tool()
     def analysis_request(
-        kind: Literal["annotate", "pattern-screen", "patterns", "architecture", "fresh-eyes"],
+        kind: Literal[
+            "annotate", "pattern-screen", "patterns", "architecture", "delivery", "fresh-eyes"
+        ],
         scope: list[str] | None = None,
         pattern_ids: list[str] | None = None,
         lens: Literal["boundaries", "packages", "verification"] | None = None,
     ) -> dict:
-        """Prepare map, pattern, focused architecture scout or blind Fresh Eyes work."""
+        """Prepare mapping, pattern, architecture, CI/CD or blind Fresh Eyes work."""
         options: dict[str, Any] = {}
         if pattern_ids is not None:
             options["pattern_ids"] = pattern_ids
@@ -104,11 +125,13 @@ def create_mcp(application: Any) -> FastMCP:
 
     @server.tool()
     def workflow_start(
-        kind: Literal["mapping", "annotate", "patterns", "architecture", "fresh-eyes"],
+        kind: Literal[
+            "mapping", "annotate", "patterns", "architecture", "ci", "delivery", "fresh-eyes"
+        ],
         config: dict[str, Any] | None = None,
         scope: list[str] | None = None,
     ) -> dict:
-        """Run resumable mapping, Patterns with component scouts, architecture, or blind Fresh Eyes."""
+        """Run resumable mapping, Patterns, component architecture, CI/CD, or blind Fresh Eyes."""
         return application.workflow_start(kind, config, scope)
 
     @server.tool()

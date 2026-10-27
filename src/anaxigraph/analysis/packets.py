@@ -16,9 +16,10 @@ from anaxigraph.contracts import Graph, Node
 
 from .architecture import architecture_packet, architecture_scopes
 from .behavior import check_behaviors as _check_behaviors
+from .delivery import delivery_packet
 from .patterns import production_modules
 
-KINDS = {"annotate", "pattern-screen", "patterns", "fresh-eyes", "architecture"}
+KINDS = {"annotate", "pattern-screen", "patterns", "fresh-eyes", "architecture", "delivery"}
 DEFAULT_PACKET_BYTES = 2_000_000
 DEFAULT_RESULT_BYTES = 8_000_000
 
@@ -99,8 +100,10 @@ def plan_scopes(
     """
     if kind not in KINDS:
         raise ValueError(
-            "Analysis kind must be annotate, pattern-screen, patterns, architecture or fresh-eyes"
+            "Analysis kind must be annotate, pattern-screen, patterns, architecture, delivery or fresh-eyes"
         )
+    if kind == "delivery":
+        return [[]]
     if kind == "architecture":
         return architecture_scopes(graph, scope, batch_size if batch_size is not None else 8)
     size = batch_size if batch_size is not None else (16 if kind == "fresh-eyes" else 1)
@@ -423,17 +426,39 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
     return packet, schema
 
 
-def _validate_request_options(kind, pattern_ids, lens, package_context) -> None:
+def _validate_request_options(
+    kind, pattern_ids, lens, package_context, delivery_context, pipeline_paths
+) -> None:
     if kind not in KINDS:
         raise ValueError(
-            "Analysis kind must be annotate, pattern-screen, patterns, architecture or fresh-eyes"
+            "Analysis kind must be annotate, pattern-screen, patterns, architecture, delivery or fresh-eyes"
         )
-    if kind == "architecture" and pattern_ids is not None:
-        raise ValueError("Architecture scouts do not accept pattern_ids")
+    if kind in {"architecture", "delivery"} and pattern_ids is not None:
+        raise ValueError("Architecture/delivery scouts do not accept pattern_ids")
     if package_context is not None and kind != "architecture":
         raise ValueError("package_context applies only to architecture requests")
     if lens is not None and kind != "architecture":
         raise ValueError("lens applies only to architecture requests")
+    if kind != "delivery" and (delivery_context is not None or pipeline_paths is not None):
+        raise ValueError("delivery_context and pipeline_paths apply only to delivery requests")
+
+
+def _delivery_request(graph, scope, context, pipeline_paths, options):
+    if scope and pipeline_paths is not None and scope != pipeline_paths:
+        raise ValueError("Delivery scope and pipeline_paths must identify the same CI paths")
+    filters = pipeline_paths if pipeline_paths is not None else scope
+    if filters is not None and (
+        not isinstance(filters, list)
+        or any(not isinstance(path, str) for path in filters)
+        or len(set(filters)) != len(filters)
+    ):
+        raise ValueError("Delivery pipeline_paths must be distinct CI paths")
+    filters = filters or None
+    packet, schema = delivery_packet(graph, context)
+    if filters and set(packet["pipeline_ids"]) - set(filters):
+        raise ValueError("Delivery evidence does not match selected pipeline_paths")
+    options["pipeline_paths"] = filters
+    return _request(graph, "delivery", [], packet, schema, [], [], options)
 
 
 def build_request(
@@ -448,8 +473,20 @@ def build_request(
     level: str = "subsystem",
     lens: str | None = None,
     package_context: dict[str, Any] | None = None,
+    delivery_context: dict[str, Any] | None = None,
+    pipeline_paths: list[str] | None = None,
 ) -> dict[str, Any]:
-    _validate_request_options(kind, pattern_ids, lens, package_context)
+    _validate_request_options(
+        kind, pattern_ids, lens, package_context, delivery_context, pipeline_paths
+    )
+    options = {
+        "max_packet_bytes": max_packet_bytes,
+        "max_result_bytes": max_result_bytes,
+        "pattern_ids": pattern_ids,
+        "level": level,
+    }
+    if kind == "delivery":
+        return _delivery_request(graph, scope, delivery_context, pipeline_paths, options)
     chosen = _scope(graph, scope, kind)
     ids = {node.id for node in chosen}
     symbols = [
@@ -477,12 +514,6 @@ def build_request(
         )
     else:
         packet, schema = _fresh_packet(graph, chosen)
-    options = {
-        "max_packet_bytes": max_packet_bytes,
-        "max_result_bytes": max_result_bytes,
-        "pattern_ids": pattern_ids,
-        "level": level,
-    }
     if kind == "fresh-eyes":
         packet["level"] = level
     if kind == "architecture":

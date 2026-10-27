@@ -15,6 +15,7 @@ from anaxigraph.analysis import (
 )
 from anaxigraph.analysis.architecture import reconcile_architecture
 from anaxigraph.analysis.architecture_guidance import proposals as scout_proposals
+from anaxigraph.analysis.delivery import capture_coverage, reconcile_delivery
 from anaxigraph.analysis.packets import catalogue
 from anaxigraph.analysis.patterns import (
     actionable_opportunities,
@@ -25,6 +26,7 @@ from anaxigraph.analysis.patterns import (
 )
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION, input_identity
 from anaxigraph.application import architecture as component_architecture
+from anaxigraph.application import delivery
 from anaxigraph.application.context import (
     _bounds,
     context_fingerprints,
@@ -50,6 +52,25 @@ def _screened_metadata(kind: str, options: dict[str, Any]) -> dict[str, str]:
     return {}
 
 
+def _request_context(app, graph: Graph, kind: str, options: dict, scope=None) -> dict:
+    if kind == "architecture":
+        return {"package_context": component_architecture.package_context(app, graph)}
+    if kind == "delivery":
+        return {
+            "delivery_context": delivery.context(app, graph, options.get("pipeline_paths") or scope)
+        }
+    return {}
+
+
+def _result_metadata(request: dict) -> dict:
+    metadata = {}
+    if request["kind"] == "delivery":
+        metadata["delivery_coverage"] = capture_coverage(request["packet"]["delivery_context"])
+    if request.get("pattern_mode") in ("screened", "selected"):
+        metadata["pattern_mode"] = request["pattern_mode"]
+    return metadata
+
+
 def analysis_request(
     app, kind: str, scope: list[str] | None = None, **options: Any
 ) -> dict[str, Any]:
@@ -57,8 +78,7 @@ def analysis_request(
     graph = app._current()
     app._require_live(graph)
     sources = None
-    if kind == "architecture":
-        options["package_context"] = component_architecture.package_context(app, graph)
+    options.update(_request_context(app, graph, kind, options, scope))
     if kind == "annotate":
         modules = [n for n in graph.nodes if n.kind == "module"]
         selected = scope or [modules[0].id] if modules else []
@@ -166,11 +186,7 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
                 "basis": "agent-reported-proposal",
                 "scope": request["scope"],
                 "request_options": request.get("request_options", {}),
-                **(
-                    {"pattern_mode": request["pattern_mode"]}
-                    if request.get("pattern_mode") in ("screened", "selected")
-                    else {}
-                ),
+                **_result_metadata(request),
                 "children": request.get("children", []),
                 "input_identity": input_identity(request),
                 "resource_context": review_context(app, graph, request["scope"]),
@@ -263,8 +279,7 @@ def _rebuild_request(
             **{k: options[k] for k in ("max_packet_bytes", "max_result_bytes") if k in options},
         )
     options = dict(body.get("request_options", {}))
-    if kind == "architecture":
-        options["package_context"] = component_architecture.package_context(app, graph)
+    options.update(_request_context(app, graph, kind, options))
     request = build_request(graph, kind, body["scope"], **options)
     if body.get("pattern_mode") in ("screened", "selected"):
         request["pattern_mode"] = body["pattern_mode"]
@@ -364,6 +379,13 @@ def analysis_reconcile(
     app, kind: str, review_ids: list[str], scope: list[str] | None = None
 ) -> dict[str, Any]:
     graph = app._current()
+    if kind == "delivery":
+        return {
+            "status": "completed",
+            "phase": "Final reconciliation",
+            "declared_modules": 0,
+            "review_ids": review_ids,
+        } | reconcile_delivery(_reconciliation_rows(app, graph, kind, review_ids))
     selected = {
         n.id
         for n in graph.nodes

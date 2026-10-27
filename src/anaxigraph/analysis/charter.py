@@ -44,8 +44,8 @@ CHARTER = (
     },
     {
         "id": "component-tests",
-        "principle": "Make components independently testable.",
-        "guidance": "Give each component local behavior and public-contract checks; expand verification for changed contracts, shared infrastructure or unknown impact.",
+        "principle": "Make components independently buildable and testable.",
+        "guidance": "Declare component CI inputs, local behavior and contract checks. Run independent checks in parallel; widen for changed contracts, shared infrastructure or unknown impact. Review CI scope when architecture changes.",
     },
     {
         "id": "change-locality",

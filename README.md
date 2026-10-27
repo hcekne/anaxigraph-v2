@@ -11,8 +11,9 @@ The [component architecture principles](docs/component-architecture-principles.m
 house analogy: cohesive packages can be independent units of change and verification within one
 process. Behavioral contracts and shared data/configuration matter as well as method signatures.
 Current test links guide investigation; they do not generate a verified CI selection.
-New Pattern runs also execute three targeted architectural scouts: component boundaries,
-standalone packages/repositories and independent verification. Their current findings feed change
+New Pattern runs also execute three targeted architectural scouts and one root CI/CD review:
+component boundaries, standalone packages/repositories, independent verification and the delivery
+pipeline. Their current findings feed change
 guidance; plan assessment requires an adopt/defer/reject reason for material recommendations.
 The [scout workflow and limits](docs/change-request-architecture-scouts.md) distinguish those
 mechanical requirements from verified implementation or automatic CI selection.
@@ -95,14 +96,14 @@ When replacing an older service with custom source exclusions, pass
 repository-relative glob patterns. The same policy applies to scans and live-source checks;
 V2 does not silently interpret the legacy `.anaxigraph.yml` provider configuration.
 
-## Run Mapping, Patterns, Component Architecture or Fresh Eyes
+## Run Mapping, Patterns, Component Architecture, CI/CD or Fresh Eyes
 
-The dashboard's **Run full mapping**, **Run full pattern analysis**, **Run full component review**
-and **Run full Fresh Eyes** buttons execute the workflows. New defaults use **Luna/low** for mapping,
+The dashboard's **Run full mapping**, **Run pattern analysis**, **Run full component review**,
+**Review CI/CD** and **Run full Fresh Eyes** buttons execute the five workflows. New defaults use **Luna/low** for mapping,
 architectural scouts and ID-only pattern
 screening, **Sol/medium** for shortlisted detailed reviews, and a pool of **32** independent workers.
-Positive architectural findings receive a separate Sol/medium review by default; keep/unknown-only
-scout drafts skip it. The architecture finding review model is configurable; explicit ordered review
+CI/CD review also starts with Luna/low. Positive architecture or CI/CD findings receive a separate
+Sol/medium review by default; keep/unknown-only drafts skip it. The finding review models are configurable; explicit ordered review
 passes replace its default. Recording an adopt decision still does not verify implementation.
 Existing explicit model selections remain unchanged. Choose Codex or Claude and a model for each stage, parallel workers
 (1–100), optional stronger fallbacks and ordered review passes. Installed provider CLIs must already
@@ -131,6 +132,7 @@ The same workflows are available to coding agents through MCP and the CLI:
 uv run anaxigraph run mapping --repo /path/to/repo
 uv run anaxigraph run patterns --repo /path/to/repo
 uv run anaxigraph run architecture --repo /path/to/repo
+uv run anaxigraph run ci --repo /path/to/repo
 uv run anaxigraph run fresh-eyes --repo /path/to/repo
 uv run anaxigraph runs --repo /path/to/repo
 uv run anaxigraph resume RUN_ID --repo /path/to/repo
@@ -142,7 +144,7 @@ Accepted results are saved immediately; resume retries unfinished batches. A rep
 workflow reuses compatible accepted results with the same model/review pipeline.
 Per-batch timestamps and cumulative wall durations include failed attempts. Model-call time and
 tokens are separate from local/cache work. Pattern review shows screening and detailed review as
-separate phases. Three focused architecture scouts per group run alongside screening. Fresh Eyes
+separate phases. Three focused architecture scouts per group and one root CI/CD review run alongside screening. Fresh Eyes
 runs only when requested, outside the mapping-plus-Patterns path.
 
 Save model settings in the dashboard or through `workflow-config --file settings.json`. For example:
@@ -162,6 +164,8 @@ Save model settings in the dashboard or through `workflow-config --file settings
     "pattern-screen": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
     "architecture": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
     "architecture-review": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
+    "delivery": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
+    "delivery-review": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
     "patterns": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
     "fresh-eyes": {"provider": "claude", "model": "YOUR_DESIGN_MODEL"}
   },
@@ -185,12 +189,15 @@ uv run anaxigraph request pattern-screen --repo /path/to/repo --scope src/exampl
 # For manual detail, pass selected catalogue IDs; omitting --pattern-ids requests an exhaustive task.
 uv run anaxigraph request patterns --repo /path/to/repo --scope src/example.py --pattern-ids adapter
 uv run anaxigraph request fresh-eyes --repo /path/to/repo
+uv run anaxigraph request delivery --repo /path/to/repo --scope .github/workflows/ci.yml
 uv run anaxigraph reviews --repo /path/to/repo
 uv run anaxigraph inspect review:REVIEW_ID --repo /path/to/repo
 ```
 
-Requests survive application restart. Explicit scopes accept module IDs or relative paths. Manual
-annotation requests default to the first module; pattern requests default to an eligible production
+Requests survive application restart. Module scopes accept module IDs or relative paths.
+CI/CD scopes name pipeline paths and retain root analysis scope; this review needs no Python
+modules or semantic annotations and works on a JavaScript-only repository.
+Manual annotation requests default to the first module; pattern requests default to an eligible production
 module. Default Pattern workflows cover production modules, excluding tests and inert markers.
 Active package facades stay eligible, and explicit scopes may include tests. Set `pattern_mode` to
 `"exhaustive"` for the full written matrix. Neither exclusion nor non-selection proves irrelevance.
@@ -216,18 +223,51 @@ prompt inputs separately from structural readiness.
   high-level Mermaid diagram. Internal workers have tool access disabled. An externally supplied
   agent remains responsible for honoring its packet's isolation requirements. The service cannot
   prove architectural novelty; it retains all alternatives and separates later source-aware comparison.
+- **CI/CD:** inspect captured GitHub Actions jobs, dependencies, conditions, matrices, commands,
+  caches and local reusable workflows/actions, alongside declared task policy and inferred component
+  context. Return at most three actionable recommendations with a fast path, widening conditions,
+  cache strategy, parallelism, deployment checks, retained obligations and next steps. Captured
+  script fingerprints invalidate advice when selectors change; script bodies, remote actions,
+  dynamic expressions and missing timings remain unknown. Truncated evidence is labelled partial.
 
 The dashboard can copy these tasks, accept result JSON and display saved proposals. Pattern ratings
 remain hypotheses. Source-aware verification of a frozen alternative is separate from blind design.
-The [architecture-scout qualification](docs/change-request-architecture-scouts.md) records the current
-workflow on an isolated twelve-module Snow Rankings copy: **107.2 seconds** for a cold map plus
+The [architecture-scout qualification](docs/change-request-architecture-scouts.md) records the earlier,
+**pre-CI/CD** workflow on an isolated twelve-module Snow Rankings copy: **107.2 seconds** for a cold map plus
 Patterns including mandatory scouts, then **1.1 seconds** unchanged with no model calls. Its single
 portable record stayed at **109,914 bytes**. Small recognition cases retain both a failed initial
 recommendation and the subsequent reviewed results. These are measured examples, not general
 latency or code-quality guarantees. Targets do not impose worker deadlines.
 The [earlier focused-review qualification](docs/change-request-focused-reviews.md#completed-qualification--27-october-2026)
 preserves the preceding protocol's 83.1-second result and 63.5-second leaf edit; that workload did
-not include the new scouts. A controlled edit cycle has not been remeasured for the new protocol.
+not include the new scouts. Neither workload included the new root CI/CD review; those measurements
+do not establish the current workflow's latency.
+
+## Plan focused CI checks
+
+CI/CD is an architectural concern: a component should have a small executable verification target,
+and its public contracts, consumers and shared inputs should explain when checks must widen.
+Run **CI/CD review** to inspect the actual pipeline before proposing changes. It recognizes existing
+selectors and task commands; it does not execute project code or edit CI configuration.
+
+Accept concrete task declarations in **`anaxigraph/ci-policy.json`**, then preview a change plan:
+
+```bash
+uv run anaxigraph scan --repo /path/to/repo
+uv run anaxigraph ci-plan --repo /path/to/repo --base-ref main
+```
+
+The plan identifies the base and candidate, selected commands, dependency layers, reasons for
+widening, unresolved paths and retained scheduled/release tasks. `needs` orders prerequisites;
+`consumes` also propagates changed output to consumers. Shared inputs widen selection. Unknown
+ownership uses only the declared fallback and remains incomplete. Neither unchanged signatures nor
+the map's two-level neighborhood establishes safe CI scope.
+
+Cache fingerprints are computed only from declared inputs, consumed producers and supplied runtime
+context; they are neither cache hits nor passed checks. Commands and deployments are never run by
+the planner. Re-evaluate the CI design when component agreements, shared infrastructure or CI/task
+configuration changes. The [CI/CD change request and policy example](docs/change-request-ci-delivery.md)
+document the format, constraints and next steps for adopting a plan in your existing runner.
 
 ## What the first milestone supports
 

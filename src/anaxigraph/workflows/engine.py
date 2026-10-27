@@ -42,6 +42,8 @@ KINDS = {
     "annotate": "annotate",
     "patterns": "patterns",
     "architecture": "architecture",
+    "ci": "delivery",
+    "delivery": "delivery",
     "fresh-eyes": "fresh-eyes",
 }
 DEFAULTS: dict[str, Any] = {
@@ -58,7 +60,7 @@ DEFAULTS: dict[str, Any] = {
                     {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"}
                 ],
             }
-            for kind in ("annotate", "pattern-screen", "architecture")
+            for kind in ("annotate", "pattern-screen", "architecture", "delivery")
         },
         "patterns": {
             "provider": "codex",
@@ -68,11 +70,14 @@ DEFAULTS: dict[str, Any] = {
                 {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "xhigh"}
             ],
         },
-        "architecture-review": {
-            "provider": "codex",
-            "model": "gpt-6.1-sol",
-            "reasoning_effort": "medium",
-            "fallbacks": [],
+        **{
+            kind: {
+                "provider": "codex",
+                "model": "gpt-6.1-sol",
+                "reasoning_effort": "medium",
+                "fallbacks": [],
+            }
+            for kind in ("architecture-review", "delivery-review")
         },
         "fresh-eyes": {"provider": "codex", "model": "", "fallbacks": []},
     },
@@ -104,14 +109,18 @@ def _stage_choices(stages: Any) -> dict[str, Any]:
         raise ValueError("stages must map analysis names to model choices")
     selected = deepcopy(DEFAULTS["stages"])
     for name, choice in stages.items():
-        if name not in KINDS and name not in {"pattern-screen", "architecture-review"}:
+        if name not in KINDS and name not in {
+            "pattern-screen",
+            "architecture-review",
+            "delivery-review",
+        }:
             raise ValueError("Unknown model stage")
         fallbacks = choice.get("fallbacks", []) if isinstance(choice, dict) else []
         if not isinstance(fallbacks, list) or len(fallbacks) > 4:
             raise ValueError("Select at most four progressively stronger fallback workers")
-        if name == "architecture-review" and fallbacks:
+        if name in {"architecture-review", "delivery-review"} and fallbacks:
             raise ValueError(
-                "Architecture finding review uses one worker; configure ordered review_passes for multiple reviewers"
+                "Finding review uses one worker; configure ordered review_passes for multiple reviewers"
             )
         selected[KINDS.get(name, name)] = _worker(choice) | {
             "fallbacks": [_worker(x) for x in fallbacks]
@@ -319,7 +328,9 @@ class WorkflowRunner:
         background: bool = True,
     ) -> dict[str, Any]:
         if kind not in KINDS:
-            raise ValueError("Workflow must be mapping, patterns, architecture, or fresh-eyes")
+            raise ValueError(
+                "Workflow must be mapping, patterns, architecture, ci, delivery, or fresh-eyes"
+            )
         with _MUTEX:
             active = [x for x in self.status()["items"] if x["status"] in {"running", "queued"}]
             if active:
@@ -344,6 +355,7 @@ class WorkflowRunner:
                 "attempt_history_version": 1,
                 "timing_version": 1,
                 "architecture_scouts_version": 1,
+                "delivery_review_version": 1,
                 "pid": os.getpid(),
             }
             self._save(run)
@@ -444,6 +456,7 @@ class WorkflowRunner:
             "pattern-screen": "Fast catalogue screening",
             "patterns": "Catalogue review",
             "architecture": "Component architecture scouts",
+            "delivery": "CI/CD pipeline review",
             "fresh-eyes": "Independent subsystem designs",
         }
         run["phase"] = " / ".join(labels[stage] for stage in kinds)
@@ -465,7 +478,7 @@ class WorkflowRunner:
 
     def _plan_scopes(self, run, kind):
         graph = self.application._current()
-        scope = run["scope"]
+        scope = None if kind == "delivery" and run["kind"] != "delivery" else run["scope"]
         if kind == "annotate" and run["kind"] in {"patterns", "architecture"} and scope is None:
             scope = [
                 identity for group in plan_scopes(graph, "pattern-screen") for identity in group
@@ -486,6 +499,11 @@ class WorkflowRunner:
                     "scope": scope,
                     "status": "pending",
                     "attempts": 0,
+                    **(
+                        {"pipeline_paths": run["scope"] if run["kind"] == "delivery" else None}
+                        if kind == "delivery"
+                        else {}
+                    ),
                 }
             )
 
@@ -505,6 +523,8 @@ class WorkflowRunner:
                     )
 
     def _request(self, batch):
+        if batch["kind"] == "delivery":
+            return self.application.analysis_request("delivery", batch.get("pipeline_paths"))
         if "lens" in batch:
             return self.application.analysis_request(
                 "architecture", batch["scope"], lens=batch["lens"]

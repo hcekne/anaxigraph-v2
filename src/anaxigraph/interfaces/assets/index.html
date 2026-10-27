@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark light">
   <title>AnaxiGraph · V2</title>
   <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/ci.js" defer></script>
   <script src="/assets/app.js" defer></script>
 </head>
 <body>
@@ -68,10 +69,12 @@
       <div class="panel-heading workflow-intro"><div><p class="eyebrow">BUILD UNDERSTANDING, THEN CHALLENGE IT</p><h2>Run the full analysis, one saved batch at a time</h2></div></div>
       <div class="workflow-grid">
         <article class="panel workflow-card"><span class="step">01</span><h3>Mapping</h3><p>Refresh the source graph, annotate only missing or stale modules, then reconcile the current map.</p><button class="primary" data-run="mapping">Run full mapping →</button><small>Current annotations are reused.</small></article>
-        <article class="panel workflow-card"><span class="step">02</span><h3>Pattern discovery</h3><p>Run focused component scouts while screening the catalogue, then review useful patterns in detail.</p><button class="primary" data-run="patterns">Run pattern analysis →</button><small>Includes boundary, standalone-package and independent-verification scouts. Production modules by default.</small></article>
+        <article class="panel workflow-card"><span class="step">02</span><h3>Pattern discovery</h3><p>Run component and CI/CD reviews while screening the catalogue, then review useful patterns in detail.</p><button class="primary" data-run="patterns">Run pattern analysis →</button><small>Includes component boundaries, standalone packages, independent verification and one pipeline review.</small></article>
         <article class="panel workflow-card"><span class="step">03</span><h3>Fresh Eyes</h3><p>Explore three designs per subsystem, then reconcile a product design from behavior alone. Workers cannot inspect source.</p><button class="primary" data-run="fresh-eyes">Run full Fresh Eyes →</button><small>Subsystem designs feed a final product review.</small></article>
         <article class="panel workflow-card"><span class="step">04</span><h3>Component Architecture</h3><p>Assign separate scouts to boundaries, standalone packages or repos, and independent verification.</p><button class="primary" data-run="architecture">Run full component review →</button><small>Compare keeping code together with extraction; save contracts, costs and concrete next steps.</small></article>
+        <article class="panel workflow-card"><span class="step">05</span><h3>CI/CD</h3><p>Review real pipeline configuration for a fast component path, wider checks, caching, parallelism and deployment.</p><button class="primary" data-run="delivery">Review CI/CD →</button><small>Starts from source facts and configuration. No semantic mapping or project test execution is required.</small></article>
       </div>
+      <section class="panel"><div class="panel-heading"><h2>Preview affected checks</h2></div><p class="section-note">Use declared task inputs and dependencies to explain which checks a change needs. This previews the plan; it does not run commands or deploy.</p><form id="ci-plan-form"><div class="model-settings"><label>Optional base Git revision<input id="ci-base-ref" placeholder="Use the pinned change baseline"></label><label>Run purpose<select id="ci-cadence"><option value="change">This change</option><option value="release">Release</option><option value="scheduled">Scheduled review</option></select></label></div><label>Optional changed paths, one per line<textarea id="ci-changed-paths" rows="2" placeholder="Leave blank to compare the checkout with its base"></textarea></label><button class="secondary" type="submit">Preview affected checks</button></form><div id="ci-plan-summary" class="section-note">No change plan requested.</div><details><summary>Full check plan and evidence</summary><pre id="ci-plan-json">No plan yet.</pre></details></section>
       <section class="panel workflow-settings">
         <div class="panel-heading"><h2>Models and parallel workers</h2><button id="save-workflow-settings" class="secondary">Save choices</button></div>
         <p class="section-note">Each stage uses the model you choose. A blank model uses that CLI's configured default. Installed Codex or Claude CLI authentication is required.</p>
@@ -81,20 +84,20 @@
         </div>
         <label><span><input id="workflow-exhaustive" type="checkbox"> Review every catalogue pattern in detail (slower)</span></label>
         <div id="stage-models" class="model-settings"></div>
-        <p class="section-note">Architecture finding review runs only when a scout proposes a change. Enabled ordered review passes replace that default reviewer.</p>
+        <p class="section-note">Architecture and CI/CD finding reviews run only when a worker proposes a change. Enabled ordered review passes replace those default reviewers.</p>
         <details><summary>Ordered review passes</summary><p class="section-note">Independent batches run in parallel. Within each batch, enabled review passes run in this order.</p>
           <div class="model-settings"><label><span><input id="review-codex-enabled" type="checkbox"> 1. OpenAI / Codex review</span><input id="review-codex-model" placeholder="Configured Codex model"></label><label><span><input id="review-claude-enabled" type="checkbox"> 2. Claude review</span><input id="review-claude-model" placeholder="Configured Claude model"></label></div>
         </details>
-        <label for="workflow-scope">Optional scope <span class="muted">module paths, one per line; blank uses the workflow default (Patterns: production modules)</span></label><textarea id="workflow-scope" rows="2" placeholder="Leave blank for the default scope"></textarea>
+        <label for="workflow-scope">Optional scope <span class="muted">module paths, or pipeline paths for CI/CD; one per line. Blank uses the workflow default.</span></label><textarea id="workflow-scope" rows="2" placeholder="Leave blank for the default scope"></textarea>
       </section>
       <section class="panel"><div class="panel-heading"><h2>Workflow progress</h2><button id="load-workflows" class="quiet">Refresh progress</button></div><div id="workflow-runs" class="empty" aria-live="polite">No workflows started.</div></section>
       <section class="panel"><div class="panel-heading"><div><h2>Portable understanding</h2><p class="section-note">Current analyses travel with your repository in <code>anaxigraph/</code>. Commit and push that folder through your normal Git workflow.</p></div></div><div class="record-actions"><button id="export-record" class="secondary">Save portable record</button><button id="import-record" class="secondary">Reuse record from this repo</button></div><p id="portable-state" class="section-note">Mapped locally, exported, and committed/pushed are reported separately.</p></section>
       <details class="panel manual-analysis"><summary>Advanced: prepare and submit an individual agent task</summary>
-        <div class="record-actions"><button class="secondary" data-kind="annotate">Prepare annotation task</button><button class="secondary" data-kind="patterns">Prepare exhaustive pattern task</button><button class="secondary" data-kind="architecture">Prepare component scout task</button><button class="secondary" data-kind="fresh-eyes">Prepare blind design task</button></div>
+        <div class="record-actions"><button class="secondary" data-kind="annotate">Prepare annotation task</button><button class="secondary" data-kind="patterns">Prepare exhaustive pattern task</button><button class="secondary" data-kind="architecture">Prepare component scout task</button><button class="secondary" data-kind="delivery">Prepare CI/CD task</button><button class="secondary" data-kind="fresh-eyes">Prepare blind design task</button></div>
       <section class="panel analysis-workspace">
         <div class="panel-heading"><div><p class="eyebrow">AGENT REVIEW</p><h2 id="analysis-title">Prepare a task to begin</h2></div><span id="analysis-state" class="pill">No task selected</span></div>
         <p class="section-note">Use these packets with an independent agent when you want direct control. Full workflows above run and save their batches automatically.</p>
-        <label for="analysis-scope">Scope <span class="muted">optional entity IDs, one per line; leave blank for the default batch</span></label>
+        <label for="analysis-scope">Scope <span class="muted">optional module paths or IDs, or CI/CD configuration paths; one per line. Blank uses the default batch.</span></label>
         <textarea id="analysis-scope" rows="2" placeholder="module:src/example.py"></textarea>
         <div class="analysis-columns">
           <div><div class="subheading"><h3>1. Give this task to an agent</h3><button id="copy-task" class="quiet" disabled>Copy task</button></div>

@@ -36,8 +36,18 @@ class ValidationInput(Input):
     baseline_id: str | None = Field(default=None, max_length=200)
 
 
+class CIPlanInput(Input):
+    base_ref: str | None = Field(default=None, max_length=200)
+    base_snapshot_id: str | None = Field(default=None, max_length=200)
+    changed_paths: list[str] | None = Field(default=None, max_length=10000)
+    cadence: str = Field(default="change", pattern="^(change|release|scheduled)$")
+    runtime_context: dict[str, Any] | None = None
+
+
 class AnalysisInput(Input):
-    kind: str = Field(pattern="^(annotate|pattern-screen|patterns|architecture|fresh-eyes)$")
+    kind: str = Field(
+        pattern="^(annotate|pattern-screen|patterns|architecture|delivery|fresh-eyes)$"
+    )
     scope: list[str] | None = Field(default=None, max_length=100)
     pattern_ids: list[str] | None = Field(default=None, max_length=133)
     lens: str | None = Field(default=None, pattern="^(boundaries|packages|verification)$")
@@ -49,7 +59,7 @@ class SubmissionInput(Input):
 
 
 class WorkflowInput(Input):
-    kind: str = Field(pattern="^(mapping|annotate|patterns|architecture|fresh-eyes)$")
+    kind: str = Field(pattern="^(mapping|annotate|patterns|architecture|ci|delivery|fresh-eyes)$")
     config: dict[str, Any] | None = None
     scope: list[str] | None = None
 
@@ -133,6 +143,10 @@ def create_app(application: Any) -> FastAPI:
         if body.baseline_id:
             return application.validate_change(body.receipts, body.baseline_id)
         return application.validate_change(body.receipts)
+
+    @server.post("/api/ci/plan")
+    def ci_plan(body: CIPlanInput) -> dict:
+        return application.ci_plan(**body.model_dump())
 
     @server.post("/api/analysis/request")
     def analysis_request(body: AnalysisInput) -> dict:

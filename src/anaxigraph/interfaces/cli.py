@@ -22,6 +22,22 @@ def _location(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _ci_plan_parser(commands: Any) -> None:
+    command = commands.add_parser(
+        "ci-plan", help="Preview affected checks from declared task inputs and an explicit change"
+    )
+    _location(command)
+    command.add_argument("--base-ref", help="Git revision to compare with the current checkout")
+    command.add_argument("--base-snapshot-id", help="Retained snapshot to compare")
+    command.add_argument(
+        "--changed-paths", type=Path, help="JSON array of caller-supplied changed paths"
+    )
+    command.add_argument("--cadence", choices=("change", "release", "scheduled"), default="change")
+    command.add_argument(
+        "--runtime-context", type=Path, help="JSON object of declared runtime inputs"
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     from anaxigraph import __version__
 
@@ -29,6 +45,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     _location(result)
     commands = result.add_subparsers(dest="command", required=True)
+    _ci_plan_parser(commands)
     for name, help_text in (
         ("scan", "Build or refresh the structural map"),
         ("status", "Show checkout identity and analysis readiness"),
@@ -37,10 +54,10 @@ def parser() -> argparse.ArgumentParser:
         ("prepare", "Find ownership, reuse and checks for a change"),
         ("assess", "Assess proposed file placement"),
         ("validate", "Compare snapshots and attribute supplied check results"),
-        ("request", "Prepare an annotation, architectural review or blind Fresh Eyes task"),
+        ("request", "Prepare mapping, pattern, architecture, CI/CD or blind Fresh Eyes work"),
         ("submit", "Validate and save an agent's analysis result"),
         ("reviews", "Read saved architectural reviews"),
-        ("run", "Run a mapping, Patterns, component architecture or Fresh Eyes workflow"),
+        ("run", "Run mapping, Patterns, component architecture, CI/CD or Fresh Eyes"),
         ("runs", "Show durable batch progress and failed batches"),
         ("resume", "Retry unfinished workflow batches; keep completed results"),
         ("workflow-config", "Read or save model choices and worker settings"),
@@ -85,7 +102,14 @@ def parser() -> argparse.ArgumentParser:
         elif name == "request":
             command.add_argument(
                 "kind",
-                choices=("annotate", "pattern-screen", "patterns", "architecture", "fresh-eyes"),
+                choices=(
+                    "annotate",
+                    "pattern-screen",
+                    "patterns",
+                    "architecture",
+                    "delivery",
+                    "fresh-eyes",
+                ),
             )
             command.add_argument("--scope", nargs="+")
             command.add_argument("--pattern-ids", nargs="*", help="Explicit detailed-review cards")
@@ -101,7 +125,8 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--offset", type=int, default=0)
         elif name == "run":
             command.add_argument(
-                "kind", choices=("mapping", "patterns", "architecture", "fresh-eyes")
+                "kind",
+                choices=("mapping", "patterns", "architecture", "ci", "delivery", "fresh-eyes"),
             )
             command.add_argument("--scope", nargs="+")
             command.add_argument("--config", type=Path, help="Workflow settings JSON")
@@ -141,6 +166,23 @@ def _analysis_options(args: argparse.Namespace) -> dict[str, Any]:
     return options
 
 
+def _check_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
+    if args.command == "ci-plan":
+        return application.ci_plan(
+            base_ref=args.base_ref,
+            base_snapshot_id=args.base_snapshot_id,
+            changed_paths=_read_json(args.changed_paths, list) if args.changed_paths else None,
+            cadence=args.cadence,
+            runtime_context=_read_json(args.runtime_context, dict)
+            if args.runtime_context
+            else None,
+        )
+    receipts = _read_json(args.receipts, list) if args.receipts else None
+    if args.baseline_id:
+        return application.validate_change(receipts, args.baseline_id)
+    return application.validate_change(receipts)
+
+
 def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     """Keep transport dispatch independent from application implementation."""
     if args.command == "scan":
@@ -161,11 +203,8 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
         if args.decisions is not None:
             return application.assess_plan(args.task, args.files, _read_json(args.decisions, list))
         return application.assess_plan(args.task, args.files)
-    if args.command == "validate":
-        receipts = _read_json(args.receipts, list) if args.receipts else None
-        if args.baseline_id:
-            return application.validate_change(receipts, args.baseline_id)
-        return application.validate_change(receipts)
+    if args.command in {"validate", "ci-plan"}:
+        return _check_dispatch(application, args)
     if args.command == "request":
         return application.analysis_request(args.kind, args.scope, **_analysis_options(args))
     if args.command == "submit":

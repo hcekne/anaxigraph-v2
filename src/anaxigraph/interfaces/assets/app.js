@@ -252,7 +252,7 @@ async function requestAnalysis(kind) {
   const scope = lines($("#analysis-scope").value);
   const packet = await api("/api/analysis/request", { kind, scope: scope.length ? scope : null });
   state.request = packet;
-  $("#analysis-title").textContent = { annotate: "Module annotation", patterns: "Exhaustive pattern task", architecture: "Component boundary scout", "fresh-eyes": "Blind Fresh Eyes design" }[kind];
+  $("#analysis-title").textContent = { annotate: "Module annotation", patterns: "Exhaustive pattern task", architecture: "Component boundary scout", delivery: "CI/CD pipeline review", "fresh-eyes": "Blind Fresh Eyes design" }[kind];
   $("#analysis-state").textContent = "Awaiting agent result";
   $("#analysis-packet").textContent = formatJSON(packet);
   $("#blind-note").hidden = kind !== "fresh-eyes";
@@ -278,7 +278,7 @@ async function refreshReviews(append = false) {
     const section = document.createElement("details");
     section.className = "review-card";
     const summary = document.createElement("summary");
-    summary.textContent = `${item.kind || "Review"} · ${item.status || "saved"} · ${item.producer || "producer unspecified"}`;
+    summary.textContent = `${item.kind === "delivery" ? "CI/CD" : item.kind || "Review"} · ${item.status || "saved"} · ${item.producer || "producer unspecified"}`;
     const content = document.createElement("div");
     content.className = "review-content";
     content.textContent = item.summary || "Expand to load the full saved review.";
@@ -372,6 +372,7 @@ function renderReview(parent, record) {
   if (Array.isArray(result.alternatives)) parent.append(...result.alternatives.map(alternativeCard));
   else if (Array.isArray(result.evaluations)) renderPatternPages(parent, result.evaluations);
   else if (Array.isArray(result.findings)) renderArchitecture(parent, result);
+  else if (Array.isArray(result.recommendations)) AnaxiGraphCI.renderReview(parent, result);
   const raw = document.createElement("details");
   raw.append(textElement("summary", "Full saved record and provenance"));
   raw.append(textElement("pre", formatJSON(record)));
@@ -411,7 +412,7 @@ async function refresh() {
   }
 }
 
-const stageLabels = { annotate: "Mapping", "pattern-screen": "Fast pattern screening", architecture: "Component architecture scouts", "architecture-review": "Architecture finding review", patterns: "Detailed pattern review", "fresh-eyes": "Fresh Eyes" };
+const stageLabels = { annotate: "Mapping", "pattern-screen": "Fast pattern screening", architecture: "Component architecture scouts", "architecture-review": "Architecture finding review", delivery: "CI/CD pipeline review", "delivery-review": "CI/CD finding review", patterns: "Detailed pattern review", "fresh-eyes": "Fresh Eyes" };
 const lensLabels = { boundaries: "Component boundaries", packages: "Standalone packages or repos", verification: "Independent verification" };
 let workflowSettings = null;
 let workflowTimer = null;
@@ -460,7 +461,7 @@ function renderModelSettings(config) {
     fallback.value = (config.stages[kind].fallbacks || []).map((x) => x.provider === config.stages[kind].provider ? x.model : `${x.provider}:${x.model}`).join(", ");
     fallback.placeholder = "model, claude:other-model";
     fallbackLabel.append(fallback);
-    fallbackLabel.hidden = kind === "architecture-review";
+    fallbackLabel.hidden = kind.endsWith("-review");
     group.append(providerLabel, modelLabel, effortLabel, fallbackLabel);
     parent.append(group);
   }
@@ -699,6 +700,7 @@ $("#validate-change").addEventListener("click", () => action($("#validate-change
   const receipts = $("#receipts").value.trim() ? JSON.parse($("#receipts").value) : null;
   $("#change-validation").textContent = formatJSON(await api("/api/validate", { receipts }));
 }));
+AnaxiGraphCI.bindPlanForm({ $, api, action, textElement, formatJSON, lines, notice });
 refresh().catch((error) => notice(error.message, true));
 api("/api/workflows/config").then(renderModelSettings).catch((error) => notice(error.message, true));
 refreshWorkflows().catch((error) => notice(error.message, true));

@@ -11,7 +11,7 @@ separately. The production budget counts every physical Python, JavaScript, CSS 
 data is reported separately and has its own byte budget. Tests and experiment code are visible in
 the report rather than folded into the production count or omitted from the accounting.
 
-The explicit limits in `quality-budget.json` are 10,150 production lines, 800 lines per
+The explicit limits in `quality-budget.json` are 12,050 production lines, 800 lines per
 production file and 200,000 bytes of package JSON data. New Python functions have a decision-score
 ceiling of 15. Existing functions above that value have named limits equal to their measured debt,
 so they cannot silently become more complex. The score is one plus branch, boolean and comprehension
@@ -54,6 +54,14 @@ Another 50 lines permit conditional strong review of positive scout findings. A 
 control exposed a redundant packaging recommendation, so positives now need a second judgment;
 keep/unknown outcomes skip that call. This reuses the existing draft-review pipeline and records
 configured policy separately from reviewers actually called.
+
+The CI/CD change adds a 1,900-line allowance for bounded, redacted workflow evidence capture,
+a separate delivery specialist, and deterministic declared-input check selection with cache
+fingerprints, dependency ordering, explicit baselines, portable retention and shared UI/API access.
+This is a new capability, rather than a second implementation of mapping or model execution.
+It reuses the existing resumable workers and positive-finding review. No function-complexity or
+per-file limit increases. The allowance includes JSON validation, non-executing YAML parsing and
+honest incomplete-scope reporting; no project tests or deployment commands are executed by the planner.
 
 When a check fails, simplify the change or deliberately revise the relevant budget with an
 explanation of the required behavior and tradeoff. CI never rewrites the baseline or raises a limit.

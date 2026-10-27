@@ -121,7 +121,13 @@ def test_whole_mapping_patterns_and_fresh_eyes_cover_marker_without_inventing_re
     assert fresh["status"] == "completed", fresh
     assert fresh["reconciliation"]["declared_modules"] == 2
     assert fresh["reconciliation"]["alternatives"] == 3
-    assert calls == {"annotate": 2, "patterns": 2, "architecture": 3, "fresh-eyes": 2}
+    assert calls == {
+        "annotate": 2,
+        "patterns": 2,
+        "architecture": 3,
+        "delivery": 1,
+        "fresh-eyes": 2,
+    }
 
 
 def test_inert_only_tail_batches_join_behavioral_scope_without_adding_requirements(tmp_path):
