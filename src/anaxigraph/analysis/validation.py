@@ -7,6 +7,7 @@ from typing import Any
 
 from anaxigraph.contracts import Graph
 
+from .architecture import FINDING_FIELDS, validate_architecture
 from .behavior import check_annotation_behaviors
 from .packets import DEFAULT_RESULT_BYTES, _check_behavior
 
@@ -128,6 +129,22 @@ def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[st
                     },
                     {"evidence": reference},
                 )
+            },
+        ),
+        "architecture": (
+            {"producer", "lens", "assessments", "findings", "uncertainty"},
+            {
+                "assessments": lambda item: _project(item, {"module_id", "outcome"}),
+                "findings": lambda item: _project(
+                    item,
+                    FINDING_FIELDS,
+                    {
+                        "evidence": reference,
+                        "options": lambda option: _project(
+                            option, {"placement", "benefit", "cost"}
+                        ),
+                    },
+                ),
             },
         ),
         "fresh-eyes": (
@@ -356,6 +373,9 @@ def validate_result(request: dict[str, Any], result: dict[str, Any], graph: Grap
         "pattern-screen": _pattern_screen,
         "patterns": _patterns,
         "fresh-eyes": _fresh_eyes,
+        "architecture": lambda request, result, graph: validate_architecture(
+            request, result, graph, _evidence
+        ),
     }
     if kind not in validators:
         raise ValueError("Unknown analysis result kind")

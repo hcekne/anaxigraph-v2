@@ -8,6 +8,9 @@ implementation, explicit dependencies and local verification. Many agents should
 different components concurrently while preserving the agreements between them.
 
 This records the maintainer's house analogy and sharpens the existing ten-principle charter.
+The subsequent [architecture scout implementation](change-request-architecture-scouts.md) turns
+these principles into mandatory focused jobs, including standalone libraries in separate repos,
+and explicit dispositions during plan assessment.
 The charter and agent change guidance express this policy now. Component declarations, complete
 resource-aware impact analysis and automatic CI selection are proposed capabilities below; they
 are not implemented by this documentation or by changing the advice. No project CI checks are

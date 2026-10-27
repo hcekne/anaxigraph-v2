@@ -29,6 +29,9 @@ modular monoliths are valid choices; do not manufacture abstractions or force pa
 Use `docs/component-architecture-principles.md`: components are independent units of change and
 verification, usually composed in process. Behavioral contracts and shared resources determine
 impact; unchanged signatures and bounded test-reference lists do not establish complete CI scope.
+New Pattern runs include mandatory architecture scouts for boundaries, standalone packages/repos
+and independent verification. Preserve their per-lens coverage and portable identities. Material
+plan findings need explicit adopt/defer/reject reasons; decisions never prove implementation.
 
 The maintainer selected a clean slate and selective MVP capabilities. Do not treat every legacy
 feature as mandatory. Do not publish a release or alter the legacy service merely to move files.

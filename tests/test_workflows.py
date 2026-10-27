@@ -50,6 +50,16 @@ def answer(request):
                 for module in packet["modules"]
             ],
         }
+    if kind == "architecture":
+        return {
+            "producer": "synthetic-workflow-fixture",
+            "lens": packet["lens"],
+            "assessments": [
+                {"module_id": identity, "outcome": "keep"} for identity in request["scope"]
+            ],
+            "findings": [],
+            "uncertainty": [],
+        }
     if kind == "patterns":
         return {
             "producer": "synthetic-workflow-fixture",
@@ -210,7 +220,7 @@ def test_patterns_and_blind_hierarchical_design_are_saved_and_reused(tmp_path):
     previous = calls.copy()
     repeated = runner.start("patterns", {"pattern_mode": "exhaustive"}, background=False)
     assert repeated["status"] == "completed", repeated
-    assert repeated["reused_batches"] == 2
+    assert repeated["reused_batches"] == 5
     assert calls == previous
     fresh = runner.start("fresh-eyes", background=False)
     assert fresh["status"] == "completed", fresh

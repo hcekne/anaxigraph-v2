@@ -28,6 +28,7 @@ class TaskInput(Input):
 class PlanInput(Input):
     task: str = Field(min_length=1, max_length=8000)
     files: list[str] = Field(max_length=100)
+    decisions: list[dict[str, Any]] | None = Field(default=None, max_length=30)
 
 
 class ValidationInput(Input):
@@ -36,9 +37,10 @@ class ValidationInput(Input):
 
 
 class AnalysisInput(Input):
-    kind: str = Field(pattern="^(annotate|pattern-screen|patterns|fresh-eyes)$")
+    kind: str = Field(pattern="^(annotate|pattern-screen|patterns|architecture|fresh-eyes)$")
     scope: list[str] | None = Field(default=None, max_length=100)
     pattern_ids: list[str] | None = Field(default=None, max_length=133)
+    lens: str | None = Field(default=None, pattern="^(boundaries|packages|verification)$")
 
 
 class SubmissionInput(Input):
@@ -47,7 +49,7 @@ class SubmissionInput(Input):
 
 
 class WorkflowInput(Input):
-    kind: str = Field(pattern="^(mapping|annotate|patterns|fresh-eyes)$")
+    kind: str = Field(pattern="^(mapping|annotate|patterns|architecture|fresh-eyes)$")
     config: dict[str, Any] | None = None
     scope: list[str] | None = None
 
@@ -122,6 +124,8 @@ def create_app(application: Any) -> FastAPI:
 
     @server.post("/api/assess")
     def assess(body: PlanInput) -> dict:
+        if body.decisions is not None:
+            return application.assess_plan(body.task, body.files, body.decisions)
         return application.assess_plan(body.task, body.files)
 
     @server.post("/api/validate")
@@ -132,9 +136,12 @@ def create_app(application: Any) -> FastAPI:
 
     @server.post("/api/analysis/request")
     def analysis_request(body: AnalysisInput) -> dict:
+        options: dict[str, Any] = {}
         if body.pattern_ids is not None:
-            return application.analysis_request(body.kind, body.scope, pattern_ids=body.pattern_ids)
-        return application.analysis_request(body.kind, body.scope)
+            options["pattern_ids"] = body.pattern_ids
+        if body.lens is not None:
+            options["lens"] = body.lens
+        return application.analysis_request(body.kind, body.scope, **options)
 
     @server.post("/api/analysis/submit")
     def submit(body: SubmissionInput) -> dict:

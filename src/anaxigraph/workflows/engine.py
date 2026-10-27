@@ -27,6 +27,7 @@ from anaxigraph.workflows.progress import (
     timing_summary,
 )
 from anaxigraph.workflows.providers import configured_model, execute, reasoning_effort
+from anaxigraph.workflows.scouts import plan_scouts, review_workflow
 
 _MUTEX = threading.RLock()
 _RUNNING: dict[tuple[str, str], threading.Thread] = {}
@@ -35,6 +36,7 @@ KINDS = {
     "mapping": "annotate",
     "annotate": "annotate",
     "patterns": "patterns",
+    "architecture": "architecture",
     "fresh-eyes": "fresh-eyes",
 }
 DEFAULTS: dict[str, Any] = {
@@ -51,7 +53,7 @@ DEFAULTS: dict[str, Any] = {
                     {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"}
                 ],
             }
-            for kind in ("annotate", "pattern-screen")
+            for kind in ("annotate", "pattern-screen", "architecture")
         },
         "patterns": {
             "provider": "codex",
@@ -302,7 +304,7 @@ class WorkflowRunner:
         background: bool = True,
     ) -> dict[str, Any]:
         if kind not in KINDS:
-            raise ValueError("Workflow must be mapping, patterns, or fresh-eyes")
+            raise ValueError("Workflow must be mapping, patterns, architecture, or fresh-eyes")
         with _MUTEX:
             active = [x for x in self.status()["items"] if x["status"] in {"running", "queued"}]
             if active:
@@ -326,6 +328,7 @@ class WorkflowRunner:
                 "stages_planned": [],
                 "attempt_history_version": 1,
                 "timing_version": 1,
+                "architecture_scouts_version": 1,
                 "pid": os.getpid(),
             }
             self._save(run)
@@ -417,47 +420,29 @@ class WorkflowRunner:
                 _ACTIVE.discard((str(self.application.root), run_id))
 
     def _review(self, run: dict[str, Any]) -> None:
-        stages = ["annotate"] if run["kind"] == "annotate" else ["annotate", run["kind"]]
-        if run["kind"] == "patterns" and run["config"].get("pattern_mode") == "screened":
-            stages.insert(1, "pattern-screen")
-        for stage in stages:
-            self._stage(run, stage)
-            if any(batch["status"] == "failed" for batch in run["batches"]):
-                raise ValueError(
-                    "Some batches failed; completed results are saved. Retry failed batches."
-                )
-        run["phase"] = "Final reconciliation"
-        self._save(run)
-        if run["kind"] == "fresh-eyes":
-            self._product(run)
-        review_ids = [
-            batch["request_id"]
-            for batch in run["batches"]
-            if batch.get("request_id") and batch["kind"] != "annotate"
-        ]
-        reconciliation = self.application.analysis_reconcile(run["kind"], review_ids, run["scope"])
-        run["reconciliation"] = reconciliation | {
-            "status": "completed",
-            "phase": "Final reconciliation",
-            "review_ids": review_ids,
-            "message": "Validated batches form one current map; all declared scopes are accounted for.",
-        }
+        review_workflow(self, run)
 
-    def _stage(self, run: dict[str, Any], kind: str) -> None:
-        run["phase"] = {
+    def _stage(self, run: dict[str, Any], kind: str | tuple[str, ...]) -> None:
+        kinds = (kind,) if isinstance(kind, str) else kind
+        labels = {
             "annotate": "Mapping annotations",
             "pattern-screen": "Fast catalogue screening",
             "patterns": "Catalogue review",
+            "architecture": "Component architecture scouts",
             "fresh-eyes": "Independent subsystem designs",
-        }[kind]
-        if kind not in run["stages_planned"]:
-            if kind == "patterns" and run["config"].get("pattern_mode") == "screened":
-                self._plan_details(run)
-            else:
-                self._plan_scopes(run, kind)
-            run["stages_planned"].append(kind)
+        }
+        run["phase"] = " / ".join(labels[stage] for stage in kinds)
+        for stage in kinds:
+            if stage not in run["stages_planned"]:
+                if stage == "architecture":
+                    plan_scouts(self, run)
+                elif stage == "patterns" and run["config"].get("pattern_mode") == "screened":
+                    self._plan_details(run)
+                else:
+                    self._plan_scopes(run, stage)
+                run["stages_planned"].append(stage)
         self._save(run)
-        pending = [b for b in run["batches"] if b["kind"] == kind and b["status"] != "completed"]
+        pending = [b for b in run["batches"] if b["kind"] in kinds and b["status"] != "completed"]
         with ThreadPoolExecutor(max_workers=run["config"]["workers"]) as pool:
             jobs = [pool.submit(self._batch, run, batch) for batch in pending]
             for job in as_completed(jobs):
@@ -466,7 +451,7 @@ class WorkflowRunner:
     def _plan_scopes(self, run, kind):
         graph = self.application._current()
         scope = run["scope"]
-        if kind == "annotate" and run["kind"] == "patterns" and scope is None:
+        if kind == "annotate" and run["kind"] in {"patterns", "architecture"} and scope is None:
             scope = [
                 identity for group in plan_scopes(graph, "pattern-screen") for identity in group
             ]
@@ -505,6 +490,10 @@ class WorkflowRunner:
                     )
 
     def _request(self, batch):
+        if "lens" in batch:
+            return self.application.analysis_request(
+                "architecture", batch["scope"], lens=batch["lens"]
+            )
         if "children" in batch:
             return self.application.analysis_product_request(batch["children"])
         if "screen_id" in batch:

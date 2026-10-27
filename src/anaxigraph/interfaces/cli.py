@@ -37,10 +37,10 @@ def parser() -> argparse.ArgumentParser:
         ("prepare", "Find ownership, reuse and checks for a change"),
         ("assess", "Assess proposed file placement"),
         ("validate", "Compare snapshots and attribute supplied check results"),
-        ("request", "Prepare an annotation, Patterns or blind Fresh Eyes task"),
+        ("request", "Prepare an annotation, architectural review or blind Fresh Eyes task"),
         ("submit", "Validate and save an agent's analysis result"),
         ("reviews", "Read saved architectural reviews"),
-        ("run", "Run a complete mapping, Patterns or Fresh Eyes workflow"),
+        ("run", "Run a mapping, Patterns, component architecture or Fresh Eyes workflow"),
         ("runs", "Show durable batch progress and failed batches"),
         ("resume", "Retry unfinished workflow batches; keep completed results"),
         ("workflow-config", "Read or save model choices and worker settings"),
@@ -68,6 +68,9 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("task")
             if name == "assess":
                 command.add_argument("--files", nargs="+", required=True)
+                command.add_argument(
+                    "--decisions", type=Path, help="JSON array of proposal decisions"
+                )
             else:
                 command.add_argument("--limit", type=int, default=12)
                 command.add_argument("--baseline-id", help="Explicitly pin a new change baseline")
@@ -81,10 +84,12 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--baseline-id", help="Compare against this retained snapshot")
         elif name == "request":
             command.add_argument(
-                "kind", choices=("annotate", "pattern-screen", "patterns", "fresh-eyes")
+                "kind",
+                choices=("annotate", "pattern-screen", "patterns", "architecture", "fresh-eyes"),
             )
             command.add_argument("--scope", nargs="+")
             command.add_argument("--pattern-ids", nargs="*", help="Explicit detailed-review cards")
+            command.add_argument("--lens", choices=("boundaries", "packages", "verification"))
         elif name == "submit":
             command.add_argument("request_id")
             command.add_argument(
@@ -95,7 +100,9 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--limit", type=int, default=12)
             command.add_argument("--offset", type=int, default=0)
         elif name == "run":
-            command.add_argument("kind", choices=("mapping", "patterns", "fresh-eyes"))
+            command.add_argument(
+                "kind", choices=("mapping", "patterns", "architecture", "fresh-eyes")
+            )
             command.add_argument("--scope", nargs="+")
             command.add_argument("--config", type=Path, help="Workflow settings JSON")
         elif name == "runs":
@@ -125,6 +132,15 @@ def _read_json(path: Path, expected: type) -> Any:
     return value
 
 
+def _analysis_options(args: argparse.Namespace) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    if args.pattern_ids is not None:
+        options["pattern_ids"] = args.pattern_ids
+    if args.lens is not None:
+        options["lens"] = args.lens
+    return options
+
+
 def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     """Keep transport dispatch independent from application implementation."""
     if args.command == "scan":
@@ -142,6 +158,8 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
             return application.prepare_change(args.task, args.limit, args.baseline_id)
         return application.prepare_change(args.task, args.limit)
     if args.command == "assess":
+        if args.decisions is not None:
+            return application.assess_plan(args.task, args.files, _read_json(args.decisions, list))
         return application.assess_plan(args.task, args.files)
     if args.command == "validate":
         receipts = _read_json(args.receipts, list) if args.receipts else None
@@ -149,9 +167,7 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
             return application.validate_change(receipts, args.baseline_id)
         return application.validate_change(receipts)
     if args.command == "request":
-        if args.pattern_ids is not None:
-            return application.analysis_request(args.kind, args.scope, pattern_ids=args.pattern_ids)
-        return application.analysis_request(args.kind, args.scope)
+        return application.analysis_request(args.kind, args.scope, **_analysis_options(args))
     if args.command == "submit":
         return application.submit_analysis(args.request_id, _read_json(args.result, dict))
     if args.command == "reviews":

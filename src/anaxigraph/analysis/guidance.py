@@ -10,6 +10,8 @@ from typing import Any
 
 from anaxigraph.contracts import Graph, Node
 
+from .architecture_guidance import coverage as architecture_coverage
+from .architecture_guidance import proposals as architecture_proposals
 from .charter import CHARTER, boundary_findings, module_facts
 
 
@@ -209,6 +211,7 @@ def _review_proposals(
         if row.get("kind") == "patterns"
         for proposal in _pattern_proposals(row, owners, graph)
     ][:2]
+    selected = (architecture_proposals(current, owners) + patterns)[:2]
     architecture_task = bool(
         re.search(
             r"\b(architectur(?:e|al)|design|refactor(?:ing)?|simplify|modularity|maintainability|patterns?)\b",
@@ -227,8 +230,8 @@ def _review_proposals(
             None,
         )
         if fresh is not None:
-            return patterns[:1] + [fresh]
-    return patterns
+            return selected[:1] + [fresh]
+    return selected
 
 
 def _coding_steps(
@@ -319,8 +322,9 @@ def _coding_steps(
 
 def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
     """Keep the default expansion small; original source/reviews remain inspectable."""
+    proposals = brief["implementation_advice"]["review_proposals"]
     collections = [
-        brief["implementation_advice"]["review_proposals"],
+        proposals,
         brief["reuse_candidates"],
         brief["contracts"],
         brief["affected_paths"],
@@ -329,7 +333,14 @@ def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
         brief["implementation_advice"]["steps"],
     ]
     while len(json.dumps(brief, ensure_ascii=False, indent=2).encode()) > 7000:
-        collection = next((items for items in collections if items), None)
+        collection = next(
+            (
+                items
+                for items in collections
+                if items and (items is not proposals or len(items) > 1)
+            ),
+            proposals or None,
+        )
         if collection is None:
             break
         if collection is brief["contracts"]:
@@ -408,7 +419,9 @@ def prepare(
         for node in modules.values()
         if node.path in impacted and (node.data.get("is_test") or node.path.startswith("tests/"))
     ]
-    proposals = _review_proposals(graph, reviews or [], {node.id for node in candidates}, task)
+    owner_ids = {node.id for node in candidates}
+    saved_reviews = reviews or []
+    proposals = _review_proposals(graph, saved_reviews, owner_ids, task)
     brief: dict[str, Any] = {
         "task": _short(task, 1200),
         "snapshot_id": graph.snapshot.id,
@@ -430,6 +443,7 @@ def prepare(
         "tests_total": len(set(tests)),
         "implementation_advice": {
             "principles": [{"id": item["id"], "principle": item["principle"]} for item in CHARTER],
+            "architecture_review": architecture_coverage(saved_reviews, owner_ids),
             "steps": _coding_steps(graph, candidates, matches, contracts, tests, impacted),
             "review_proposals": proposals,
             "review_scope": "At most two owner-scoped proposals; expand saved reviews for other options. A proposal is not an instruction to rewrite.",

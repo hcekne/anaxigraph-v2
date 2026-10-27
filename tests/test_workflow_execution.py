@@ -24,7 +24,10 @@ def configuration():
     return {
         "pattern_mode": "exhaustive",
         "timeout_seconds": None,
-        "stages": {kind: deepcopy(worker) for kind in ("annotate", "patterns", "fresh-eyes")},
+        "stages": {
+            kind: deepcopy(worker)
+            for kind in ("annotate", "patterns", "architecture", "fresh-eyes")
+        },
         "review_passes": [reviewer],
     }
 
@@ -127,7 +130,9 @@ def test_portable_import_does_not_accept_invalid_reasoning(tmp_path, location):
     execution = (
         record["modules"][0]["annotation"]["execution"]
         if location == "annotation"
-        else record["analyses"][0]["body"]["result"]["execution"]
+        else next(row for row in record["analyses"] if row["kind"] == "patterns")["body"]["result"][
+            "execution"
+        ]
     )
     execution["worker"].update(provider="claude", reasoning_effort="xhigh")
     record_path.write_text(json.dumps(record))
@@ -139,6 +144,7 @@ def test_portable_import_does_not_accept_invalid_reasoning(tmp_path, location):
         assert "reasoning_effort" in imported["issue"]
         assert target.status()["annotations"]["current"] == 0
     else:
-        assert imported["analyses_imported"] == 0
+        assert imported["analyses_imported"] == len(record["analyses"]) - 1
         assert "reasoning_effort" in imported["skipped"][0]["reason"]
         assert target.reviews("patterns")["total"] == 0
+        assert target.reviews("architecture")["total"] == 3

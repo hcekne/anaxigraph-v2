@@ -87,6 +87,10 @@ contracts, usually composed in process. Shared schemas, mutable state, configura
 can extend a change's scope even when signatures stay stable. Current guidance states these rules;
 the bounded two-level reference neighborhood and observed test links are not a verified CI plan.
 Declared components, resource-aware impact and executable check selection remain proposed work.
+The [architecture scouts](change-request-architecture-scouts.md) now perform focused source-aware
+searches, compare local/workspace/separate-repository package options, feed task guidance and
+require dispositions for material plan findings. They reuse the shared runner and do not alter
+Fresh Eyes isolation or implement automatic CI selection.
 
 Annotation validity includes its own source and public interfaces of resolved outgoing dependencies.
 Comment and body-only dependency edits preserve callers; changed signatures, documentation and

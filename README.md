@@ -11,6 +11,11 @@ The [component architecture principles](docs/component-architecture-principles.m
 house analogy: cohesive packages can be independent units of change and verification within one
 process. Behavioral contracts and shared data/configuration matter as well as method signatures.
 Current test links guide investigation; they do not generate a verified CI selection.
+New Pattern runs also execute three targeted architectural scouts: component boundaries,
+standalone packages/repositories and independent verification. Their current findings feed change
+guidance; plan assessment requires an adopt/defer/reject reason for material recommendations.
+The [scout workflow and limits](docs/change-request-architecture-scouts.md) distinguish those
+mechanical requirements from verified implementation or automatic CI selection.
 Private-access checks cover resolved function, class and method references; private globals and
 instance attributes can be missed, so no finding does not establish complete boundary coverage.
 
@@ -90,10 +95,11 @@ When replacing an older service with custom source exclusions, pass
 repository-relative glob patterns. The same policy applies to scans and live-source checks;
 V2 does not silently interpret the legacy `.anaxigraph.yml` provider configuration.
 
-## Run Mapping, Patterns or Fresh Eyes
+## Run Mapping, Patterns, Component Architecture or Fresh Eyes
 
-The dashboard's **Run full mapping**, **Run full pattern analysis** and **Run full Fresh Eyes**
-buttons execute the workflows. New defaults use **Luna/low** for concise mapping and ID-only pattern
+The dashboard's **Run full mapping**, **Run full pattern analysis**, **Run full component review**
+and **Run full Fresh Eyes** buttons execute the workflows. New defaults use **Luna/low** for mapping,
+architectural scouts and ID-only pattern
 screening, **Sol/medium** for shortlisted detailed reviews, and a pool of **32** independent workers.
 Existing explicit model selections remain unchanged. Choose Codex or Claude and a model for each stage, parallel workers
 (1–100), optional stronger fallbacks and ordered review passes. Installed provider CLIs must already
@@ -121,6 +127,7 @@ The same workflows are available to coding agents through MCP and the CLI:
 ```bash
 uv run anaxigraph run mapping --repo /path/to/repo
 uv run anaxigraph run patterns --repo /path/to/repo
+uv run anaxigraph run architecture --repo /path/to/repo
 uv run anaxigraph run fresh-eyes --repo /path/to/repo
 uv run anaxigraph runs --repo /path/to/repo
 uv run anaxigraph resume RUN_ID --repo /path/to/repo
@@ -132,7 +139,8 @@ Accepted results are saved immediately; resume retries unfinished batches. A rep
 workflow reuses compatible accepted results with the same model/review pipeline.
 Per-batch timestamps and cumulative wall durations include failed attempts. Model-call time and
 tokens are separate from local/cache work. Pattern review shows screening and detailed review as
-separate phases. Fresh Eyes runs only when requested, outside the mapping-plus-Patterns path.
+separate phases. Three focused architecture scouts per group run alongside screening. Fresh Eyes
+runs only when requested, outside the mapping-plus-Patterns path.
 
 Save model settings in the dashboard or through `workflow-config --file settings.json`. For example:
 
@@ -149,6 +157,7 @@ Save model settings in the dashboard or through `workflow-config --file settings
       "fallbacks": [{"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"}]
     },
     "pattern-screen": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
+    "architecture": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
     "patterns": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
     "fresh-eyes": {"provider": "claude", "model": "YOUR_DESIGN_MODEL"}
   },

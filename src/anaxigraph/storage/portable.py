@@ -150,6 +150,11 @@ def _analysis_key(row: dict[str, Any]) -> str:
                 "pattern_ids": retention_options(body).get("pattern_ids"),
                 "level": body.get("request_options", {}).get("level"),
                 "saved_id": row.get("id") if row.get("explicitly_saved") else None,
+                **(
+                    {"lens": body.get("request_options", {}).get("lens")}
+                    if row.get("kind") == "architecture"
+                    else {}
+                ),
             }
         )
     ).hexdigest()

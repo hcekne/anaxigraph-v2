@@ -17,6 +17,7 @@ from anaxigraph.analysis.changes import change_review
 from anaxigraph.analysis.charter import module_facts
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
+from anaxigraph.application import architecture as component_architecture
 from anaxigraph.application import records, reviews
 from anaxigraph.application.context import (
     _bounds,
@@ -306,6 +307,13 @@ class Application:
                 str(self.root), include_requests=False, module_ids=owner_ids, limit=6
             )
         ]
+        review_rows = list(
+            {
+                row["id"]: row
+                for row in review_rows
+                + component_architecture.owner_reviews(self, graph, owner_ids)
+            }.values()
+        )
         result = prepare(graph, matches, task, reviews=review_rows) | {
             "baseline_id": pinned,
             "baseline_basis": "pinned-change-baseline",
@@ -325,7 +333,9 @@ class Application:
         )
         return result
 
-    def assess_plan(self, task: str, files: list[str]) -> dict[str, Any]:
+    def assess_plan(
+        self, task: str, files: list[str], decisions: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         if not isinstance(files, list) or not files or len(files) > 30:
             raise ValueError("files must name between 1 and 30 relative paths")
         if any(
@@ -345,12 +355,16 @@ class Application:
                         "existing": sorted(existing),
                     }
                 )
+        architecture = component_architecture.assess(self, brief, files, decisions)
         return {
             "snapshot_id": brief["snapshot_id"],
             "files": files,
             "findings": findings,
             "brief": brief,
-            "status": "advisory",
+            "status": architecture["status"]
+            if architecture["status"] in {"decision_required", "scope_incomplete"}
+            else "advisory",
+            "architecture": architecture,
             "scope": "Placement and lexical reuse evidence; behavioral plan correctness is unresolved.",
         }
 
@@ -382,6 +396,7 @@ class Application:
             ),
         }
 
+        result["architecture"] = component_architecture.followthrough(self, selected)
         self.evidence.outcome(
             "validation_reported",
             graph.snapshot.id,

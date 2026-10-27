@@ -7,6 +7,7 @@ import json
 import shutil
 import subprocess
 import weakref
+from collections import Counter
 from dataclasses import replace
 
 import pytest
@@ -175,13 +176,23 @@ def test_repairing_four_briefs_reuses_six_unchanged_xhigh_pattern_reviews(tmp_pa
         calls.append((request["kind"], request["packet"]["modules"][0]["path"]))
         return result_for(request) if request["kind"] == "annotate" else answer(request)
 
-    result = WorkflowRunner(app, provider).start("patterns", CONFIG, background=False)
+    runner = WorkflowRunner(app, provider)
+    result = runner.start("patterns", CONFIG, background=False)
     assert result["status"] == "completed", result
-    assert result["reused_batches"] == 6
+    timings = runner.status(result["run_id"], batch_limit=50)["batch_timings"]
+    assert Counter(batch["kind"] for batch in timings if batch["reused"]) == {
+        "patterns": 6,
+        "architecture": 3,
+    }
+    assert result["reused_batches"] == 9
     assert result["reconciliation"]["evaluated_pairs"] == 1330
     assert {path for kind, path in calls if kind == "annotate"} == set(LEAKS)
     assert {path for kind, path in calls if kind == "patterns"} == set(LEAKS)
-    assert len(calls) == 8
+    # Only the eight-module scout group containing repaired briefs needs another
+    # three-lens pass; the final two-module group is reused unchanged.
+    assert Counter(path for kind, path in calls if kind == "architecture") == {"part0.py": 3}
+    assert result["reconciliation"]["architecture"]["assessed_pairs"] == 30
+    assert len(calls) == 11
     assert not any(node["data"].get("annotation_stale_reason") for node in app.modules()["items"])
 
     # Git-only identity changes and imports must agree with the repaired cache,
@@ -202,11 +213,11 @@ def test_repairing_four_briefs_reuses_six_unchanged_xhigh_pattern_reviews(tmp_pa
     cloned = Application(root)
     imported = cloned.scan()["portable_import"]
     assert imported["annotations_imported"] == 10
-    assert imported["analyses_imported"] == 10
+    assert imported["analyses_imported"] == 16  # ten detailed reviews, two three-lens groups
     repeated = WorkflowRunner(cloned, provider).start("patterns", CONFIG, background=False)
     assert repeated["status"] == "completed", repeated
-    assert repeated["reused_batches"] == 10
-    assert len(calls) == 8
+    assert repeated["reused_batches"] == 16
+    assert len(calls) == 11
 
 
 @pytest.mark.parametrize("filename", ["record", "server"])

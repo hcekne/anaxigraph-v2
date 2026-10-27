@@ -14,10 +14,11 @@ from typing import Any
 
 from anaxigraph.contracts import Graph, Node
 
+from .architecture import architecture_packet, architecture_scopes
 from .behavior import check_behaviors as _check_behaviors
 from .patterns import production_modules
 
-KINDS = {"annotate", "pattern-screen", "patterns", "fresh-eyes"}
+KINDS = {"annotate", "pattern-screen", "patterns", "fresh-eyes", "architecture"}
 DEFAULT_PACKET_BYTES = 2_000_000
 DEFAULT_RESULT_BYTES = 8_000_000
 
@@ -28,6 +29,11 @@ def catalogue() -> list[dict[str, Any]]:
 
 
 def _default_scope(graph: Graph, kind: str) -> list[str]:
+    if kind == "architecture":
+        groups = architecture_scopes(graph)
+        if not groups:
+            raise ValueError("No production modules available; request an explicit module scope")
+        return groups[0]
     modules = (
         production_modules(graph)
         if kind in {"patterns", "pattern-screen"}
@@ -92,17 +98,27 @@ def plan_scopes(
     These are scheduling defaults, not limits on the repository or saved analysis.
     """
     if kind not in KINDS:
-        raise ValueError("Analysis kind must be annotate, patterns, or fresh-eyes")
+        raise ValueError(
+            "Analysis kind must be annotate, pattern-screen, patterns, architecture or fresh-eyes"
+        )
+    if kind == "architecture":
+        return architecture_scopes(graph, scope, batch_size if batch_size is not None else 8)
     size = batch_size if batch_size is not None else (16 if kind == "fresh-eyes" else 1)
     if type(size) is not int or size < 1:
         raise ValueError("batch_size must be a positive integer")
+    return _batches(_planned_modules(graph, kind, scope, include_current), size, kind)
+
+
+def _planned_modules(
+    graph: Graph, kind: str, scope: list[str] | None, include_current: bool
+) -> list[Node]:
     if kind in {"patterns", "pattern-screen"} and not scope:
         selected = production_modules(graph)
     else:
         selected = _scope(graph, scope or [n.id for n in graph.nodes if n.kind == "module"], kind)
     if kind == "annotate" and not include_current:
         selected = [node for node in selected if not _annotation_current(node)]
-    return _batches(selected, size, kind)
+    return selected
 
 
 def _check_behavior(graph: Graph, behavior: str) -> None:
@@ -407,6 +423,19 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
     return packet, schema
 
 
+def _validate_request_options(kind, pattern_ids, lens, package_context) -> None:
+    if kind not in KINDS:
+        raise ValueError(
+            "Analysis kind must be annotate, pattern-screen, patterns, architecture or fresh-eyes"
+        )
+    if kind == "architecture" and pattern_ids is not None:
+        raise ValueError("Architecture scouts do not accept pattern_ids")
+    if package_context is not None and kind != "architecture":
+        raise ValueError("package_context applies only to architecture requests")
+    if lens is not None and kind != "architecture":
+        raise ValueError("lens applies only to architecture requests")
+
+
 def build_request(
     graph: Graph,
     kind: str,
@@ -417,9 +446,10 @@ def build_request(
     max_result_bytes: int = DEFAULT_RESULT_BYTES,
     pattern_ids: list[str] | None = None,
     level: str = "subsystem",
+    lens: str | None = None,
+    package_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if kind not in KINDS:
-        raise ValueError("Analysis kind must be annotate, patterns, or fresh-eyes")
+    _validate_request_options(kind, pattern_ids, lens, package_context)
     chosen = _scope(graph, scope, kind)
     ids = {node.id for node in chosen}
     symbols = [
@@ -433,6 +463,18 @@ def build_request(
         packet, schema = _pattern_packet(graph, chosen, pattern_ids)
     elif kind == "pattern-screen":
         packet, schema = _screen_packet(graph, chosen)
+    elif kind == "architecture":
+        lens = "boundaries" if lens is None else lens
+        packet, schema = architecture_packet(graph, chosen, lens, _screen_module)
+        packet["package_context"] = (
+            package_context
+            if package_context is not None
+            else {
+                "status": "unknown",
+                "manifests": [],
+                "limitations": ["Declared root package metadata was not supplied."],
+            }
+        )
     else:
         packet, schema = _fresh_packet(graph, chosen)
     options = {
@@ -443,6 +485,8 @@ def build_request(
     }
     if kind == "fresh-eyes":
         packet["level"] = level
+    if kind == "architecture":
+        options["lens"] = lens
     return _request(graph, kind, sorted(ids), packet, schema, symbols, chosen, options)
 
 

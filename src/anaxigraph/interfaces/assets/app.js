@@ -252,7 +252,7 @@ async function requestAnalysis(kind) {
   const scope = lines($("#analysis-scope").value);
   const packet = await api("/api/analysis/request", { kind, scope: scope.length ? scope : null });
   state.request = packet;
-  $("#analysis-title").textContent = { annotate: "Module annotation", patterns: "Exhaustive pattern task", "fresh-eyes": "Blind Fresh Eyes design" }[kind];
+  $("#analysis-title").textContent = { annotate: "Module annotation", patterns: "Exhaustive pattern task", architecture: "Component boundary scout", "fresh-eyes": "Blind Fresh Eyes design" }[kind];
   $("#analysis-state").textContent = "Awaiting agent result";
   $("#analysis-packet").textContent = formatJSON(packet);
   $("#blind-note").hidden = kind !== "fresh-eyes";
@@ -371,10 +371,30 @@ function renderReview(parent, record) {
   }
   if (Array.isArray(result.alternatives)) parent.append(...result.alternatives.map(alternativeCard));
   else if (Array.isArray(result.evaluations)) renderPatternPages(parent, result.evaluations);
+  else if (Array.isArray(result.findings)) renderArchitecture(parent, result);
   const raw = document.createElement("details");
   raw.append(textElement("summary", "Full saved record and provenance"));
   raw.append(textElement("pre", formatJSON(record)));
   parent.append(raw);
+}
+
+function renderArchitecture(parent, result) {
+  const outcomes = (result.assessments || []).reduce((counts, item) => ({ ...counts, [item.outcome]: (counts[item.outcome] || 0) + 1 }), {});
+  parent.append(textElement("p", `${lensLabels[result.lens] || result.lens} scout · ${outcomes.finding || 0} modules with findings · ${outcomes.keep || 0} keep · ${outcomes.unknown || 0} unknown. Recommendations remain proposals.`, "section-note"));
+  for (const finding of result.findings) {
+    const card = textElement("article", "", "alternative-card");
+    card.append(textElement("h3", finding.title), textElement("p", `Priority ${finding.priority} · ${finding.placement}`));
+    card.append(textElement("p", finding.next_step));
+    card.append(textElement("h4", "Proposed public contract"), textElement("p", finding.public_contract));
+    card.append(textElement("h4", "Private implementation"), textElement("p", finding.private_implementation));
+    reviewTradeoffs(card, "Dependencies", finding.dependencies);
+    reviewTradeoffs(card, "Proposed verification; not executed", finding.verification);
+    for (const option of finding.options || []) card.append(textElement("p", `${option.placement}: ${option.benefit} Cost: ${option.cost}`));
+    reviewTradeoffs(card, "Uncertainty", finding.uncertainty);
+    card.append(textElement("p", (finding.evidence || []).map((item) => `${item.path}:${item.line}`).join(" · "), "section-note"));
+    parent.append(card);
+  }
+  reviewTradeoffs(parent, "Review uncertainty", result.uncertainty);
 }
 
 async function refresh() {
@@ -391,7 +411,8 @@ async function refresh() {
   }
 }
 
-const stageLabels = { annotate: "Mapping", "pattern-screen": "Fast pattern screening", patterns: "Detailed pattern review", "fresh-eyes": "Fresh Eyes" };
+const stageLabels = { annotate: "Mapping", "pattern-screen": "Fast pattern screening", architecture: "Component architecture scouts", patterns: "Detailed pattern review", "fresh-eyes": "Fresh Eyes" };
+const lensLabels = { boundaries: "Component boundaries", packages: "Standalone packages or repos", verification: "Independent verification" };
 let workflowSettings = null;
 let workflowTimer = null;
 const workflowStatuses = new Map();
@@ -498,7 +519,7 @@ function workflowTiming(runId) {
         for (const stage of run.stage_timings || []) content.append(textElement("p", `${stageLabels[stage.stage] || stage.stage}: ${stage.completed_batches}/${stage.total_batches} batches · ${stage.elapsed_seconds.toFixed(2)} summed batch seconds · ${stage.model_calls} worker calls · ${stage.reused_batches} reused.`, "section-note"));
         for (const model of run.model_usage || []) content.append(textElement("p", `${model.model || "Provider default"} ${model.reasoning_effort || ""}: ${model.calls} calls · ${model.elapsed_seconds.toFixed(2)} worker seconds · ${model.output_tokens === null ? `${model.known_output_tokens} known output tokens; ${model.unknown_output_calls} calls unknown` : `${model.output_tokens} output tokens`}.`, "section-note"));
       }
-      for (const batch of run.batch_timings || []) content.append(textElement("p", `Batch ${batch.id} · ${stageLabels[batch.kind] || batch.kind} · ${Number.isFinite(batch.elapsed_seconds) ? batch.elapsed_seconds.toFixed(2) : "Unknown"} seconds · ${batch.model_calls ?? "Unknown"} worker calls${batch.reused ? " · saved result reused" : batch.skipped ? " · empty shortlist; no detail call" : ""}.`, "section-note"));
+      for (const batch of run.batch_timings || []) content.append(textElement("p", `Batch ${batch.id} · ${stageLabels[batch.kind] || batch.kind}${batch.lens ? ` / ${lensLabels[batch.lens] || batch.lens}` : ""} · ${Number.isFinite(batch.elapsed_seconds) ? batch.elapsed_seconds.toFixed(2) : "Unknown"} seconds · ${batch.model_calls ?? "Unknown"} worker calls${batch.reused ? " · saved result reused" : batch.skipped ? " · empty shortlist; no detail call" : ""}.`, "section-note"));
       shown += (run.batch_timings || []).length;
       offset = run.next_batch_offset;
       more.hidden = offset === null;
@@ -563,6 +584,42 @@ async function startWorkflow(kind) {
   await api("/api/workflows/start", { kind, config: readWorkflowSettings(), scope: scope.length ? scope : null });
   await refreshWorkflows();
   notice("Full workflow started. Each completed batch is saved immediately; progress updates below.");
+}
+
+function renderPlanAssessment(result, request) {
+  $("#change-validation").textContent = formatJSON(result);
+  const parent = $("#architecture-decisions");
+  parent.replaceChildren();
+  const architecture = result.architecture;
+  if (!architecture) return;
+  const labels = { decision_required: "Choose how to address these proposals", decisions_recorded: "Decisions recorded", no_current_material_proposals: "No current material proposals for this plan", scope_incomplete: "Review a narrower scope to account for more proposals" };
+  parent.append(textElement("h3", "Architecture decisions"), textElement("p", `${labels[architecture.status] || "Review status unavailable"}. Implementation remains unverified.`, "section-note"));
+  if (architecture.truncated) parent.append(textElement("p", "More relevant proposals exist. Expand the saved reviews and assess a narrower scope.", "review-stale"));
+  const entries = [];
+  for (const requirement of architecture.requirements || []) {
+    const card = textElement("div", "", "alternative-card");
+    card.append(textElement("h4", requirement.title), textElement("p", requirement.suggestion));
+    const choice = document.createElement("select");
+    choice.setAttribute("aria-label", `Decision for ${requirement.title}`);
+    for (const [value, label] of [["", "Choose a decision"], ["adopt", "Adopt"], ["defer", "Defer"], ["reject", "Reject"]]) {
+      const option = textElement("option", label); option.value = value; choice.append(option);
+    }
+    const reason = document.createElement("textarea");
+    reason.rows = 2; reason.placeholder = "Explain the decision"; reason.setAttribute("aria-label", `Reason for ${requirement.title}`);
+    const saved = (architecture.decisions || []).find((item) => item.proposal_id === requirement.proposal_id);
+    choice.value = saved?.decision || ""; reason.value = saved?.reason || "";
+    card.append(choice, reason); parent.append(card);
+    entries.push({ proposal_id: requirement.proposal_id, choice, reason });
+  }
+  if (!entries.length) return;
+  const save = textElement("button", "Record architecture decisions", "secondary");
+  save.addEventListener("click", () => action(save, async () => {
+    const decisions = entries.map((item) => ({ proposal_id: item.proposal_id, decision: item.choice.value, reason: item.reason.value.trim() }));
+    if (decisions.some((item) => !item.decision || !item.reason)) throw new Error("Choose a decision and give a reason for each proposal.");
+    renderPlanAssessment(await api("/api/assess", { ...request, decisions }), request);
+    notice("Architecture decisions recorded. This does not verify their implementation.");
+  }));
+  parent.append(save);
 }
 
 document.querySelectorAll("[data-run]").forEach((button) => button.addEventListener("click", () => action(button, () => startWorkflow(button.dataset.run))));
@@ -633,7 +690,8 @@ $("#assess-form").addEventListener("submit", (event) => {
   event.preventDefault();
   action(event.submitter, async () => {
     if (!$("#change-task").value.trim()) throw new Error("Describe your intended change first.");
-    $("#change-validation").textContent = formatJSON(await api("/api/assess", { task: $("#change-task").value, files: lines($("#planned-files").value) }));
+    const request = { task: $("#change-task").value, files: lines($("#planned-files").value) };
+    renderPlanAssessment(await api("/api/assess", request), request);
   });
 });
 $("#validate-change").addEventListener("click", () => action($("#validate-change"), async () => {

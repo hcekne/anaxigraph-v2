@@ -18,7 +18,7 @@ def test_defaults_are_fast_and_existing_saved_model_choices_are_preserved(tmp_pa
     defaults = runner.configuration()
     assert defaults["workers"] == 32
     assert defaults["pattern_mode"] == "screened"
-    for kind in ("annotate", "pattern-screen"):
+    for kind in ("annotate", "pattern-screen", "architecture"):
         assert defaults["stages"][kind]["model"] == "gpt-6-luna"
         assert defaults["stages"][kind]["reasoning_effort"] == "low"
     detail = defaults["stages"]["patterns"]
@@ -78,7 +78,12 @@ def test_screened_workflow_shortlists_skips_empty_and_records_models_tokens_and_
     reconciliation = result["reconciliation"]
     assert reconciliation["screened_pairs"] == 399
     assert reconciliation["selected_pairs"] == reconciliation["detailed_pairs"] == 3
-    assert {kind for kind, *_ in calls} == {"annotate", "pattern-screen", "patterns"}
+    assert {kind for kind, *_ in calls} == {
+        "annotate",
+        "pattern-screen",
+        "patterns",
+        "architecture",
+    }
     assert all(not path.startswith("tests/") and path != "__init__.py" for _, path, _ in calls)
     assert all(
         worker["model"] == "gpt-6-luna" and worker["reasoning_effort"] == "low"
@@ -105,7 +110,7 @@ def test_screened_workflow_shortlists_skips_empty_and_records_models_tokens_and_
     before = len(calls)
     repeated = runner.start("patterns", background=False)
     assert repeated["status"] == "completed", repeated
-    assert repeated["reused_batches"] == 5
+    assert repeated["reused_batches"] == 8
     assert len(calls) == before
     assert repeated["model_usage"] == []
     assert all(
@@ -217,6 +222,9 @@ def test_legacy_exhaustive_run_resumes_its_original_all_module_scope(tmp_path):
     path = runner._path(first["run_id"])
     legacy = json.loads(path.read_text())
     legacy["config"].pop("pattern_mode")
+    legacy.pop("architecture_scouts_version")
+    legacy["batches"] = [batch for batch in legacy["batches"] if batch["kind"] != "architecture"]
+    legacy["stages_planned"].remove("architecture")
     legacy["scope"] = None
     path.write_text(json.dumps(legacy))
     failed = False

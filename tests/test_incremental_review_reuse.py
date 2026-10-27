@@ -15,9 +15,12 @@ def test_scoped_screen_and_detail_reuse_does_not_need_a_portable_record(tmp_path
         (tmp_path / f"{name}.py").write_text(f"def {name}(value):\n    return value\n")
     application = Application(tmp_path)
     calls = Counter()
+    scout_scopes = []
 
     def provider(request, *_args, **_kwargs):
         calls[(request["kind"], request["packet"]["modules"][0]["path"])] += 1
+        if request["kind"] == "architecture":
+            scout_scopes.append(tuple(request["scope"]))
         if request["kind"] == "pattern-screen":
             return {
                 "producer": "synthetic-scoped-reuse",
@@ -34,11 +37,15 @@ def test_scoped_screen_and_detail_reuse_does_not_need_a_portable_record(tmp_path
     runner = WorkflowRunner(application, provider)
     first = runner.start("patterns", background=False)
     assert first["status"] == "completed", first
-    assert len(calls) == 6
+    kinds = Counter()
+    for (kind, _path), count in calls.items():
+        kinds[kind] += count
+    assert kinds == {"annotate": 2, "pattern-screen": 2, "patterns": 2, "architecture": 3}
     calls.clear()
     unchanged = runner.start("patterns", background=False)
     assert unchanged["status"] == "completed", unchanged
     assert not calls
+    scout_scopes.clear()
 
     # Force local reuse rather than recovering old reviews from a portable export.
     (tmp_path / "anaxigraph" / "record.json").unlink()
@@ -50,10 +57,14 @@ def test_scoped_screen_and_detail_reuse_does_not_need_a_portable_record(tmp_path
             ("annotate", "first.py"): 1,
             ("pattern-screen", "first.py"): 1,
             ("patterns", "first.py"): 1,
+            ("architecture", "first.py"): 3,
         }
     )
     assert changed["reconciliation"]["screened_pairs"] == 266
     assert changed["reconciliation"]["detailed_pairs"] == 2
+    # A leaf edit leaves the other file's screen/detail cached, while the three
+    # architectural scouts correctly revisit their bounded two-file context.
+    assert scout_scopes == [("module:first.py", "module:second.py")] * 3
 
 
 def test_opaque_resource_edit_prevents_reuse_of_identical_scoped_packets(tmp_path):
@@ -85,3 +96,4 @@ def test_opaque_resource_edit_prevents_reuse_of_identical_scoped_packets(tmp_pat
     assert refreshed["status"] == "completed", refreshed
     assert calls["pattern-screen"] == 1
     assert calls["patterns"] == 0
+    assert calls["architecture"] == 3

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from collections import Counter
 
 import pytest
 from test_workflows import answer, app
@@ -88,7 +89,7 @@ def clone(original, tmp_path):
     return Application(root)
 
 
-@pytest.mark.parametrize("kind,review_count", [("patterns", 1), ("fresh-eyes", 2)])
+@pytest.mark.parametrize("kind,review_count", [("patterns", 4), ("fresh-eyes", 2)])
 def test_doc_only_commit_and_fresh_clone_reuse_without_calls_and_keep_provenance(
     tmp_path, kind, review_count
 ):
@@ -99,6 +100,13 @@ def test_doc_only_commit_and_fresh_clone_reuse_without_calls_and_keep_provenance
     original.scan()
     original.export_record()
     analyses = json.loads(record.read_text())["analyses"]
+    if kind == "patterns":
+        assert Counter(row["kind"] for row in analyses) == {"patterns": 1, "architecture": 3}
+        assert {
+            row["body"]["request_options"]["lens"]
+            for row in analyses
+            if row["kind"] == "architecture"
+        } == {"boundaries", "packages", "verification"}
     assert all(len(row["analysis_context"]) == 64 for row in analyses)
     initial_calls = len(calls)
     (original.root / "review.md").write_text("Record the design choices and executed checks.\n")
@@ -142,7 +150,7 @@ def test_changed_opaque_behavioral_resource_blocks_reuse(tmp_path, kind, path):
     assert len(calls) == count
 
 
-@pytest.mark.parametrize("kind,review_count", [("patterns", 1), ("fresh-eyes", 2)])
+@pytest.mark.parametrize("kind,review_count", [("patterns", 4), ("fresh-eyes", 2)])
 @pytest.mark.parametrize("path,compatible", [("unit0.py", False), ("unit1.py", True)])
 def test_python_changes_are_checked_by_exact_scoped_input(
     tmp_path, kind, review_count, path, compatible
@@ -186,7 +194,7 @@ def test_document_cited_only_outside_the_review_scope_does_not_invalidate_it(tmp
     original.export_record()
     target = clone(original, tmp_path)
     (target.root / "POLICY.md").write_text("Changed obligations for an unrelated responsibility.\n")
-    assert target.scan()["portable_import"]["analyses_imported"] == 1
+    assert target.scan()["portable_import"]["analyses_imported"] == 4
     count = len(calls)
     repeated = WorkflowRunner(target, provider).start(
         "patterns", CONFIG, ["unit0.py"], background=False
@@ -207,7 +215,7 @@ def test_legacy_context_is_backfilled_only_after_global_match(tmp_path, changed)
     if changed:
         (target.root / "review.md").write_text("A later review document.\n")
     imported = target.scan()["portable_import"]
-    assert imported["analyses_imported"] == (0 if changed else 1)
+    assert imported["analyses_imported"] == (0 if changed else 4)
     target.export_record()
     rows = json.loads((target.root / "anaxigraph/record.json").read_text())["analyses"]
     if changed:

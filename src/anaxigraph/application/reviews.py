@@ -13,6 +13,8 @@ from anaxigraph.analysis import (
     canonical_result,
     validate_result,
 )
+from anaxigraph.analysis.architecture import reconcile_architecture
+from anaxigraph.analysis.architecture_guidance import proposals as scout_proposals
 from anaxigraph.analysis.packets import catalogue
 from anaxigraph.analysis.patterns import (
     actionable_opportunities,
@@ -22,6 +24,7 @@ from anaxigraph.analysis.patterns import (
     review_summary,
 )
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION, input_identity
+from anaxigraph.application import architecture as component_architecture
 from anaxigraph.application.context import (
     _bounds,
     context_fingerprints,
@@ -54,6 +57,8 @@ def analysis_request(
     graph = app._current()
     app._require_live(graph)
     sources = None
+    if kind == "architecture":
+        options["package_context"] = component_architecture.package_context(app, graph)
     if kind == "annotate":
         modules = [n for n in graph.nodes if n.kind == "module"]
         selected = scope or [modules[0].id] if modules else []
@@ -206,6 +211,9 @@ def reviews(
         "offset": offset,
         "next_offset": offset + len(rows) if offset + len(rows) < len(saved) else None,
         "opportunities": actionable_opportunities(rows),
+        "scout_findings": scout_proposals(
+            rows, {node.id for node in graph.nodes if node.kind == "module"}, 5
+        ),
     }
 
 
@@ -254,7 +262,10 @@ def _rebuild_request(
             children,
             **{k: options[k] for k in ("max_packet_bytes", "max_result_bytes") if k in options},
         )
-    request = build_request(graph, kind, body["scope"], **body.get("request_options", {}))
+    options = dict(body.get("request_options", {}))
+    if kind == "architecture":
+        options["package_context"] = component_architecture.package_context(app, graph)
+    request = build_request(graph, kind, body["scope"], **options)
     if body.get("pattern_mode") in ("screened", "selected"):
         request["pattern_mode"] = body["pattern_mode"]
     return request
@@ -329,10 +340,24 @@ def _reconciliation_rows(app, graph: Graph, kind: str, review_ids: list[str]) ->
         row = app.store.get_review(str(app.root), identity, kind)
         if row is None and kind == "patterns":
             row = app.store.get_review(str(app.root), identity, "pattern-screen")
+        if row is None and kind == "patterns":
+            row = app.store.get_review(str(app.root), identity, "architecture")
         if row is None or app._review_state(row, graph)["status"] != "current":
             raise ValueError("Reconciliation found a missing or stale review batch")
         rows.append(row)
     return rows
+
+
+def _pattern_reconciliation(selected: set[str], rows: list[dict]) -> dict:
+    scouts = [row for row in rows if row["kind"] == "architecture"]
+    reviewed = reconcile_patterns(
+        selected,
+        [row for row in rows if row["kind"] != "architecture"],
+        {card["id"] for card in catalogue()},
+    )
+    if scouts:
+        reviewed["architecture"] = reconcile_architecture(selected, scouts)
+    return reviewed
 
 
 def analysis_reconcile(
@@ -344,7 +369,7 @@ def analysis_reconcile(
         for n in graph.nodes
         if n.kind == "module" and (not scope or n.id in scope or n.path in scope)
     }
-    if kind == "patterns" and not scope:
+    if kind in {"patterns", "architecture"} and not scope:
         selected = {node.id for node in production_modules(graph)}
     base = {
         "status": "completed",
@@ -362,10 +387,12 @@ def analysis_reconcile(
             raise ValueError("Mapping reconciliation found missing or stale module understanding")
         return base | {"annotated_modules": len(selected)}
     rows = _reconciliation_rows(app, graph, kind, review_ids)
+    if kind == "architecture":
+        return base | reconcile_architecture(selected, rows)
     if kind == "patterns":
         return (
             base
-            | reconcile_patterns(selected, rows, {card["id"] for card in catalogue()})
+            | _pattern_reconciliation(selected, rows)
             | {
                 "excluded_modules": excluded_modules(graph) if not scope else [],
             }

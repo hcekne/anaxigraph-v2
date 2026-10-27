@@ -329,6 +329,19 @@ class Evidence:
             db.execute("BEGIN")
             return self._summary(db)
 
+    def latest(self, kind: str) -> dict[str, Any] | None:
+        """Read the last retained event for the active task, without scanning usage."""
+        self._safe()
+        if not self.enabled or not self.path.exists():
+            return None
+        with self._connection() as db:
+            active = self._get(db, "active_task")
+            row = db.execute(
+                "SELECT payload FROM events WHERE task_id=? AND kind=? ORDER BY id DESC LIMIT 1",
+                (active, kind),
+            ).fetchone()
+            return json.loads(row[0]) if row else None
+
     def _summary(self, db: sqlite3.Connection) -> dict[str, Any]:
         kinds = {
             row[0]: row[1] for row in db.execute("SELECT kind,count(*) FROM events GROUP BY kind")

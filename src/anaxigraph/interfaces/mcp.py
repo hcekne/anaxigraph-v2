@@ -14,7 +14,11 @@ def create_mcp(application: Any) -> FastMCP:
         json_response=True,
         instructions=(
             "Prepare substantial changes, inspect evidence, assess placement, then scan and validate. "
+            "Resolve assess_plan decision_required or scope_incomplete before treating a plan as assessed; "
+            "adopt, defer or reject each material proposal with a reason. Dispositions do not prove implementation. "
             "Run complete model workflows using workflow_start; inspect progress with workflow_status. "
+            "Pattern workflows include boundary, standalone-package and independent-verification scouts. "
+            "Use architecture for those searches alone; assess_plan records explicit proposal decisions. "
             "Explicit request/submit packets remain available for independent agents. "
             "Fresh Eyes packets are implementation-blind; do not add source context to that task."
         ),
@@ -54,8 +58,12 @@ def create_mcp(application: Any) -> FastMCP:
         return application.prepare_change(task, limit)
 
     @server.tool()
-    def assess_plan(task: str, files: list[str]) -> dict:
-        """Check proposed placement against the shared graph and existing capabilities."""
+    def assess_plan(
+        task: str, files: list[str], decisions: list[dict[str, Any]] | None = None
+    ) -> dict:
+        """Check placement and explicitly adopt, defer or reject disclosed architecture proposals."""
+        if decisions is not None:
+            return application.assess_plan(task, files, decisions)
         return application.assess_plan(task, files)
 
     @server.tool()
@@ -69,14 +77,18 @@ def create_mcp(application: Any) -> FastMCP:
 
     @server.tool()
     def analysis_request(
-        kind: Literal["annotate", "pattern-screen", "patterns", "fresh-eyes"],
+        kind: Literal["annotate", "pattern-screen", "patterns", "architecture", "fresh-eyes"],
         scope: list[str] | None = None,
         pattern_ids: list[str] | None = None,
+        lens: Literal["boundaries", "packages", "verification"] | None = None,
     ) -> dict:
-        """Prepare a concise map, ID-only screen, focused pattern or blind Fresh Eyes packet."""
+        """Prepare map, pattern, focused architecture scout or blind Fresh Eyes work."""
+        options: dict[str, Any] = {}
         if pattern_ids is not None:
-            return application.analysis_request(kind, scope, pattern_ids=pattern_ids)
-        return application.analysis_request(kind, scope)
+            options["pattern_ids"] = pattern_ids
+        if lens is not None:
+            options["lens"] = lens
+        return application.analysis_request(kind, scope, **options)
 
     @server.tool()
     def submit_analysis(request_id: str, result: dict[str, Any]) -> dict:
@@ -92,11 +104,11 @@ def create_mcp(application: Any) -> FastMCP:
 
     @server.tool()
     def workflow_start(
-        kind: Literal["mapping", "annotate", "patterns", "fresh-eyes"],
+        kind: Literal["mapping", "annotate", "patterns", "architecture", "fresh-eyes"],
         config: dict[str, Any] | None = None,
         scope: list[str] | None = None,
     ) -> dict:
-        """Run a complete resumable mapping, Patterns or Fresh Eyes workflow in the background."""
+        """Run resumable mapping, Patterns with component scouts, architecture, or blind Fresh Eyes."""
         return application.workflow_start(kind, config, scope)
 
     @server.tool()

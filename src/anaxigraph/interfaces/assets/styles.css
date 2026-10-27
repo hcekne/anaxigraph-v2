@@ -14,10 +14,10 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--text); background: var(--bg); font-size: 14px; line-height: 1.6; }
-button, textarea { font: inherit; }
+button, textarea, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .45; }
-button, a, summary, textarea { outline-offset: 4px; }
+button, a, summary, textarea, select { outline-offset: 4px; }
 :focus-visible { outline: 2px solid var(--accent); }
 a { color: var(--accent); }
 button { border: 1px solid transparent; border-radius: 7px; padding: .65rem .9rem; font-weight: 600; }
@@ -94,7 +94,7 @@ pre { max-height: 420px; overflow: auto; padding: .9rem; border: 1px solid var(-
 .legend i { width: 17px; border-top: 2px solid #648273; }
 .legend i.uncertain { margin-left: .8rem; border-top: 2px dashed var(--warning); }
 .workflow-intro { margin-bottom: 1rem; }
-.workflow-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.workflow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
 .workflow-card { display: flex; flex-direction: column; align-items: start; }
 .workflow-card h3 { margin-top: .9rem; font-size: 1.2rem; }
 .workflow-card p { flex: 1; color: var(--muted); font-size: .8rem; }
@@ -160,7 +160,7 @@ form button, #submit-analysis { margin-top: .8rem; }
 .workflow-card small { display:block; margin-top:10px; color:var(--muted); }
 .model-settings { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:16px; margin:16px 0; }
 .model-settings label { display:flex; flex-direction:column; gap:8px; }
-.model-settings input, .model-settings select { width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:9px; background:var(--surface); color:inherit; }
+.model-settings input, .model-settings select, #architecture-decisions select { width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; padding:9px; background:var(--surface); color:inherit; }
 .model-settings input[type=checkbox] { width:auto; margin-right:6px; }
 .record-actions { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0; }
 .run-card { padding:18px 0; border-top:1px solid var(--line); }

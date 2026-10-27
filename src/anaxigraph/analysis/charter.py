@@ -55,7 +55,7 @@ CHARTER = (
     {
         "id": "simplicity",
         "principle": "Use the simplest design that preserves the boundaries.",
-        "guidance": "Prefer cohesive in-process packages; functions and objects are both valid. Separate services need a deployment, isolation or scaling benefit.",
+        "guidance": "Use cohesive packages with small agent contexts; versioned libraries can live in separate repositories and run in process. Services need a deployment, isolation or scaling benefit.",
     },
     {
         "id": "failure-behavior",

@@ -29,7 +29,7 @@ def _compatible_context(app: Any, graph: Graph, row: dict[str, Any], scope: list
 
 
 def reuse_analysis(app: Any, request: dict[str, Any], pipeline: dict[str, Any] | None) -> bool:
-    if request["kind"] not in {"pattern-screen", "patterns"}:
+    if request["kind"] not in {"pattern-screen", "patterns", "architecture"}:
         return False
     row = app.store.find_review(
         str(app.root),

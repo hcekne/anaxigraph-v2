@@ -126,6 +126,7 @@ def timing_summary(
         "id",
         "kind",
         "scope",
+        "lens",
         "status",
         "attempts",
         "started_at",
