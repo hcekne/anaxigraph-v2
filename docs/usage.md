@@ -86,6 +86,8 @@ separate operations. Ignore `.anaxigraph-v2/`, which contains local indexes, pro
 
 ## Learning from real use
 
+The [audit follow-up](audit-followup-2026-10-27.md) records current fixes and earlier trial measurements.
+
 Periodically ask coding agents what they actually consulted, which recommendations changed their
 implementation, which were rejected, and what the tool failed to find. Ask for examples and source
 references rather than general impressions. Check whether the next change was easier, whether

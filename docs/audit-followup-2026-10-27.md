@@ -14,11 +14,13 @@ Patterns still include architecture scouts and CI/CD by default. The recommended
 documented rather than making everything opt-in; effective ordered-review overrides are explicit.
 Dependency observations remain incomplete evidence, not proof that unseen consumers cannot exist.
 
-Local checks passed: 636 core tests, 103 focused checks and 29 experiment-harness tests. Final CI
-and deployment are separate qualification steps. Production source is 12,050 physical lines against
+Local checks passed: 636 core tests, 103 focused checks and 29 experiment-harness tests.
+[CI for `1b17b40`](https://github.com/hcekne/anaxigraph-v2/actions/runs/40598038379) passed
+640 core plus 29 harness tests on both Python versions. Installed-wheel browser, stdio MCP and
+both deployed HTTP MCP services passed; existing settings, analyses and the original record were preserved. Production source is 12,050 physical lines against
 the unchanged 12,050-line budget after removing duplicated helpers and orchestration; no dependency
 was added. The introductory README fell from 2,963 words/23,502 bytes to 599 words/4,574 bytes.
-A context response on the same twelve-module Snow Rankings copy fell from 7,102 to 3,457 bytes,
+A context response on the same twelve-module Snow Rankings copy fell from 7,102 to 3,411 bytes,
 without model calls. The [usage guide](usage.md) contains the operational routine and a copyable
 AGENTS block.
 

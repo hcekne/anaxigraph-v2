@@ -3,8 +3,8 @@
   "date": "2026-10-27",
   "scope": "Audit fixes and reconstruction of an earlier experiment; current local checks and historical runtime results are separate.",
   "current_changes": {
-    "source_commit": null,
-    "source_commit_basis": "Fixes locally qualified; final commit, CI and deployment are managed separately.",
+    "source_commit": "1b17b40716661e8c8958ab63c91c5c3b8c76f294",
+    "source_commit_basis": "Installed wheel bound to source; subsequent documentation-only commits share this runtime.",
     "bugs_fixed": [
       "Trusted Host/Origin and authenticated explicit LAN access.",
       "assess_plan baseline continuation.",
@@ -23,8 +23,29 @@
       "experiment_harness_tests_passed": 29,
       "counts_are_overlapping_not_additive": true
     },
-    "final_ci": "pending separate verification",
-    "deployment": "pending separate verification",
+    "final_ci": {
+      "url": "https://github.com/hcekne/anaxigraph-v2/actions/runs/40598038379",
+      "conclusion": "success",
+      "python_versions": [
+        "3.11",
+        "3.12"
+      ],
+      "core_tests_per_version": 640,
+      "harness_tests_per_version": 29,
+      "lint_types_quality_and_wheel_checks": "passed"
+    },
+    "deployment": {
+      "commit": "1b17b40716661e8c8958ab63c91c5c3b8c76f294",
+      "wheel_sha256": "9ab5939b1e9b3b878500824beb203cdc495b7951fa726a9f98ea944aa16c5a5f",
+      "cli_and_two_services_updated": true,
+      "source_hashes_match": true,
+      "settings_preserved": true,
+      "saved_annotations_preserved": true,
+      "original_snow_record_unchanged": true,
+      "preview_active": "active",
+      "model_jobs_started": 0,
+      "pypi_release_published": false
+    },
     "production_physical_lines": 12050,
     "unchanged_source_line_budget": 12050,
     "new_dependencies": 0,
@@ -38,11 +59,22 @@
     "context_response": {
       "source": "Same twelve-module Snow Rankings copy.",
       "before_bytes": 7102,
-      "after_bytes": 3457,
-      "model_calls": 0
+      "after_bytes": 3411,
+      "model_calls": 0,
+      "serialization": "UTF-8 JSON, ensure_ascii=False, indent=2; not MCP transport bytes.",
+      "baseline_runtime_commit": "855dbbe673a4a685ed1ffd89ed948ed7c36a55d6"
     },
     "usage_guide": "../usage.md",
-    "copyable_agents_block": true
+    "copyable_agents_block": true,
+    "wheel_sha256": "9ab5939b1e9b3b878500824beb203cdc495b7951fa726a9f98ea944aa16c5a5f",
+    "installed_checks": {
+      "browser": "passed",
+      "stdio_mcp": "passed",
+      "actual_http_mcp_on_both_services": "passed",
+      "hostile_origin_status": 403,
+      "untrusted_host_status": 421,
+      "model_calls": 0
+    }
   },
   "historical_run": {
     "experiment_id": "snow-rankings-verified-2026-10-26",
