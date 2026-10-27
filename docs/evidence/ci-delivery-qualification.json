@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "qualified_on": "2026-10-27",
+  "scope": "CI/CD review and deterministic declared-input planning; separate live models, installed-wheel integration, portable reuse and local deployment evidence.",
+  "package": {
+    "version": "1.0.0a1",
+    "commit": "855dbbe673a4a685ed1ffd89ed948ed7c36a55d6",
+    "wheel_sha256": "5702ec399f6d287ae8c5e3c0d8a757ff27c33b8637ba4a40d9df83fc0d6a37f4",
+    "installed_sources_match": true,
+    "pypi_release_published": false
+  },
+  "ci": {
+    "url": "https://github.com/hcekne/anaxigraph-v2/actions/runs/40543053975",
+    "commit": "855dbbe673a4a685ed1ffd89ed948ed7c36a55d6",
+    "conclusion": "success",
+    "python_versions": [
+      "3.11",
+      "3.12"
+    ],
+    "core_tests_per_version": 562,
+    "core_test_warnings_per_version": 1,
+    "experiment_harness_tests_per_version": 29,
+    "checks": [
+      "Ruff",
+      "mypy",
+      "source and complexity budgets",
+      "wheel build",
+      "installed wheel through uvx"
+    ]
+  },
+  "live_model_profile": {
+    "draft": {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low"
+    },
+    "positive_review": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "medium"
+    },
+    "timeout_seconds": null,
+    "fallbacks_used": 0
+  },
+  "live_cases": [
+    {
+      "case": "coarse_synthetic_pipeline",
+      "status": "completed",
+      "wall_seconds": 52.047,
+      "actual_model_calls": 2,
+      "failed_attempts": 0,
+      "unchanged_repeat_seconds": 0.518,
+      "repeat_new_calls": 0,
+      "assessed_pipelines": 1,
+      "recommendations": 1,
+      "accepted_result_json_bytes": 4440,
+      "portable_record_bytes": 6394
+    },
+    {
+      "case": "already_scoped_synthetic_pipeline",
+      "status": "completed",
+      "wall_seconds": 51.901,
+      "actual_model_calls": 2,
+      "failed_attempts": 0,
+      "unchanged_repeat_seconds": 0.523,
+      "repeat_new_calls": 0,
+      "assessed_pipelines": 1,
+      "recommendations": 1,
+      "accepted_result_json_bytes": 4315,
+      "portable_record_bytes": 6269
+    },
+    {
+      "case": "committed_configuration_snapshot",
+      "status": "completed",
+      "wall_seconds": 75.126,
+      "actual_model_calls": 2,
+      "failed_attempts": 0,
+      "unchanged_repeat_seconds": 0.616,
+      "repeat_new_calls": 0,
+      "assessed_pipelines": 5,
+      "recommendations": 2,
+      "accepted_result_json_bytes": 6810,
+      "portable_record_bytes": 14429
+    }
+  ],
+  "output_byte_basis": "Accepted result JSON serialized as compact UTF-8 with ensure_ascii=False; portable records measured separately. These are not model transport bytes.",
+  "model_usage": {
+    "actual_calls": 6,
+    "input_tokens": 86113,
+    "output_tokens": 6764,
+    "cached_input_tokens": 44160,
+    "reasoning_output_tokens": 555,
+    "cost_usd": null,
+    "cost_basis": "CLI token receipts supplied; dollar cost unavailable, not zero."
+  },
+  "qualitative_findings": {
+    "coarse_case": "Conditional narrower and parallel feedback opportunities; existing checks remain obligations until the prerequisites are verified.",
+    "already_scoped_case": {
+      "existing_parallelism_filters_and_cache_recognized": true,
+      "zero_recommendation_control": false,
+      "remaining_recommendation": "Conditional fallback for unknown input ownership.",
+      "missing_check_proven": false
+    },
+    "committed_snapshot": {
+      "input_scope": "Selected committed CI declarations and referenced scripts; no application semantics or observed job durations.",
+      "source_inspection_confirmed": [
+        "A relevant source path omitted by a lint selector.",
+        "Four suites serialized in one job."
+      ],
+      "safe_independence_proven": false,
+      "pipeline_edited": false,
+      "application_benchmark_saved": false
+    },
+    "initial_probe": "Earlier valid unknown-only probes omitted selector rules/output mappings and rejected structural candidates without timings. These final runs followed capture and prompt fixes; shape acceptance alone is not useful-advice evidence."
+  },
+  "browser": {
+    "status": "passed",
+    "provider": "synthetic fixtures",
+    "planning_cases": 3,
+    "cases": [
+      "focused target selection",
+      "shared-input widening",
+      "unknown ownership stays incomplete"
+    ],
+    "workflow_cards": 5,
+    "browser_errors": 0,
+    "model_calls": 0,
+    "project_checks_executed": false,
+    "served_asset_matches_wheel": true,
+    "shutdown_verified": true,
+    "process_absent_after_shutdown": true,
+    "http_listener_closed": true
+  },
+  "mcp": {
+    "status": "passed",
+    "transport": "actual installed-wheel stdio MCP",
+    "comparison_completeness": "caller-reported",
+    "checks_executed": false,
+    "model_calls": 0
+  },
+  "portable_reuse": {
+    "status": "passed",
+    "different_checkout_path": true,
+    "source": "Actual model-reviewed coarse synthetic pipeline record.",
+    "analyses_imported": 1,
+    "provider_calls": 0,
+    "reused_batches": 1,
+    "wall_seconds": 0.443,
+    "provenance_preserved": true,
+    "repeat_cycles": 3,
+    "database_bytes": 114688,
+    "record_bytes": 6394,
+    "record_sha256": "04af921c90fcacbda8ee3edee32a6e4a19f198a13772a81459185030eecd471e",
+    "record_and_database_stable": true,
+    "checks_executed": false,
+    "github_round_trip_tested": false
+  },
+  "source_accounting": {
+    "previous_production_physical_lines": 10147,
+    "production": {
+      "files": 51,
+      "physical_lines": 11925,
+      "nonblank_lines": 10843,
+      "bytes": 515100
+    },
+    "production_physical_line_budget": 12050,
+    "file_or_complexity_ceilings_raised": false,
+    "package_data": {
+      "files": 1,
+      "physical_lines": 2399,
+      "nonblank_lines": 2399,
+      "bytes": 91978
+    },
+    "tests": {
+      "files": 39,
+      "physical_lines": 9167,
+      "nonblank_lines": 8067,
+      "bytes": 379899
+    },
+    "experiments": {
+      "files": 10,
+      "physical_lines": 3304,
+      "nonblank_lines": 3067,
+      "bytes": 135949
+    },
+    "runtime_dependencies_added": [
+      "PyYAML"
+    ],
+    "qualified_pyyaml_version": "6.0.3",
+    "quality_violations": []
+  },
+  "local_deployment": {
+    "checked_at": "2026-10-27T16:43:29.415948+00:00",
+    "commit": "855dbbe673a4a685ed1ffd89ed948ed7c36a55d6",
+    "wheel_sha256": "5702ec399f6d287ae8c5e3c0d8a757ff27c33b8637ba4a40d9df83fc0d6a37f4",
+    "cli_and_two_connected_services_updated": true,
+    "installed_sources_match": true,
+    "existing_settings_unchanged": true,
+    "new_delivery_defaults_added": true,
+    "annotation_counts_preserved": true,
+    "original_application_record_unchanged": true,
+    "model_jobs_started": 0,
+    "preview_active": true,
+    "planner_endpoint_present_on_both": true,
+    "served_assets_match_on_both": true
+  },
+  "limitations": [
+    "Three model-reviewed cases do not establish general recommendation quality, faster delivery or equivalent assurance.",
+    "The already-scoped control still received conditional fallback advice. No missing check was established.",
+    "The committed configuration snapshot lacks application semantics and actual job durations; safe suite independence and savings remain unmeasured.",
+    "No inspected application pipeline was changed or application timing benchmark saved. Historical Snow timings predate the expanded root CI/CD review.",
+    "Declared-input selection and cache keys are caller declarations, not proven scope completeness, passed checks or cache hits.",
+    "Portable reuse was local and did not execute target checks or test a GitHub round trip.",
+    "CI and local deployment are separate from publishing a numbered PyPI release."
+  ]
+}

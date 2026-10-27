@@ -174,8 +174,51 @@ Initial live probes exposed two failures despite accepted result contracts: sele
 and output mappings were missing from the packet, and reviewers rejected conditional structural
 opportunities because timings or scope proofs were absent. The reader now includes those selector
 facts, and the prompts distinguish a candidate with validation prerequisites from a measured saving
-or permission to skip checks. Fresh live qualification is required after these changes; a valid
-unknown-only result does not by itself establish useful architectural advice.
+or permission to skip checks. The completed rerun below follows these changes; the initial valid,
+unknown-only results did not by themselves establish useful architectural advice.
+
+The frozen **1.0.0a1** wheel at `855dbbe` completed three live cases using Luna/low drafts and
+Sol/medium review. Each made two actual calls without failure, retry or fallback. All worker
+timeouts were explicitly unlimited. Exact package identity, measurements and limitations are in
+[the qualification evidence](evidence/ci-delivery-qualification.json).
+
+| Case | First review | Unchanged repeat; new calls | Accepted result JSON | Portable record |
+| --- | ---: | ---: | ---: | ---: |
+| Coarse synthetic pipeline | 52.047 s | 0.518 s; zero | 4,440 bytes | 6,394 bytes |
+| Already scoped synthetic pipeline | 51.901 s | 0.523 s; zero | 4,315 bytes | 6,269 bytes |
+| Committed CI configuration snapshot | 75.126 s | 0.616 s; zero | 6,810 bytes | 14,429 bytes |
+
+The scoped case recognized existing parallelism, filters and caching. It still returned one
+conditional unknown-input fallback recommendation; it was **not a zero-recommendation control**,
+and the missing check was not proven. The committed snapshot contained only selected CI declarations
+and referenced scripts, without application semantics or observed job durations. Source inspection
+confirmed an omitted lint-selector path and four serial suites. The review surfaced conditional
+delivery opportunities, not measured savings or proof that those suites can safely run independently.
+No source pipeline was edited and no application benchmark was produced.
+
+Installed-wheel browser checks passed three deterministic planning cases: a focused change selected
+its target, a shared input widened selection, and unknown ownership remained incomplete. All five
+workflow cards were accessible, the served asset matched the wheel, shutdown was checked and no
+browser errors occurred. These checks used synthetic fixtures and no model calls. Actual stdio MCP
+also exposed the review and planner successfully, with caller-reported comparison completeness;
+it executed no checks or model calls.
+
+A fresh-path import of the actual coarse-case record reused its accepted review in **0.443 seconds
+with zero provider calls**, preserving provenance. Three repeated cycles kept the database at
+114,688 bytes and the record byte-identical at 6,394 bytes. This was a local portable-record proof,
+not a GitHub round trip or a claim that task results were cached.
+
+[GitHub CI for `855dbbe`](https://github.com/hcekne/anaxigraph-v2/actions/runs/40543053975) passed
+562 core tests and 29 experiment-harness tests on both Python 3.11 and 3.12, plus Ruff, mypy,
+source/complexity budgets, wheel build and uvx execution. Production physical lines increased from
+10,147 to 11,925 against an explicit 12,050-line budget; file and complexity ceilings were not
+raised. The feature adds one runtime dependency, PyYAML; qualification used version 6.0.3.
+
+Local deployment then verified the same commit and wheel in the CLI and both connected services.
+Installed sources, new planner endpoints and served assets matched the package; existing settings,
+annotation counts, the original application record and preview were preserved. The new delivery
+stages were present, and no model-analysis jobs were started during deployment. This records source,
+CI and local deployment evidence, not a new PyPI publication.
 
 Historical mapping/Pattern timings in earlier change requests predate this root CI/CD review. They
 are not measurements of this expanded protocol. New qualification must distinguish deterministic

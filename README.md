@@ -269,6 +269,10 @@ context; they are neither cache hits nor passed checks. Commands and deployments
 the planner. Re-evaluate the CI design when component agreements, shared infrastructure or CI/task
 configuration changes. The [CI/CD change request and policy example](docs/change-request-ci-delivery.md)
 document the format, constraints and next steps for adopting a plan in your existing runner.
+The [completed CI/CD qualification](docs/change-request-ci-delivery.md#qualification-and-limits)
+records three real model-reviewed cases, zero-call unchanged repeats and local portable/MCP/browser
+checks. It recognizes existing optimizations and conditional opportunities; no application pipeline
+was changed and equivalent assurance or delivery-time savings have not been measured.
 
 ## What the first milestone supports
 
