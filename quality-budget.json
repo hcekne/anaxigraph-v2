@@ -2,7 +2,7 @@
   "version": 1,
   "baseline_commit": "dcc1a68173c794fc37d9e83541fd3bb89b6eef2c",
   "limits": {
-    "production_physical_lines": 9000,
+    "production_physical_lines": 9100,
     "file_physical_lines": 800,
     "package_data_bytes": 200000,
     "new_function_complexity": 15
@@ -32,8 +32,8 @@
   },
   "reviewed_changes": {
     "src/anaxigraph/application/records.py:import_record": {
-      "ceiling": 20,
-      "reason": "A portable analysis can match either its complete legacy source identity or its recorded resource context. Exact rebuilt scoped input identity and result validation remain mandatory in both cases."
+      "ceiling": 21,
+      "reason": "Validate scoped input/resource compatibility, then promote an identical imported review retention tag without model calls. The extra flat branch preserves explicit-selected intent and bounded default shortlist retention."
     },
     "src/anaxigraph/analysis/portable.py:compatible_annotations": {
       "ceiling": 18,
@@ -50,6 +50,14 @@
     "src/anaxigraph/interfaces/cli.py:dispatch": {
       "ceiling": 28,
       "reason": "Opt-in portable publication, local evidence and explicit selected-card requests add flat transport cases. Direct argument dispatch keeps CLI policy in the shared application; forwarding helpers solely to lower the metric would obscure it."
+    },
+    "src/anaxigraph/application/reviews.py:submit_analysis": {
+      "ceiling": 17,
+      "reason": "Carry optional screened/explicit-selected retention metadata outside model inputs. This flat projection preserves exact validation and provenance while keeping one current default shortlist per module."
+    },
+    "src/anaxigraph/storage/portable.py:_analysis_records": {
+      "ceiling": 16,
+      "reason": "Preserve optional explicit-selected/default retention intent when a byte-stable existing analysis supplies canonical provenance. The one metadata branch prevents loss of manual intent during compatible cache promotion."
     }
   }
 }

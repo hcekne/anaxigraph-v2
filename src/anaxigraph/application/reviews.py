@@ -35,9 +35,22 @@ if TYPE_CHECKING:
     from anaxigraph.application.core import Application
 
 
+def _screened_metadata(kind: str, options: dict[str, Any]) -> dict[str, str]:
+    """Separate retention intent from the inputs sent to a model or fingerprinted."""
+    screened = options.pop("screened", False)
+    if type(screened) is not bool or (
+        screened and (kind != "patterns" or options.get("pattern_ids") is None)
+    ):
+        raise ValueError("screened must be a boolean for selected pattern details only")
+    if kind == "patterns" and options.get("pattern_ids") is not None:
+        return {"pattern_mode": "screened" if screened else "selected"}
+    return {}
+
+
 def analysis_request(
     app, kind: str, scope: list[str] | None = None, **options: Any
 ) -> dict[str, Any]:
+    metadata = _screened_metadata(kind, options)
     graph = app._current()
     app._require_live(graph)
     sources = None
@@ -46,7 +59,7 @@ def analysis_request(
         selected = scope or [modules[0].id] if modules else []
         selected_paths = [n.path for n in modules if n.id in selected or n.path in selected]
         sources = capture_sources(app.root, selected_paths, graph.snapshot.files)
-    request = build_request(graph, kind, scope, sources, **options)
+    request = build_request(graph, kind, scope, sources, **options) | metadata
     app.store.save_review(
         str(app.root), graph.snapshot.id, request["request_id"], "request", request
     )
@@ -148,6 +161,11 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
                 "basis": "agent-reported-proposal",
                 "scope": request["scope"],
                 "request_options": request.get("request_options", {}),
+                **(
+                    {"pattern_mode": request["pattern_mode"]}
+                    if request.get("pattern_mode") in ("screened", "selected")
+                    else {}
+                ),
                 "children": request.get("children", []),
                 "input_identity": input_identity(request),
                 "resource_context": review_context(app, graph, request["scope"]),
@@ -236,7 +254,10 @@ def _rebuild_request(
             children,
             **{k: options[k] for k in ("max_packet_bytes", "max_result_bytes") if k in options},
         )
-    return build_request(graph, kind, body["scope"], **body.get("request_options", {}))
+    request = build_request(graph, kind, body["scope"], **body.get("request_options", {}))
+    if body.get("pattern_mode") in ("screened", "selected"):
+        request["pattern_mode"] = body["pattern_mode"]
+    return request
 
 
 def analysis_product_request(app: Application, review_ids: list[str]) -> dict[str, Any]:
@@ -274,14 +295,20 @@ def analysis_saved(
     row = app.store.get_review(str(app.root), request_id, request["result"]["kind"])
     if row is None or app._review_state(row, app._current())["status"] != "current":
         return reuse_analysis(app, request["result"], pipeline)
-    return bool(
-        row
-        and app._review_state(row, app._current())["status"] == "current"
-        and (
-            pipeline is None
-            or row["result"]["result"].get("execution", {}).get("pipeline") == pipeline
+    if (
+        pipeline is not None
+        and row["result"]["result"].get("execution", {}).get("pipeline") != pipeline
+    ):
+        return False
+    if request["result"].get("pattern_mode") in ("screened", "selected"):
+        app.store.save_review(
+            str(app.root),
+            row["snapshot_id"],
+            request_id,
+            row["kind"],
+            row["result"] | {"pattern_mode": request["result"]["pattern_mode"]},
         )
-    )
+    return True
 
 
 def analysis_selection(app: Application, request_id: str) -> list[dict[str, Any]]:

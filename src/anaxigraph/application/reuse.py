@@ -32,7 +32,11 @@ def reuse_analysis(app: Any, request: dict[str, Any], pipeline: dict[str, Any] |
     if request["kind"] not in {"pattern-screen", "patterns"}:
         return False
     row = app.store.find_review(
-        str(app.root), request["kind"], request["scope"], request.get("request_options", {})
+        str(app.root),
+        request["kind"],
+        request["scope"],
+        request.get("request_options", {}),
+        pattern_mode=request.get("pattern_mode"),
     )
     if row is None:
         return False
@@ -53,11 +57,14 @@ def reuse_analysis(app: Any, request: dict[str, Any], pipeline: dict[str, Any] |
         "original_id": row["id"],
         "source_snapshot": row["snapshot_id"],
     }
+    mode = "selected" if body.get("pattern_mode") == "selected" else request.get("pattern_mode")
     app.store.save_review(
         str(app.root),
         graph.snapshot.id,
         request["request_id"],
         request["kind"],
-        body | {"provenance": provenance},
+        body
+        | {"provenance": provenance}
+        | ({"pattern_mode": mode} if mode in ("screened", "selected") else {}),
     )
     return True

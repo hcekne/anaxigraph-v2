@@ -22,6 +22,7 @@ from typing import Any, Iterator
 
 from anaxigraph.contracts import Graph, Node, Snapshot
 from anaxigraph.storage.graph_codec import decode_edges, decode_nodes, encode_edges, encode_nodes
+from anaxigraph.storage.portable import retention_options
 from anaxigraph.storage.schema import SCHEMA, SCHEMA_VERSION
 
 
@@ -50,6 +51,17 @@ def _review_text(body: str | bytes, maximum: int) -> str:
         return raw.decode()
     except (zlib.error, UnicodeError) as exc:
         raise ValueError("Saved review is not valid compressed JSON") from exc
+
+
+def _preserve_selected_intent(result: dict[str, Any], previous: str | None) -> dict[str, Any]:
+    """A default workflow may update a shared result, but cannot unpin a manual shard."""
+    if (
+        result.get("pattern_mode") == "screened"
+        and previous
+        and json.loads(previous).get("pattern_mode") == "selected"
+    ):
+        return result | {"pattern_mode": "selected"}
+    return result
 
 
 class Store:
@@ -560,16 +572,6 @@ class Store:
         root = _root(root)
         if not review_id or not kind:
             raise ValueError("Review identity and kind are required")
-        # Task/result sizing belongs to the analysis request. The store enforces
-        # the complete database budget, not an unrelated 256 KiB review ceiling.
-        body = _encode(result, limit=self.max_record_bytes)
-        payload = zlib.compress(body.encode(), level=6)
-        scope_key = _encode(
-            {
-                "scope": result.get("scope", review_id),
-                "options": result.get("request_options", {}),
-            }
-        )
         now = datetime.now(timezone.utc).isoformat()
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -578,11 +580,15 @@ class Store:
                 "SELECT snapshot_id,result FROM reviews WHERE root=? AND id=? AND kind=?",
                 (root, review_id, kind),
             ).fetchone()
-            if (
-                old is not None
-                and old["snapshot_id"] == snapshot_id
-                and _review_text(old["result"], self.max_record_bytes) == body
-            ):
+            previous = _review_text(old["result"], self.max_record_bytes) if old else None
+            result = _preserve_selected_intent(result, previous)
+            # Task sizing belongs to the request; the database retains its complete budget.
+            body = _encode(result, limit=self.max_record_bytes)
+            payload = zlib.compress(body.encode(), level=6)
+            scope_key = _encode(
+                {"scope": result.get("scope", review_id), "options": retention_options(result)}
+            )
+            if old is not None and old["snapshot_id"] == snapshot_id and previous == body:
                 return
             db.execute(
                 "INSERT INTO reviews VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(root,id,kind) DO UPDATE "
@@ -614,17 +620,30 @@ class Store:
         return rows[0] if rows else None
 
     def find_review(
-        self, root: str, kind: str, scope: list[str], options: dict[str, Any]
+        self,
+        root: str,
+        kind: str,
+        scope: list[str],
+        options: dict[str, Any],
+        *,
+        pattern_mode: str | None = None,
     ) -> dict[str, Any] | None:
         """Find one logical scope using the existing index, across snapshot changes."""
-        key = _encode({"scope": scope, "options": options})
+        selected = retention_options({"request_options": options, "pattern_mode": pattern_mode})
+        keys = [_encode({"scope": scope, "options": selected})]
+        if selected != options:
+            keys.append(_encode({"scope": scope, "options": options}))
         with self._connection() as db:
-            row = db.execute(
-                "SELECT id FROM reviews WHERE root=? AND kind=? AND scope_key=? "
-                "ORDER BY updated_at DESC LIMIT 1",
-                (_root(root), kind, key),
-            ).fetchone()
-        return self.get_review(root, row["id"], kind) if row else None
+            for key in keys:
+                row = db.execute(
+                    "SELECT id FROM reviews WHERE root=? AND kind=? AND scope_key=? "
+                    "ORDER BY updated_at DESC LIMIT 1",
+                    (_root(root), kind, key),
+                ).fetchone()
+                candidate = self.get_review(root, row["id"], kind) if row else None
+                if candidate and candidate["result"].get("request_options", {}) == options:
+                    return candidate
+        return None
 
     def reviews(
         self,

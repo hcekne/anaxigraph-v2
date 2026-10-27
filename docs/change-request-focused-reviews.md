@@ -85,7 +85,11 @@ even without classes. Record considered/selected/unevaluated coverage without pe
 **Detailed review:** use the stronger configured model only for selected IDs. Require concrete
 incremental benefits, costs, evidence and a simpler alternative. A pattern already implemented well
 does not earn an improvement score simply because it fits. Keep unknown distinct from zero. Empty
-shortlists require no strong-model call. Default agent responses summarize actionable opportunities;
+shortlists require no strong-model call. Keep one current default shortlisted-detail result per module
+as selections change; retain exact selected IDs in validation and fingerprints. Explicit selected and
+exhaustive shards and explicitly saved analyses preserve their retention. Metadata-only promotion
+reuses compatible results without a model call; other unknown legacy shards are preserved.
+Default agent responses summarize actionable opportunities;
 explicit inspection can expand saved detail.
 
 **Incremental work:** reuse annotations and scoped reviews when their actual input fingerprints and

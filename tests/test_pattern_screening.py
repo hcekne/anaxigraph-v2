@@ -289,6 +289,84 @@ def test_selected_details_reuse_without_portable_export_after_unrelated_and_neig
     assert mapped.analysis_saved(neighbor["request_id"])
 
 
+def _replace_neighbor_contracts(application, contracts):
+    graph = application._current()
+    prior = next(node.data["annotation"] for node in graph.nodes if node.id == "module:worker.py")
+    request = application.analysis_request("annotate", ["worker.py"])
+    application.submit_analysis(
+        request["request_id"],
+        {
+            "producer": "synthetic-contract-refresh",
+            "annotations": [copy.deepcopy(prior) | {"contracts": contracts}],
+        },
+    )
+
+
+@pytest.mark.parametrize("kind", ["pattern-screen", "patterns"])
+def test_inferred_neighbor_rewording_keeps_scoped_input_and_saved_work(mapped, kind):
+    contract = {
+        "statement": "Deliver an observable result.",
+        "basis": "inferred",
+        "evidence": [{"path": "worker.py", "line": 1}],
+    }
+    _replace_neighbor_contracts(mapped, [contract])
+    options = {"pattern_ids": ["adapter"]} if kind == "patterns" else {}
+    before = mapped.analysis_request(kind, ["app.py"], **options)
+    assert before["packet"]["modules"][0]["neighbor_contracts"] == []
+    result = pattern_result(before) if kind == "patterns" else selection_result(before)
+    mapped.submit_analysis(before["request_id"], result)
+    (mapped.root / "worker.py").write_text("def compute():\n    return 2\n")
+    mapped.scan()
+    _replace_neighbor_contracts(mapped, [contract | {"statement": "Return an observable result."}])
+    after = mapped.analysis_request(kind, ["app.py"], **options)
+    assert before["request_id"] != after["request_id"]
+    assert input_identity(before) == input_identity(after)
+    assert mapped.analysis_saved(after["request_id"])
+
+
+@pytest.mark.parametrize("kind", ["pattern-screen", "patterns"])
+@pytest.mark.parametrize("change", ["statement", "evidence", "signature"])
+def test_declared_neighbor_contract_and_public_interface_changes_invalidate(mapped, kind, change):
+    contract = {
+        "statement": "Deliver an observable result.",
+        "basis": "declared",
+        "evidence": [{"path": "worker.py", "line": 1}],
+    }
+    _replace_neighbor_contracts(mapped, [contract])
+    options = {"pattern_ids": ["adapter"]} if kind == "patterns" else {}
+    before = mapped.analysis_request(kind, ["app.py"], **options)
+    assert before["packet"]["modules"][0]["neighbor_contracts"] == [
+        {"path": "worker.py", "contracts": [contract]}
+    ]
+    result = pattern_result(before) if kind == "patterns" else selection_result(before)
+    mapped.submit_analysis(before["request_id"], result)
+    if change == "signature":
+        (mapped.root / "worker.py").write_text("def compute(value=0):\n    return value\n")
+        mapped.scan()
+        annotate(mapped, ["app.py"])
+    else:
+        updated = contract | (
+            {"statement": "Deliver a result without modifying supplied values."}
+            if change == "statement"
+            else {"evidence": [{"path": "worker.py", "line": 2}]}
+        )
+        _replace_neighbor_contracts(mapped, [updated])
+    after = mapped.analysis_request(kind, ["app.py"], **options)
+    assert input_identity(before) != input_identity(after)
+    assert not mapped.analysis_saved(after["request_id"])
+
+
+def test_concise_detail_instruction_does_not_change_exhaustive_review_or_schema(mapped):
+    selected = mapped.analysis_request("patterns", ["app.py"], pattern_ids=["adapter"])
+    exhaustive = mapped.analysis_request("patterns", ["app.py"])
+    assert "80 words" in selected["packet"]["instruction"]
+    assert "one short pro, one short con" in selected["packet"]["instruction"]
+    assert "must not force a positive" in selected["packet"]["instruction"]
+    assert "80 words" not in exhaustive["packet"]["instruction"]
+    assert selected["response_schema"] == exhaustive["response_schema"]
+    assert exhaustive["packet"]["instruction"].endswith("No card or module may be skipped.")
+
+
 def test_screen_rejects_a_stale_saved_selection(mapped):
     request = mapped.analysis_request("pattern-screen", ["app.py"])
     mapped.submit_analysis(request["request_id"], selection_result(request))

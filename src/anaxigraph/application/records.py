@@ -152,10 +152,9 @@ def import_record(app: Application) -> dict[str, Any]:
             identity = request["request_id"]
             remapped[row["id"]] = identity
             progress = True
-            if not app.analysis_saved(identity):
-                app.store.save_review(
-                    str(app.root), graph.snapshot.id, identity, "request", request
-                )
+            already_saved = app.analysis_saved(identity)
+            app.store.save_review(str(app.root), graph.snapshot.id, identity, "request", request)
+            if not already_saved:
                 app.store.save_review(
                     str(app.root),
                     graph.snapshot.id,
@@ -170,6 +169,8 @@ def import_record(app: Application) -> dict[str, Any]:
                     },
                 )
                 imported += 1
+            elif request.get("pattern_mode") == "screened":
+                app.analysis_saved(identity)  # Promote only the compatible row's retention tag.
         if not progress:
             skipped.extend(
                 {"id": row["id"], "reason": "missing compatible child analysis"} for row in deferred

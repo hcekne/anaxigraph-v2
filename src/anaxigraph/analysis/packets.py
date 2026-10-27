@@ -120,6 +120,8 @@ def _annotation_packet(
             "about 60–90 words, and about 15 words for EVERY supplied function. Give 3–6 key "
             "capabilities and only the few essential behavioral contracts; avoid repeating "
             "every helper as another capability or obligation. "
+            "When an earlier annotation is supplied, retain capability and contract wording "
+            "where behavior and obligations are unchanged; revise claims only when warranted. "
             "Use source evidence for claims; distinguish declared from inferred obligations. "
             "Capabilities AND contract statements must describe observable behavior without "
             "implementation names, internal classes/methods, source paths or current module "
@@ -187,7 +189,7 @@ def _pattern_packet(
     selected_ids = {node.id for node in graph.nodes if node.path in selected_paths}
     owners = {node.id: node.path for node in graph.nodes}
     cards = _pattern_cards(pattern_ids)
-    packet = {
+    packet: dict[str, Any] = {
         "instruction": (
             "Independently advocate for EACH catalogue pattern against EACH supplied module. "
             "Look for useful alternate responsibility, state, interface and control-flow designs, "
@@ -242,6 +244,14 @@ def _pattern_packet(
         from .charter import CHARTER
 
         packet["charter"] = CHARTER
+        packet["instruction"] += (
+            " Judge thoroughly, report briefly: aim for at most 80 words of explanatory text "
+            "per evaluation, with one concrete change, one short pro, one short con, the "
+            "simplest alternative, and one or two precise evidence references when available. For zero or "
+            "unknown opportunity, give a brief reason without repeated rejection essays. "
+            "Keep every selected pair, the full response fields, honest ratings and evidence; "
+            "concise output must not force a positive recommendation."
+        )
     schema = {
         "evaluations": [
             {
@@ -261,6 +271,20 @@ def _pattern_packet(
     return packet, schema
 
 
+def _declared_neighbor_contracts(graph: Graph, paths: set[str]) -> list[dict[str, Any]]:
+    peers = []
+    for peer in graph.nodes:
+        if peer.kind == "module" and peer.path in paths:
+            contracts = [
+                contract
+                for contract in peer.data.get("annotation", {}).get("contracts", [])
+                if contract.get("basis") == "declared"
+            ]
+            if contracts:
+                peers.append({"path": peer.path, "contracts": contracts})
+    return peers
+
+
 def _screen_module(graph: Graph, node: Node) -> dict[str, Any]:
     from .charter import module_facts
 
@@ -277,14 +301,7 @@ def _screen_module(graph: Graph, node: Node) -> dict[str, Any]:
             if key in annotation
         },
         "facts": facts,
-        "neighbor_contracts": [
-            {
-                "path": peer.path,
-                "contracts": peer.data.get("annotation", {}).get("contracts", []),
-            }
-            for peer in graph.nodes
-            if peer.kind == "module" and peer.path in dependencies
-        ],
+        "neighbor_contracts": _declared_neighbor_contracts(graph, dependencies),
     }
 
 

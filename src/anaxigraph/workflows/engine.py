@@ -516,7 +516,7 @@ class WorkflowRunner:
                 batch["status"], batch["skipped"] = "completed", True
                 return None
             return self.application.analysis_request(
-                "patterns", batch["scope"], pattern_ids=patterns
+                "patterns", batch["scope"], pattern_ids=patterns, screened=True
             )
         return self.application.analysis_request(batch["kind"], batch["scope"])
 

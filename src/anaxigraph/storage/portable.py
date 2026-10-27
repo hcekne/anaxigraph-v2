@@ -129,6 +129,16 @@ def read_record(root: Path, *, maximum: int = MAX_RECORD_BYTES) -> dict[str, Any
     return record
 
 
+def retention_options(body: dict[str, Any]) -> dict[str, Any]:
+    """Only logical retention forgets default shortlists; model inputs stay exact."""
+    options = body.get("request_options", {})
+    return (
+        options | {"pattern_ids": "current-screened-selection"}
+        if body.get("pattern_mode") == "screened"
+        else options
+    )
+
+
 def _analysis_key(row: dict[str, Any]) -> str:
     # Current findings replace their previous version; Git supplies the history.
     body = row.get("body", {})
@@ -137,7 +147,7 @@ def _analysis_key(row: dict[str, Any]) -> str:
             {
                 "kind": row.get("kind"),
                 "scope": sorted(body.get("scope", [])),
-                "pattern_ids": body.get("request_options", {}).get("pattern_ids"),
+                "pattern_ids": retention_options(body).get("pattern_ids"),
                 "level": body.get("request_options", {}).get("level"),
                 "saved_id": row.get("id") if row.get("explicitly_saved") else None,
             }
@@ -218,6 +228,27 @@ def _retained_analyses(
     return analyses
 
 
+def _promoted_analysis(analyses: dict[str, Any], item: dict[str, Any]) -> dict[str, Any] | None:
+    """Retag an identical shared row without inventing history or duplicating its result."""
+    body = dict(item["body"])
+    mode = body.pop("pattern_mode", None)
+    if mode not in ("screened", "selected"):
+        return None
+    if mode == "selected":
+        body["pattern_mode"] = "screened"
+    legacy_key = _analysis_key(item | {"body": body})
+    previous = analyses.get(legacy_key)
+    if (
+        previous
+        and previous["body"].get("pattern_mode") != "selected"
+        and not previous.get("explicitly_saved")
+        and _same_analysis(previous, item)
+    ):
+        del analyses[legacy_key]
+        return previous | {"body": previous["body"] | {"pattern_mode": mode}}
+    return None
+
+
 def _analysis_records(
     reviews: list[dict[str, Any]],
     existing: dict[str, Any],
@@ -246,9 +277,12 @@ def _analysis_records(
             "body": body,
         }
         key = _analysis_key(item)
-        prior = analyses.get(key)
+        promoted = _promoted_analysis(analyses, item)
+        prior = analyses.get(key) or promoted
         if prior and _same_analysis(prior, item):
             item = prior | {"status": item["status"], "analysis_context": item["analysis_context"]}
+        if body.get("pattern_mode") in ("screened", "selected"):
+            item = item | {"body": item["body"] | {"pattern_mode": body["pattern_mode"]}}
         if prior and prior.get("id") == item["id"] and item["source_identity"] is None:
             item["source_identity"] = prior.get("source_identity")
         analyses[key] = item
