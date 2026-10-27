@@ -7,6 +7,8 @@ Its architectural advice favors clear ownership, small public contracts and inde
 components. The map measures public surfaces, private cross-module references, dependency cycles and
 observed test links. These are evidence for decisions, not proof that a change cannot break callers.
 Functions, objects and modular monoliths are all valid ways to preserve a useful boundary.
+Private-access checks cover resolved function, class and method references; private globals and
+instance attributes can be missed, so no finding does not establish complete boundary coverage.
 
 This is the clean replacement core targeting **anaxigraph 1.0**. The first milestone is a local
 `1.0.0a1` alpha, separate from the existing 0.9.1 package. Features are added selectively; this
@@ -200,9 +202,12 @@ prompt inputs separately from structural readiness.
 
 The dashboard can copy these tasks, accept result JSON and display saved proposals. Pattern ratings
 remain hypotheses. Source-aware verification of a frozen alternative is separate from blind design.
-The [focused-review change request](docs/change-request-focused-reviews.md) records the design,
-Snow Rankings baseline, architectural charter and performance targets. Targets are not deadlines
-or measured guarantees; live timing and recommendation quality must be evaluated separately.
+The [focused-review qualification](docs/change-request-focused-reviews.md#completed-qualification--27-october-2026)
+records the design, baseline and measured results on an isolated twelve-module Snow Rankings copy:
+83.1 seconds for mapping plus focused Patterns, 0.7 seconds unchanged with no model calls, and
+63.5 seconds after a leaf edit. The edit missed the 60-second target. These small-repository results
+are not latency guarantees or proof of recommendation quality; the record includes known misses
+and model-profile differences. Targets do not impose worker deadlines.
 
 ## What the first milestone supports
 

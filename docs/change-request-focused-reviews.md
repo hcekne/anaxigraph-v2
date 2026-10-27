@@ -132,3 +132,84 @@ Do not claim a timing or output improvement establishes better architectural dec
 OpenAI's [Luna model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna) lists
 low reasoning effort; [Codex model guidance](https://learn.chatgpt.com/docs/models) describes Luna
 for focused, repeatable work. Account access and actual performance are checked by the live run.
+
+## Completed qualification — 27 October 2026
+
+The isolated Snow Rankings run used package **1.0.0a1** at `7ebc133`, the same source revision
+`af50630`, 32 workers, Luna/low for mapping and screening, and Sol/medium for selected detail with
+Sol/xhigh available as fallback. Its worker timeout was explicitly unlimited. Old records were
+withheld so compatible saved analyses could not make the first run appear cold. Exact revisions,
+wheel hashes, aggregate receipts and limitations are in
+[the qualification record](evidence/focused-advice-qualification.json).
+
+| Measurement | Preserved reference | Focused run |
+| --- | ---: | ---: |
+| Mapping wall time | 375.1 s; one annotation already current | 21.8 s; 12 annotation calls |
+| Patterns wall time | 1,472.7 s | 61.3 s |
+| Mapping plus Patterns | 1,847.8 s | 83.1 s |
+| Detailed module/card ratings | 1,596 across 12 modules | 43 across six production modules |
+| Minified pattern-result JSON | 1,016,382 bytes | 30,504 detail + 3,215 screening = 33,719 bytes |
+| Portable record | 1,257,081 bytes, including Fresh Eyes | 103,091 bytes, map and focused Patterns |
+
+These are different workloads and model profiles, not a controlled speed or quality comparison.
+The new screen exposed all 133 cards for each of six eligible modules: **798 pairs exposed,
+43 selected and rated**. Exposure does not establish individual reasoning, a rating or irrelevance
+for the other pairs. Five test modules and one inert marker were excluded from default Patterns;
+all twelve modules retained current mapping annotations. Fresh Eyes remains available but was not
+rerun in this timing sample, so the portable sizes do not compare identical analysis contents.
+
+An unchanged repeat finished in **0.7 seconds with zero model calls**. A behavior-equivalent body edit that
+preserved the public surface took **63.5 seconds and three calls**, all confined to the edited
+module: annotation, screening and detail. This missed the 60-second warm target by 3.5 seconds.
+Across cold, unchanged and edited runs, receipts recorded 27 actual calls and 27 accepted analyses;
+reuse events were separate. Dollar cost was unavailable, not zero.
+
+Three small synthetic recognition cases then exercised the same frozen package. All nine compatible
+annotations and five screen batches were reused; twelve new calls completed without retry or
+fallback. The positive cases retained a shared provider contract (Adapter 3, provider abstraction 2)
+and atomic replacement through one transaction (Unit of Work 3), including costs and simpler local
+alternatives. The negative case avoided another caller-facing provider boundary but still suggested
+optional private adapters at score 1; an already simple formatting function also consumed three
+strong reviews that all returned zero. The negative result is therefore partial. Selected-detail
+JSON fell from 44,065 to 28,847 bytes and output tokens from 12,686 to 8,675 across eight strong
+calls in each run, reviewing 37 versus 38 pairs. Reuse, stochastic output and changing shortlists
+prevent a causal claim; these cases do not prove general recommendation quality.
+
+The same-source disagreement audit compared 798 old production ratings with the 43 selected pairs.
+Of 49 old positive ratings, 35 were not selected: 32 scored one and three scored two. These old
+judgments are not ground truth or a recall benchmark. Of the three higher-scored omissions, a pure
+result-projection idea survived under Extract Function; the proposed separate contract-test suite
+had overlapping existing checks. **Per-location single-flight remained a plausible omission**:
+the batch lock can block unrelated forecast work while provider slots remain free. A bounded
+in-flight registry has coordination costs, and concurrent demand has not been demonstrated.
+The audit does not justify calling every omitted opportunity unnecessary.
+Private-boundary facts cover resolved cross-module function, class and method definitions; private
+globals and instance attributes remain incompletely resolved, so zero findings do not establish
+complete coverage. This qualification did not extend the parser's coverage.
+
+GitHub CI passed for the [qualified `7ebc133` package](https://github.com/hcekne/anaxigraph-v2/actions/runs/40503446255)
+and for [`94156a6`](https://github.com/hcekne/anaxigraph-v2/actions/runs/40506824918), which subsequently
+shared the source-independent charter with Fresh Eyes. That later prompt change has no new live
+Fresh Eyes quality result. Both runs exercised Python 3.11/3.12 and the built wheel through uvx.
+
+A real Sol/xhigh agent then made five successful MCP calls against `94156a6` in 24.342 seconds,
+including change guidance and workflow configuration/status; it confirmed the ten charter principles
+without changing source or starting analyses. Separate browser checks used synthetic providers,
+verified desktop/mobile workflow controls and access to all thirteen paginated batch-timing rows,
+and reported no browser errors. Those UI checks made no paid model calls and are not model benchmarks.
+
+Local deployment of `94156a6` was measured separately: both connected AnaxiGraph services were
+active and their installed source matched the commit. They expose the focused defaults while the
+existing Snow trial retains its unlimited timeout and Sol/xhigh Fresh Eyes choice. Structural scans
+refreshed boundary metadata without starting model jobs; the original Snow checkout stayed clean,
+its portable record stayed unchanged and its preview remained active. This is a source/CI/local
+deployment update; **no PyPI release was published**.
+
+A separate local Git clone of the isolated edited fixture, at a different path with a new database,
+imported twelve current annotations, six screens and six detailed reviews: 43 ratings from 798
+catalogue-exposure pairs. Mapping completed in 0.7 seconds with no pending batches; Patterns took
+2.1 seconds with all twelve review batches reused and zero provider invocations. Selected IDs,
+input fingerprints, model pipelines and source provenance survived. Three unchanged scan/import/
+export cycles kept the **103,091-byte record byte-identical**, with a stable 475,136-byte database
+and six generated files (612,379 bytes total). This used a local fixture commit without a remote
+push; it does not establish a GitHub round trip. Fresh Eyes was absent and was not tested here.

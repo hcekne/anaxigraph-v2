@@ -1,0 +1,308 @@
+{
+  "schema_version": 1,
+  "qualified_on": "2026-10-27",
+  "basis": "Real model calls on an isolated Snow Rankings copy; separate synthetic recognition cases and read-only disagreement audit. No general quality or latency guarantee.",
+  "package": {
+    "version": "1.0.0a1",
+    "qualified_commit": "7ebc133385596c6bd1f42dffce1ea58cc2c6d6c3",
+    "qualified_wheel_sha256": "7f2edce3a4f997cac0dcc27f630acd1ea190a681a370124543d7c1fc3bb5faec",
+    "deployed_commit": "94156a62abfb3f1b746ce7f17d7662647c52bb4a",
+    "deployed_wheel_sha256": "85494aadbdb92515c8af798c57a491ce6ca6e8d0fb4c27249176e63f9adc4562",
+    "qualification_to_deployment_change": "Subsequently supplied the source-independent architecture charter to Fresh Eyes; no new live Fresh Eyes quality result.",
+    "pypi_published": false
+  },
+  "ci": [
+    {
+      "commit": "7ebc133385596c6bd1f42dffce1ea58cc2c6d6c3",
+      "conclusion": "success",
+      "url": "https://github.com/hcekne/anaxigraph-v2/actions/runs/40503446255"
+    },
+    {
+      "commit": "94156a62abfb3f1b746ce7f17d7662647c52bb4a",
+      "conclusion": "success",
+      "url": "https://github.com/hcekne/anaxigraph-v2/actions/runs/40506824918"
+    }
+  ],
+  "source": {
+    "repository": "snow-rankings-v2",
+    "revision": "af50630b4854c4e29bf755735a891181c7610227",
+    "old_analyses_withheld_from_cold_run": true,
+    "same_source_production_modules_verified_by_snapshot_fingerprint": 6,
+    "controlled_edit": "Explicit zero start in enumeration; implementation fingerprint changed, public surface preserved."
+  },
+  "preserved_reference": {
+    "analysis_tool_commit": null,
+    "analysis_tool_commit_basis": "Not identified by the preserved baseline summary or portable record.",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "xhigh",
+    "workers": 8,
+    "mapping_seconds": 375.1,
+    "mapping_basis": "Eleven annotation batches; one current annotation already available. Not a cold-map latency baseline.",
+    "patterns_seconds": 1472.7,
+    "mapping_plus_patterns_seconds": 1847.8,
+    "fresh_eyes_seconds": 543.1,
+    "detailed_modules": 12,
+    "detailed_pairs": 1596,
+    "opportunities": {
+      "zero": 1254,
+      "one": 63,
+      "two": 17,
+      "three": 0,
+      "unknown": 262
+    },
+    "minified_pattern_result_json_bytes": 1016382,
+    "portable_bytes": 1257081,
+    "portable_contents": [
+      "map",
+      "exhaustive Patterns",
+      "Fresh Eyes"
+    ]
+  },
+  "focused_run": {
+    "workers": 32,
+    "timeout_seconds": null,
+    "mapping_and_screening": {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low"
+    },
+    "selected_detail": {
+      "model": "gpt-6.1-sol",
+      "reasoning_effort": "medium",
+      "fallback_effort": "xhigh"
+    },
+    "cold_mapping_seconds": 21.8,
+    "cold_patterns_seconds": 61.3,
+    "cold_mapping_plus_patterns_seconds": 83.1,
+    "current_annotations": 12,
+    "detailed_modules": 6,
+    "catalogue_cards": 133,
+    "catalogue_exposure_pairs": 798,
+    "selected_pairs": 43,
+    "detailed_pairs": 43,
+    "excluded_test_modules": 5,
+    "excluded_inert_markers": 1,
+    "minified_detail_result_json_bytes": 30504,
+    "minified_screen_result_json_bytes": 3215,
+    "minified_screen_and_detail_result_json_bytes": 33719,
+    "unchanged_seconds": 0.7,
+    "unchanged_model_calls": 0,
+    "warm_edit_seconds": 63.5,
+    "warm_edit_model_calls": 3,
+    "warm_edit_only_edited_module_called": true,
+    "warm_target_seconds": 60,
+    "warm_target_met": false,
+    "portable_bytes_after_warm_run": 103091,
+    "portable_contents": [
+      "map",
+      "pattern screens",
+      "selected pattern details"
+    ],
+    "fresh_eyes_rerun": false
+  },
+  "receipts_across_cold_unchanged_and_warm_runs": {
+    "actual_calls": 27,
+    "accepted_analyses": 27,
+    "reuse_events": 22,
+    "provider_or_validation_failures_recorded": 0,
+    "usage": [
+      {
+        "stage": "annotate",
+        "model": "gpt-6-luna",
+        "reasoning_effort": "low",
+        "calls": 13,
+        "input_tokens": 210129,
+        "output_tokens": 12091,
+        "cached_input_tokens": 83072,
+        "reasoning_output_tokens": 0
+      },
+      {
+        "stage": "pattern-screen",
+        "model": "gpt-6-luna",
+        "reasoning_effort": "low",
+        "calls": 7,
+        "input_tokens": 125677,
+        "output_tokens": 1495,
+        "cached_input_tokens": 45312,
+        "reasoning_output_tokens": 0
+      },
+      {
+        "stage": "patterns",
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "medium",
+        "calls": 7,
+        "input_tokens": 160169,
+        "output_tokens": 12336,
+        "cached_input_tokens": 58240,
+        "reasoning_output_tokens": 1341
+      }
+    ],
+    "cost_usd": null,
+    "cost_basis": "Token counts supplied by CLI receipts; dollar cost unavailable, not zero."
+  },
+  "recognition_cases": {
+    "baseline_package_commit": "db0907e6da22815024c7cfd21d319b1c87cc3781",
+    "final_package_commit": "7ebc133385596c6bd1f42dffce1ea58cc2c6d6c3",
+    "fixture_source_files_unchanged": 9,
+    "mapping_annotations_reused": 9,
+    "screen_batches_reused": 5,
+    "new_calls": 12,
+    "calls_match_actual_nonreuse_receipts": true,
+    "failed_attempts": 0,
+    "patterns_wall_seconds": {
+      "case-a": 45.999,
+      "case-b": 46.974,
+      "case-c": 30.0043
+    },
+    "shared_provider_contract": {
+      "result": "recognized",
+      "adapter_opportunity": 3,
+      "provider_abstraction_opportunity": 2
+    },
+    "atomic_replacement": {
+      "result": "recognized",
+      "unit_of_work_opportunity": 3,
+      "separate_class_required": false
+    },
+    "already_shared_negative": {
+      "result": "partial",
+      "optional_private_adapter_opportunity": 1,
+      "note": "No extra caller-facing provider boundary, but unnecessary private extraction remains suggested."
+    },
+    "other_noise": "An already simple formatting function received three strong-detail ratings, all zero.",
+    "strong_call_comparison": {
+      "before_calls": 8,
+      "after_calls": 8,
+      "before_selected_pairs": 37,
+      "after_selected_pairs": 38,
+      "before_parsed_answer_json_bytes": 44065,
+      "after_parsed_answer_json_bytes": 28847,
+      "before_output_tokens": 12686,
+      "after_output_tokens": 8675
+    }
+  },
+  "same_source_disagreement_audit": {
+    "old_pairs": 798,
+    "new_selected_and_detailed_pairs": 43,
+    "old_positive_pairs": 49,
+    "old_positive_pairs_selected": 14,
+    "old_positive_pairs_unselected": 35,
+    "unselected_by_old_rating": {
+      "1": 32,
+      "2": 3
+    },
+    "old_rating2_pairs_unselected": 3,
+    "judgment_basis": "Old ratings are model opinions, not useful-opportunity ground truth or measured recall.",
+    "highest_omitted_examples": [
+      {
+        "pattern": "pure-function",
+        "old_opportunity": 2,
+        "assessment": "Result projection preserved under selected extract-function opportunity 2."
+      },
+      {
+        "pattern": "single-flight",
+        "old_opportunity": 2,
+        "assessment": "Plausible omitted concurrency opportunity: the batch lock can block unrelated refreshes while provider slots are free. Per-key coordination costs require actual demand."
+      },
+      {
+        "pattern": "contract-test",
+        "old_opportunity": 2,
+        "assessment": "Existing tests overlap the proposed behavior. No demonstrated gap justifies a separate shared/versioned suite."
+      }
+    ]
+  },
+  "local_deployment": {
+    "checked_at": "2026-10-27T12:59:33.060459+00:00",
+    "connected_services_active": 2,
+    "installed_sources_match_deployed_commit": true,
+    "focused_defaults_observed": true,
+    "snow_unlimited_timeout_and_sol_xhigh_fresh_eyes_preserved": true,
+    "model_jobs_started": 0,
+    "structural_boundary_metadata_refreshed": true,
+    "original_snow_checkout_clean": true,
+    "original_snow_portable_record_unchanged": true,
+    "preview_active": true
+  },
+  "limitations": [
+    "One small-repository timing sample; different workloads, model profiles and worker counts prevent a controlled before/after latency or quality conclusion.",
+    "The behavior-equivalent warm edit took 63.5 seconds, exceeding the 60-second target; contract-changing edits were not timed. Targets are not worker deadlines.",
+    "Catalogue exposure is not a rating or proof every unselected card was considered correctly or is irrelevant.",
+    "Fresh Eyes was not rerun; old and new portable sizes contain different analysis sets.",
+    "Three synthetic cases, reused mapping/screens and 37 versus 38 selected pairs do not establish causal prompt improvement or general recommendation quality. Parsed answer bytes are not transport wire bytes.",
+    "A plausible single-flight opportunity was omitted and the negative canary retains low-value optional abstraction advice.",
+    "The 32 old opportunity-1 omissions were not all independently judged; semantic equivalents can use different catalogue cards.",
+    "CI and local deployment do not constitute a PyPI release.",
+    "Private-boundary facts cover resolved cross-module function, class and method definitions. Private globals and instance attributes are incompletely resolved; zero observed issues do not establish complete coverage. Parser coverage was not expanded in this task.",
+    "Portable reuse was verified from a local isolated Git fixture into a new database, not through a GitHub push/pull. Fresh Eyes was absent from that record and was not tested in this clone proof."
+  ],
+  "agent_connection": {
+    "tool_commit": "94156a62abfb3f1b746ce7f17d7662647c52bb4a",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "xhigh",
+    "elapsed_seconds": 24.342,
+    "successful_mcp_calls": 5,
+    "failed_mcp_calls": 0,
+    "mcp_tools": {
+      "status": 1,
+      "prepare_change": 1,
+      "modules": 1,
+      "workflow_configure": 1,
+      "workflow_status": 1
+    },
+    "charter_principles_confirmed": 10,
+    "source_unchanged": true,
+    "new_analysis_jobs_started": 0,
+    "input_tokens": 55473,
+    "cached_input_tokens": 43648,
+    "output_tokens": 623,
+    "cost_usd": null,
+    "scope": "Already mapped synthetic fixture; verifies real agent connection and guidance, not recommendation quality."
+  },
+  "workflow_browser_checks": {
+    "provider": "synthetic",
+    "paid_model_calls": 0,
+    "desktop_and_mobile": true,
+    "browser_errors": 0,
+    "all_batch_rows_accessible": 13,
+    "timing_page_offsets": [
+      0,
+      10
+    ],
+    "benchmark": false
+  },
+  "local_portable_clone": {
+    "status": "passed",
+    "tool_commit": "94156a62abfb3f1b746ce7f17d7662647c52bb4a",
+    "transport": "Actual local Git clone into a different path; no shared object inodes, no remote push or GitHub transfer.",
+    "isolated_fixture_commit": "70ea3153ae1b620e38d4f431feab212aaaa4be7e",
+    "fresh_database": true,
+    "annotations_current": 12,
+    "screens_imported": 6,
+    "details_imported": 6,
+    "catalogue_exposure_pairs": 798,
+    "selected_and_detailed_pairs": 43,
+    "mapping_seconds": 0.7,
+    "mapping_pending_batches": 0,
+    "patterns_seconds": 2.1,
+    "reused_review_batches": 12,
+    "total_review_batches": 12,
+    "provider_calls": 0,
+    "preserved": [
+      "exact selected IDs",
+      "input fingerprints",
+      "model pipelines",
+      "source provenance"
+    ],
+    "repeat_scan_import_export_cycles": 3,
+    "record_byte_identical": true,
+    "portable_bytes": 103091,
+    "portable_sha256": "ebcad3ce69c040d9a091e3e3e03e9c1d06d107f2daf59b225367d7dbb81519d9",
+    "database_bytes": 475136,
+    "generated_files": 6,
+    "generated_bytes": 612379,
+    "database_size_and_file_count_stable": true,
+    "original_snow_edited": false,
+    "remote_push": false,
+    "fresh_eyes_present": false,
+    "fresh_eyes_tested": false
+  }
+}
