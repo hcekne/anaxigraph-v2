@@ -306,7 +306,7 @@ def _coding_steps(
         {
             "kind": "compatibility-and-tests",
             "basis": "heuristic-backed-by-observed-consumers",
-            "suggestion": "Develop and check the owning component locally. Preserve its public behavior; when that contract changes, check consumers too. Observed test links do not prove coverage or replace required project checks.",
+            "suggestion": "Start with local behavior and public-contract checks. Verify consumers when behavior, contracts or shared data/configuration/resources change. Unchanged signatures alone do not establish compatibility. These observed test links are not a complete CI plan and do not replace required project checks.",
             "consumers": consumers,
             "tests": tests[:4],
             "component_tests": facts["observed_test_paths"][:4],
@@ -436,7 +436,7 @@ def prepare(
         },
         "uncertainty": [
             "Placement is ranked evidence, not accepted architectural intent.",
-            "Dynamic references and unparsed languages can hide consumers.",
+            "The impact neighborhood is bounded to two reference levels; dynamic references, shared resources and unparsed languages can hide consumers. It is not a complete CI scope.",
             "Tests are associated by observed references; no tests were executed.",
         ],
     }

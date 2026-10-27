@@ -25,12 +25,12 @@ CHARTER = (
     {
         "id": "contracts",
         "principle": "Preserve behavior at component contracts.",
-        "guidance": "State inputs, outputs, failures and side effects; changing an implementation should preserve its callers.",
+        "guidance": "Publish inputs, outputs, failures, side effects and data/resource obligations; unchanged signatures alone do not establish compatibility.",
     },
     {
         "id": "encapsulation",
         "principle": "Reach components through their public contracts.",
-        "guidance": "Avoid another owner's private names, storage details and provider-specific behavior.",
+        "guidance": "Keep implementation and owned mutable data private; consumers use published contracts, including shared schemas and configuration.",
     },
     {
         "id": "dependency-direction",
@@ -45,17 +45,17 @@ CHARTER = (
     {
         "id": "component-tests",
         "principle": "Make components independently testable.",
-        "guidance": "Use local behavior checks and public-contract tests; test consumers when an interface changes.",
+        "guidance": "Give each component local behavior and public-contract checks; expand verification for changed contracts, shared infrastructure or unknown impact.",
     },
     {
         "id": "change-locality",
-        "principle": "Contain the reach of ordinary changes.",
-        "guidance": "A component's internal improvement should not require edits across unrelated owners.",
+        "principle": "Make components independent units of change.",
+        "guidance": "Let agents develop and verify cohesive components independently behind stable contracts; coordinate contract and shared-resource changes.",
     },
     {
         "id": "simplicity",
         "principle": "Use the simplest design that preserves the boundaries.",
-        "guidance": "Functions and objects are both valid; add a pattern only for a specific benefit beyond the simpler option.",
+        "guidance": "Prefer cohesive in-process packages; functions and objects are both valid. Separate services need a deployment, isolation or scaling benefit.",
     },
     {
         "id": "failure-behavior",

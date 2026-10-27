@@ -26,6 +26,9 @@ is not a rating or proof of irrelevance. Preserve explicit exhaustive reviews as
 every pair declared for detailed evaluation still needs a rating or unknown, tradeoffs and evidence.
 Prefer clear ownership, small public contracts and independently testable components. Functions and
 modular monoliths are valid choices; do not manufacture abstractions or force package extraction.
+Use `docs/component-architecture-principles.md`: components are independent units of change and
+verification, usually composed in process. Behavioral contracts and shared resources determine
+impact; unchanged signatures and bounded test-reference lists do not establish complete CI scope.
 
 The maintainer selected a clean slate and selective MVP capabilities. Do not treat every legacy
 feature as mandatory. Do not publish a release or alter the legacy service merely to move files.

@@ -81,6 +81,13 @@ Screening is not evidence that every unselected pattern is irrelevant. Source-aw
 proposals, and required project checks remain authoritative. Existing explicit model profiles and
 exhaustive results are preserved. Fresh Eyes stays independently requested.
 
+The [component architecture principles](component-architecture-principles.md) define the intended
+unit of independent development and verification: a cohesive component behind published behavioral
+contracts, usually composed in process. Shared schemas, mutable state, configuration and infrastructure
+can extend a change's scope even when signatures stay stable. Current guidance states these rules;
+the bounded two-level reference neighborhood and observed test links are not a verified CI plan.
+Declared components, resource-aware impact and executable check selection remain proposed work.
+
 Annotation validity includes its own source and public interfaces of resolved outgoing dependencies.
 Comment and body-only dependency edits preserve callers; changed signatures, documentation and
 exports invalidate them. A separate implementation-change flag preserves behavioral uncertainty;

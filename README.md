@@ -7,6 +7,10 @@ Its architectural advice favors clear ownership, small public contracts and inde
 components. The map measures public surfaces, private cross-module references, dependency cycles and
 observed test links. These are evidence for decisions, not proof that a change cannot break callers.
 Functions, objects and modular monoliths are all valid ways to preserve a useful boundary.
+The [component architecture principles](docs/component-architecture-principles.md) explain the
+house analogy: cohesive packages can be independent units of change and verification within one
+process. Behavioral contracts and shared data/configuration matter as well as method signatures.
+Current test links guide investigation; they do not generate a verified CI selection.
 Private-access checks cover resolved function, class and method references; private globals and
 instance attributes can be missed, so no finding does not establish complete boundary coverage.
 
