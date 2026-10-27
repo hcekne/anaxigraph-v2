@@ -79,23 +79,34 @@ class Resolver:
             return _member(submodule, ".".join(suffix), substatus)
         return None, status if status == "ambiguous" else "unresolved"
 
-    def target(self, expression_name: str, source: Module, scope: str) -> tuple[str | None, str]:
+    def import_target(
+        self, binding: tuple[str, str, str], suffix: list[str], source: Module
+    ) -> tuple[str | None, str]:
+        kind, module_name, imported = binding
+        if kind == "module":
+            return self._module_import(module_name, suffix, source)
+        return self._symbol_import(module_name, imported, suffix, source)
+
+    def targets(
+        self, expression_name: str, source: Module, scope: str
+    ) -> list[tuple[str | None, str]]:
         names = expression_name.split(".")
         method = _method_candidate(names, source, scope)
         if method:
-            return method, "ambiguous"  # The lexical method is only a possible dispatch target.
+            return [(method, "ambiguous")]  # Only a possible runtime dispatch target.
         for parent in _scopes(source, scope):
             if names[0] in source.bound.get(parent, set()):
-                return None, "unresolved"  # Parameters/assignments shadow outer lexical names.
+                return [(None, "unresolved")]  # Assignments shadow outer lexical names.
             qualified = ".".join(part for part in (parent, expression_name) if part)
             if qualified in source.definitions:
                 node = source.definitions[qualified]
                 count = sum(n.data.get("qualified_name") == qualified for n in source.nodes)
-                return node.id, "ambiguous" if count > 1 else "resolved"
-            binding = source.bindings.get(parent, {}).get(names[0])
-            if binding:
-                kind, module_name, imported = binding
-                if kind == "module":
-                    return self._module_import(module_name, names[1:], source)
-                return self._symbol_import(module_name, imported, names[1:], source)
-        return None, "unresolved"
+                return [(node.id, "ambiguous" if count > 1 else "resolved")]
+            bindings = source.bindings.get(parent, {}).get(names[0])
+            if bindings:
+                conditional = (parent, names[0]) in source.conditional_bindings
+                candidates = [self.import_target(item, names[1:], source) for item in bindings]
+                if len(bindings) > 1 or conditional:
+                    return [(target, "ambiguous") for target, _status in candidates]
+                return candidates
+        return [(None, "unresolved")]

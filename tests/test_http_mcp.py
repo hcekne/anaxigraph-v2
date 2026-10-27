@@ -13,7 +13,9 @@ def test_dashboard_and_stateless_mcp_share_the_same_application(tmp_path):
     app = Application(tmp_path)
     app.scan()
     headers = {"Accept": "application/json, text/event-stream"}
-    with TestClient(create_app(app), base_url="http://127.0.0.1:8765") as client:
+    with TestClient(
+        create_app(app), base_url="http://127.0.0.1:8765", client=("127.0.0.1", 50000)
+    ) as client:
         assert client.get("/").status_code == 200
         initialized = client.post(
             "/mcp",

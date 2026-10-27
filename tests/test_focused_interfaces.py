@@ -20,7 +20,9 @@ def test_boundary_columns_and_selected_card_requests_use_shared_application(tmp_
     application.scan()
     annotation = application.analysis_request("annotate", ["owner.py", "consumer.py"])
     application.submit_analysis(annotation["request_id"], answer(annotation))
-    with TestClient(create_app(application)) as client:
+    with TestClient(
+        create_app(application), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
+    ) as client:
         modules = client.get("/api/modules").json()["items"]
         boundary = {node["path"]: node["data"]["boundary"] for node in modules}
         assert boundary["owner.py"]["public_names"] == 1

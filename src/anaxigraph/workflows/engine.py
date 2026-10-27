@@ -1,8 +1,4 @@
-"""Small resumable batch executor shared by CLI, MCP and HTTP.
-
-Only progress and request identities live here. Validated annotations/reviews are
-saved by Application immediately; their contents are never copied into run files.
-"""
+"""Resumable CLI/MCP/HTTP progress; Application saves analysis content separately."""
 
 from __future__ import annotations
 
@@ -10,10 +6,11 @@ import fcntl
 import json
 import os
 import re
+import sqlite3
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
@@ -22,6 +19,7 @@ from anaxigraph.analysis.packets import plan_scopes
 from anaxigraph.workflows.progress import (
     attempt_summary,
     finish_batch,
+    plan_batch,
     record_model,
     start_batch,
     timing_summary,
@@ -29,6 +27,9 @@ from anaxigraph.workflows.progress import (
 from anaxigraph.workflows.providers import configured_model, execute, reasoning_effort
 from anaxigraph.workflows.scouts import (
     applied_reviewers,
+    consumable_saved,
+    finding_review_policy,
+    linked_products,
     plan_scouts,
     review_choices,
     review_workflow,
@@ -37,6 +38,16 @@ from anaxigraph.workflows.scouts import (
 _MUTEX = threading.RLock()
 _RUNNING: dict[tuple[str, str], threading.Thread] = {}
 _ACTIVE: set[tuple[str, str]] = set()
+
+
+class ProviderFailure(RuntimeError):
+    """An attempted model invocation failed, independently of local acceptance."""
+
+    def __init__(self, request_id):
+        super().__init__("Model invocation failed")
+        self.model_request_id = request_id
+
+
 KINDS = {
     "mapping": "annotate",
     "annotate": "annotate",
@@ -46,37 +57,26 @@ KINDS = {
     "delivery": "delivery",
     "fresh-eyes": "fresh-eyes",
 }
+
+
+def _default_model(model, effort):
+    return {"provider": "codex", "model": model, "reasoning_effort": effort}
+
+
 DEFAULTS: dict[str, Any] = {
     "workers": 32,
     "timeout_seconds": 600,
     "pattern_mode": "screened",
     "stages": {
         **{
-            kind: {
-                "provider": "codex",
-                "model": "gpt-6-luna",
-                "reasoning_effort": "low",
-                "fallbacks": [
-                    {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"}
-                ],
-            }
+            kind: _default_model("gpt-6-luna", "low")
+            | {"fallbacks": [_default_model("gpt-6.1-sol", "medium")]}
             for kind in ("annotate", "pattern-screen", "architecture", "delivery")
         },
-        "patterns": {
-            "provider": "codex",
-            "model": "gpt-6.1-sol",
-            "reasoning_effort": "medium",
-            "fallbacks": [
-                {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "xhigh"}
-            ],
-        },
+        "patterns": _default_model("gpt-6.1-sol", "medium")
+        | {"fallbacks": [_default_model("gpt-6.1-sol", "xhigh")]},
         **{
-            kind: {
-                "provider": "codex",
-                "model": "gpt-6.1-sol",
-                "reasoning_effort": "medium",
-                "fallbacks": [],
-            }
+            kind: _default_model("gpt-6.1-sol", "medium") | {"fallbacks": []}
             for kind in ("architecture-review", "delivery-review")
         },
         "fresh-eyes": {"provider": "codex", "model": "", "fallbacks": []},
@@ -130,6 +130,8 @@ def _stage_choices(stages: Any) -> dict[str, Any]:
 
 def _config(value: dict[str, Any] | None) -> dict[str, Any]:
     config = deepcopy(DEFAULTS)
+    if isinstance(value, dict):
+        value = {key: item for key, item in value.items() if key != "effective_finding_review"}
     if value:
         if not isinstance(value, dict) or set(value) - set(DEFAULTS):
             raise ValueError(
@@ -148,12 +150,12 @@ def _config(value: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(passes, list) or len(passes) > 4:
         raise ValueError("Select at most four ordered review passes")
     config["review_passes"] = [_worker(x) for x in passes]
-    return config
+    return config | {"effective_finding_review": finding_review_policy(config)}
 
 
 def _failure_message(error: Exception, phase: str) -> str:
     message = f"{phase} failed ({type(error).__name__})"
-    if phase == "validation" and isinstance(error, ValueError):
+    if phase in {"validation", "local"} and isinstance(error, ValueError):
         message = (str(error)[:2000].splitlines() or [message])[0]
     return re.sub(
         r"(?i)(?:api[_-]?key|password|token|secret)\s*[:=]\s*(?:\"[^\"]*\"|'[^']*'|\S+)",
@@ -263,6 +265,7 @@ class WorkflowRunner:
             "reused_batches": sum(bool(b.get("reused")) for b in batches),
             "elapsed_seconds": round(elapsed, 1),
             "workers": run["config"]["workers"],
+            "effective_finding_review": finding_review_policy(run["config"]),
             "failures": [
                 {"batch_id": b["id"], "error": b.get("error", "Worker failed")}
                 for b in batches
@@ -423,7 +426,7 @@ class WorkflowRunner:
                         for node in self.application._current().nodes
                         if node.kind == "module"
                     ]
-                self._review(run)
+                review_workflow(self, run)
                 run["status"] = "completed"
             except Exception as error:
                 run["status"], run["error"] = "failed", str(error)[:600]
@@ -446,9 +449,6 @@ class WorkflowRunner:
                 _RUNNING.pop((str(self.application.root), run_id), None)
                 _ACTIVE.discard((str(self.application.root), run_id))
 
-    def _review(self, run: dict[str, Any]) -> None:
-        review_workflow(self, run)
-
     def _stage(self, run: dict[str, Any], kind: str | tuple[str, ...]) -> None:
         kinds = (kind,) if isinstance(kind, str) else kind
         labels = {
@@ -470,11 +470,16 @@ class WorkflowRunner:
                     self._plan_scopes(run, stage)
                 run["stages_planned"].append(stage)
         self._save(run)
-        pending = [b for b in run["batches"] if b["kind"] in kinds and b["status"] != "completed"]
+        pending = [
+            b
+            for b in run["batches"]
+            if b["kind"] in kinds and b["status"] != "completed" and "children" not in b
+        ]
+        self._parallel(run, pending)
+
+    def _parallel(self, run, batches):
         with ThreadPoolExecutor(max_workers=run["config"]["workers"]) as pool:
-            jobs = [pool.submit(self._batch, run, batch) for batch in pending]
-            for job in as_completed(jobs):
-                job.result()
+            list(pool.map(lambda batch: self._batch(run, batch), batches))
 
     def _plan_scopes(self, run, kind):
         graph = self.application._current()
@@ -492,34 +497,17 @@ class WorkflowRunner:
             include_current=kind == "annotate" and bool(run["config"]["review_passes"]),
         )
         for scope in scopes:
-            run["batches"].append(
-                {
-                    "id": len(run["batches"]) + 1,
-                    "kind": kind,
-                    "scope": scope,
-                    "status": "pending",
-                    "attempts": 0,
-                    **(
-                        {"pipeline_paths": run["scope"] if run["kind"] == "delivery" else None}
-                        if kind == "delivery"
-                        else {}
-                    ),
-                }
-            )
+            options = {}
+            if kind == "delivery":
+                options["pipeline_paths"] = run["scope"] if run["kind"] == "delivery" else None
+            plan_batch(run, kind, scope, **options)
 
     def _plan_details(self, run):
         for batch in list(run["batches"]):
             if batch["kind"] == "pattern-screen":
                 for selection in self.application.analysis_selection(batch["request_id"]):
-                    run["batches"].append(
-                        {
-                            "id": len(run["batches"]) + 1,
-                            "kind": "patterns",
-                            "scope": [selection["module_id"]],
-                            "screen_id": batch["request_id"],
-                            "status": "pending",
-                            "attempts": 0,
-                        }
+                    plan_batch(
+                        run, "patterns", [selection["module_id"]], screen_id=batch["request_id"]
                     )
 
     def _request(self, batch):
@@ -552,6 +540,7 @@ class WorkflowRunner:
             self._save(run)
         phase, recorded = "request", False
         try:
+            graph = self.application._current()
             request = self._request(batch)
             if request is None:
                 return
@@ -564,7 +553,9 @@ class WorkflowRunner:
             }
             reviewers = [_selected_worker(x) for x in review_choices(run, batch["kind"])]
             pipeline = {"worker": selected, "review_passes": reviewers}
-            if self.application.analysis_saved(request["request_id"], pipeline):
+            if self.application.analysis_saved(
+                request["request_id"], pipeline
+            ) and consumable_saved(self.application, request["request_id"], batch["kind"]):
                 self._record_call(run, batch, request, selected, "reused", 0, reused=True)
                 with _MUTEX:
                     batch["status"], batch["reused"] = "completed", True
@@ -575,9 +566,11 @@ class WorkflowRunner:
             for candidate in candidates:
                 phase = "provider"
                 try:
+                    self.application._require_live(graph)
                     result = self._call(run, batch, request, candidate)
                     executed = applied_reviewers(request["kind"], result, reviewers)
                     for reviewer in executed:
+                        self.application._require_live(graph)
                         result = self._call(run, batch, request, reviewer, draft=result)
                     phase = "validation"
                     execution = {
@@ -593,11 +586,15 @@ class WorkflowRunner:
                     recorded = False
                     break
                 except Exception as error:
+                    if getattr(error, "model_request_id", None) != request["request_id"]:
+                        phase = "local"
                     recorded = True
                     self._record_failure(run, batch, error, phase)
                     if phase == "validation":
                         self._record_result(run, batch, request, candidate, "rejected", error)
                     last_error = error
+                    if phase == "local":
+                        raise
             else:
                 raise ValueError(str(last_error))
             phase = "progress"
@@ -657,6 +654,7 @@ class WorkflowRunner:
 
     def _call(self, run, batch, request, worker, *, draft=None):
         started = time.monotonic()
+        status, usage = "failed", None
         try:
             result = self.provider(
                 request,
@@ -664,29 +662,26 @@ class WorkflowRunner:
                 timeout=run["config"]["timeout_seconds"],
                 **({"draft": draft} if draft is not None else {}),
             )
-        except Exception:
+            if not isinstance(result, dict):
+                raise ValueError("Model response must be one JSON object")
+            usage = result.pop("_anaxigraph_usage", None)
+            status = "completed"
+            return result
+        except (OSError, sqlite3.Error):
+            raise
+        except Exception as error:
+            raise ProviderFailure(request["request_id"]) from error
+        finally:
             self._record_call(
                 run,
                 batch,
                 request,
                 worker,
-                "failed",
+                status,
                 time.monotonic() - started,
+                usage=usage,
                 review=draft is not None,
             )
-            raise
-        usage = result.pop("_anaxigraph_usage", None)
-        self._record_call(
-            run,
-            batch,
-            request,
-            worker,
-            "completed",
-            time.monotonic() - started,
-            usage=usage,
-            review=draft is not None,
-        )
-        return result
 
     def _record_call(
         self,
@@ -736,39 +731,22 @@ class WorkflowRunner:
             for b in run["batches"]
             if b["kind"] == "fresh-eyes" and "children" not in b and b["status"] == "completed"
         ]
-        level = 0
         while children:
             groups = [children[i : i + 16] for i in range(0, len(children), 16)]
             planned = []
             for group in groups:
                 batch = next((b for b in run["batches"] if b.get("children") == group), None)
                 if batch is None:
-                    batch = {
-                        "id": len(run["batches"]) + 1,
-                        "kind": "fresh-eyes",
-                        "children": group,
-                        "scope": [],
-                        "status": "pending",
-                        "attempts": 0,
-                    }
-                    run["batches"].append(batch)
+                    batch = plan_batch(run, "fresh-eyes", [], children=group)
                 planned.append(batch)
             self._save(run)
-            with ThreadPoolExecutor(max_workers=run["config"]["workers"]) as pool:
-                jobs = [
-                    pool.submit(self._batch, run, batch)
-                    for batch in planned
-                    if batch["status"] != "completed"
-                ]
-                for job in as_completed(jobs):
-                    job.result()
+            self._parallel(run, (batch for batch in planned if batch["status"] != "completed"))
             next_level = []
             for batch in planned:
                 if batch["status"] != "completed":
                     raise ValueError("Product reconciliation failed; subsystem designs are saved")
                 next_level.append(batch["request_id"])
+            linked_products(run)
             if len(next_level) == 1:
                 return
-            children, level = next_level, level + 1
-            if level > 8:
-                raise ValueError("Product hierarchy exceeds the supported reconciliation depth")
+            children = next_level  # Each level groups up to sixteen children, so it shrinks.

@@ -2,16 +2,105 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, ConfigDict, Field
 
 from anaxigraph.interfaces.mcp import create_mcp
+
+_LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
+
+def _origin(value: str) -> str:
+    url = urlsplit(value)
+    invalid = (
+        url.scheme not in {"http", "https"},
+        not url.hostname,
+        url.username is not None,
+        url.password is not None,
+        url.path not in {"", "/"},
+        bool(url.query),
+        bool(url.fragment),
+        any(c.isspace() for c in value),
+    )
+    if any(invalid):
+        raise ValueError("HTTP origins must be exact http(s) URLs without credentials or paths")
+    port = url.port
+    host = f"[{url.hostname}]" if ":" in str(url.hostname) else url.hostname
+    suffix = f":{port}" if port not in (None, {"http": 80, "https": 443}[url.scheme]) else ""
+    return f"{url.scheme}://{host}{suffix}"
+
+
+def _source_status(request: Request, origins: set[str]) -> int:
+    host = request.headers.get("host", "")
+    if (
+        len(request.headers.getlist("host")) != 1
+        or "/" in host
+        or len(request.headers.getlist("origin")) > 1
+    ):
+        return 421
+    try:
+        target = _origin(f"{request.scope['scheme']}://{host}")
+        if urlsplit(target).hostname not in _LOOPBACK and target not in origins:
+            return 421
+        origin = request.headers.get("origin")
+        if origin and _origin(origin) not in origins | {target}:
+            return 403
+    except ValueError:
+        return 403
+    return 403 if not origin and request.headers.get("sec-fetch-site") == "cross-site" else 0
+
+
+def _authorized(request: Request, token: str) -> bool:
+    scheme, _, value = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() == "basic":
+        try:
+            user, separator, value = base64.b64decode(value, validate=True).decode().partition(":")
+        except (ValueError, UnicodeError, binascii.Error):
+            return False
+        if user != "anaxigraph" or not separator:
+            return False
+    elif scheme.lower() != "bearer":
+        return False
+    return secrets.compare_digest(value.encode(), token.encode())
+
+
+class _HTTPGuard:
+    def __init__(self, app, origins: set[str], token: str | None):
+        self.app, self.origins, self.token = app, origins, token
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        request = Request(scope)
+        status = _source_status(request, self.origins)
+        if (
+            not status
+            and self.token is None
+            and (request.client is None or request.client.host not in _LOOPBACK)
+        ):
+            status = 403
+        if not status and self.token is not None and not _authorized(request, self.token):
+            return await JSONResponse(
+                {"detail": "Authentication required"},
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="AnaxiGraph"'},
+            )(scope, receive, send)
+        if status:
+            return await JSONResponse(
+                {"detail": "Untrusted HTTP host or origin"}, status_code=status
+            )(scope, receive, send)
+        return await self.app(scope, receive, send)
 
 
 class Input(BaseModel):
@@ -68,8 +157,34 @@ class ConfigurationInput(Input):
     config: dict[str, Any]
 
 
-def create_app(application: Any) -> FastAPI:
+def create_app(
+    application: Any, *, allowed_origins: list[str] | None = None, auth_token: str | None = None
+) -> FastAPI:
+    origins = {_origin(value) for value in allowed_origins or []}
+    if auth_token is not None and len(auth_token) < 32:
+        raise ValueError("HTTP auth token must contain at least 32 characters")
+    if any(urlsplit(value).hostname not in _LOOPBACK for value in origins) and auth_token is None:
+        raise ValueError("Non-loopback HTTP origins require an auth token")
     mcp = create_mcp(application)
+    local_hosts = [
+        value for host in ("127.0.0.1", "localhost", "[::1]") for value in (host, host + ":*")
+    ]
+    hosts = list(local_hosts)
+    sdk_origins = set(origins)
+    for origin in origins:
+        url = urlsplit(origin)
+        hosts.append(url.netloc)
+        if url.port is None:
+            authority = f"{url.netloc}:{443 if url.scheme == 'https' else 80}"
+            hosts.append(authority)
+            sdk_origins.add(f"{url.scheme}://{authority}")
+    mcp.settings.transport_security = TransportSecuritySettings(
+        allowed_hosts=hosts,
+        allowed_origins=[
+            scheme + "://" + host for scheme in ("http", "https") for host in local_hosts
+        ]
+        + sorted(sdk_origins),
+    )
     transport = mcp.streamable_http_app()
 
     @asynccontextmanager
@@ -82,6 +197,7 @@ def create_app(application: Any) -> FastAPI:
         description="One shared map for humans and coding agents",
         lifespan=lifespan,
     )
+    server.add_middleware(_HTTPGuard, origins=origins, token=auth_token)
     assets = Path(__file__).parent / "assets"
     server.mount("/assets", StaticFiles(directory=assets), name="assets")
 

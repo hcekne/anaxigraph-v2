@@ -261,7 +261,7 @@ def test_root_and_filtered_reviews_survive_portable_clone_with_explicit_coverage
     application.submit_analysis(filtered["request_id"], answer(filtered))
     before = delivery.advice(application, application._current())
     assert before["scope_status"] == "filtered" and before["pipeline_paths"] == paths
-    assert before["coverage"]["pipeline_ids"] == paths
+    assert before["coverage"]["pipeline_ids_total"] == len(paths)
     application.export_record()
     root = tmp_path / "another-machine" / "checkout"
     shutil.copytree(application.root, root, ignore=shutil.ignore_patterns(".anaxigraph-v2", ".git"))
@@ -289,8 +289,8 @@ def test_filtered_ci_scope_stays_compact_and_exposes_preview_limits(application)
     assert advice["pipeline_paths"] == paths[:3]
     assert advice["pipeline_paths_total"] == 16 and advice["pipeline_paths_truncated"]
     assert advice["coverage"]["pipeline_ids_total"] == 16
-    assert advice["coverage"]["pipeline_ids_truncated"]
-    assert len(json.dumps(advice).encode()) < 2500
+    assert set(advice["coverage"]) == {"partial_evidence", "pipeline_ids_total", "pipelines_total"}
+    assert len(json.dumps(advice).encode()) < 1500
 
 
 def test_ci_design_review_reuses_body_only_edit_without_another_model_call(application):

@@ -32,7 +32,7 @@ def test_validation_rejection_is_retained_while_retry_runs_and_after_success(tmp
     assert first["status"] == "failed"
     assert first["failed_attempts"] == 1
     assert first["attempt_failures"][0]["phase"] == "validation"
-    assert "three alternatives" in first["attempt_failures"][0]["error"]
+    assert "functional_summary" in first["attempt_failures"][0]["error"]
     events = application.evidence.events(100)["items"]
     transport = [row for row in events if row["kind"] == "model_call"]
     assert all(row["payload"]["status"] == "completed" for row in transport)

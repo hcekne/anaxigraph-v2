@@ -3,12 +3,6 @@
 // CI presentation takes its application/DOM helpers explicitly; it owns no analysis state.
 window.AnaxiGraphCI = (() => {
   let view;
-  function addList(parent, label, values) {
-    parent.append(view.textElement("h4", label));
-    const list = document.createElement("ul");
-    for (const value of values || []) list.append(view.textElement("li", value));
-    parent.append(list);
-  }
   function renderReview(parent, result) {
     const outcomes = (result.assessments || []).reduce((totals, item) => ({ ...totals, [item.outcome]: (totals[item.outcome] || 0) + 1 }), {});
     parent.append(view.textElement("p", `CI/CD review · ${outcomes.finding || 0} pipelines with findings · ${outcomes.keep || 0} keep · ${outcomes.unknown || 0} unknown. Plans remain proposals; checks were not executed.`, "section-note"));
@@ -18,11 +12,11 @@ window.AnaxiGraphCI = (() => {
       const card = view.textElement("article", "", "alternative-card");
       card.append(view.textElement("h3", recommendation.title), view.textElement("p", `Priority ${recommendation.priority} · ${(recommendation.pipeline_ids || []).join(", ")}`));
       card.append(view.textElement("p", recommendation.bottleneck));
-      for (const [field, label] of Object.entries(labels)) addList(card, label, recommendation[field]);
+      for (const [field, label] of Object.entries(labels)) view.reviewTradeoffs(card, label, recommendation[field]);
       card.append(view.textElement("p", (recommendation.evidence || []).map((item) => `${item.path}:${item.line}`).join(" · "), "section-note"));
       parent.append(card);
     }
-    addList(parent, "Review uncertainty", result.uncertainty);
+    view.reviewTradeoffs(parent, "Review uncertainty", result.uncertainty);
   }
   function renderPlan(result) {
     const parent = view.$("#ci-plan-summary");
@@ -36,14 +30,14 @@ window.AnaxiGraphCI = (() => {
     for (const target of result.selected_targets || []) {
       const card = view.textElement("article", "", "alternative-card");
       card.append(view.textElement("h4", target.id), view.textElement("p", target.command || "Declared target"));
-      addList(card, "Why this check is included", target.reasons || []);
+      view.reviewTradeoffs(card, "Why this check is included", target.reasons || []);
       card.append(view.textElement("p", target.cache_eligible ? "Input fingerprint available for trusted cache validation; no cache hit is claimed." : "No reusable check result has been established.", "section-note"));
       parent.append(card);
     }
-    if (result.uncovered_paths?.length) addList(parent, "Paths needing ownership or broader checks", result.uncovered_paths);
-    if (result.expansion_reasons?.length) addList(parent, "Why the scope widens", result.expansion_reasons);
-    if (result.layers?.length) addList(parent, "Execution order; each group can run in parallel", result.layers.map((layer) => layer.join(", ")));
-    if (result.reevaluation_reasons?.length) addList(parent, "CI/CD architecture review needed", result.reevaluation_reasons);
+    if (result.uncovered_paths?.length) view.reviewTradeoffs(parent, "Paths needing ownership or broader checks", result.uncovered_paths);
+    if (result.expansion_reasons?.length) view.reviewTradeoffs(parent, "Why the scope widens", result.expansion_reasons);
+    if (result.layers?.length) view.reviewTradeoffs(parent, "Execution order; each group can run in parallel", result.layers.map((layer) => layer.join(", ")));
+    if (result.reevaluation_reasons?.length) view.reviewTradeoffs(parent, "CI/CD architecture review needed", result.reevaluation_reasons);
     if (result.critical_path_seconds != null) parent.append(view.textElement("p", `Declared critical path: ${result.critical_path_seconds} seconds. ${result.critical_path_basis || ""}`, "section-note"));
   }
   function bindPlanForm(helpers) {

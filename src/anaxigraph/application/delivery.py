@@ -18,10 +18,6 @@ from anaxigraph.indexing.ci_evidence import capture_ci_evidence, redacted_comman
 POLICY_PATH = "anaxigraph/ci-policy.json"
 
 
-def _constant(value):
-    raise ValueError(f"CI policy contains non-finite value {value}")
-
-
 def policy(app: Any, graph) -> dict | None:
     if POLICY_PATH not in graph.snapshot.files:
         if (app.root / POLICY_PATH).exists():
@@ -29,7 +25,7 @@ def policy(app: Any, graph) -> dict | None:
         return None
     captured = capture_sources(app.root, [POLICY_PATH], graph.snapshot.files, maximum=1_000_000)
     try:
-        return validate_policy(json.loads(captured[POLICY_PATH], parse_constant=_constant))
+        return validate_policy(json.loads(captured[POLICY_PATH]))
     except (TypeError, ValueError) as error:
         raise ValueError(f"Invalid CI policy: {error}") from error
 
@@ -51,10 +47,7 @@ def _policy_context(app: Any, graph) -> dict:
         "targets": targets,
         "targets_total": len(declared["targets"]),
         "targets_truncated": len(declared["targets"]) > 100,
-        "always": declared["always"],
-        "fallback": declared["fallback"],
-        "shared_inputs": declared["shared_inputs"],
-        "ignored_inputs": declared["ignored_inputs"],
+        **{key: value for key, value in declared.items() if key not in {"version", "targets"}},
     }
 
 
@@ -75,27 +68,21 @@ def context(app: Any, graph, pipeline_paths: list[str] | None = None) -> dict:
 
 def _scope(body: dict) -> dict:
     paths = body.get("request_options", {}).get("pipeline_paths") or []
-    captured = body.get("delivery_coverage")
-    coverage = None
-    if isinstance(captured, dict):
-        coverage = {key: value for key, value in captured.items() if type(value) in {bool, int}}
-        for key in ("pipeline_ids", "incomplete_declarations"):
-            values = captured.get(key, [])
-            coverage[key] = [value[:240] for value in values[:3]]
-            coverage[key + "_total"] = len(values)
-            coverage[key + "_truncated"] = len(values) > 3
+    captured = body.get("delivery_coverage") or {}
+    partial = captured.get("partial_evidence") is not False
+    reviewed = len(captured.get("pipeline_ids", []))
     return {
         "pipeline_paths": [value[:240] for value in paths[:3]],
         "pipeline_paths_total": len(paths),
         "pipeline_paths_truncated": len(paths) > 3,
-        "coverage": coverage,
+        "coverage": {
+            "partial_evidence": partial,
+            "pipeline_ids_total": reviewed,
+            "pipelines_total": captured.get("pipelines_total", reviewed),
+        },
         "scope_status": "filtered"
         if paths
-        else (
-            "partial_evidence"
-            if coverage is None or coverage.get("partial_evidence") is not False
-            else "captured_declarations"
-        ),
+        else ("partial_evidence" if partial else "captured_declarations"),
     }
 
 
@@ -116,7 +103,7 @@ def advice(app: Any, graph) -> dict:
         "status": "compatible_design_review",
         **scope,
         "review_id": row["id"],
-        "basis": "Matching CI, component-interface and policy inputs; no checks were executed or reused.",
+        "basis": "Matching CI, component inventory/topology and policy inputs; no checks were executed or reused.",
         "suggestions": [
             {
                 "title": item["title"],

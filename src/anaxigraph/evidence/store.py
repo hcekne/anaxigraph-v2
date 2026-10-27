@@ -160,9 +160,12 @@ class Evidence:
         active = task_id or payload.get("task_id") or self._get(db, "active_task")
         stamp = datetime.now(timezone.utc).isoformat()
         envelope = payload | {"arm": self.arm, "experiment_id": self.experiment_id}
+        encoded = _encode(envelope)
+        identity = db.execute("SELECT coalesce(max(id),0)+1 FROM events").fetchone()[0]
+        self._retain(db, len(encoded.encode()) + 128)
         cursor = db.execute(
-            "INSERT INTO events(at,task_id,kind,payload) VALUES (?,?,?,?)",
-            (stamp, active, kind, _encode(envelope)),
+            "INSERT INTO events(id,at,task_id,kind,payload) VALUES (?,?,?,?,?)",
+            (identity, stamp, active, kind, encoded),
         )
         if kind == "task_started":
             self._set(db, "active_task", payload["task_id"])
@@ -171,14 +174,6 @@ class Evidence:
                 "active_task_key",
                 [payload["task"], payload["starting_revision"], payload["baseline_id"]],
             )
-        count = db.execute("SELECT count(*) FROM events").fetchone()[0]
-        if count > self.max_events:
-            removed = count - self.max_events
-            db.execute(
-                "DELETE FROM events WHERE id IN (SELECT id FROM events ORDER BY id LIMIT ?)",
-                (removed,),
-            )
-            self._set(db, "dropped_events", self._get(db, "dropped_events", 0) + removed)
         return {
             "id": cursor.lastrowid,
             "at": stamp,
@@ -186,6 +181,21 @@ class Evidence:
             "kind": kind,
             "payload": envelope,
         }
+
+    def _retain(self, db: sqlite3.Connection, incoming: int) -> None:
+        # Leave half the physical budget for SQLite pages, metadata and the next write.
+        rows = db.execute(
+            "SELECT id,length(CAST(payload AS BLOB))+128 AS bytes FROM events ORDER BY id"
+        ).fetchall()
+        used, removed = sum(row["bytes"] for row in rows) + incoming, 0
+        while removed < len(rows) and (
+            used > self.max_bytes // 2 or len(rows) - removed >= self.max_events
+        ):
+            used -= rows[removed]["bytes"]
+            removed += 1
+        if removed:
+            db.execute("DELETE FROM events WHERE id<=?", (rows[removed - 1]["id"],))
+            self._set(db, "dropped_events", self._get(db, "dropped_events", 0) + removed)
 
     def start_task(
         self,

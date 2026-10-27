@@ -99,8 +99,8 @@ def test_existing_behavior_contract_consumers_and_tests_guide_the_change():
     assert reuse["owner"] == "module:billing.py"
     assert "list_invoices" in reuse["suggestion"]
     assert reuse["evidence"] == [{"path": "billing.py", "line": 20}]
-    contract = next(step for step in steps if step["kind"] == "contract")
-    assert "tenant isolation" in contract["suggestion"]
+    contract = brief["contracts"][0]
+    assert "tenant isolation" in contract["statement"]
     checks = next(step for step in steps if step["kind"] == "compatibility-and-tests")
     assert checks["consumers"] == ["api/export.py"]
     assert checks["tests"] == ["tests/test_billing.py"]
@@ -194,11 +194,9 @@ def test_stale_contracts_require_verification_and_input_is_unchanged():
     changed = replace(graph, nodes=(replace(graph.nodes[0], data=data), *graph.nodes[1:]))
     before = copy.deepcopy(changed)
     brief = prepare(changed, matches, "Add export")
-    contract = next(
-        step for step in brief["implementation_advice"]["steps"] if step["kind"] == "contract"
-    )
+    contract = brief["contracts"][0]
     assert contract["annotation_status"] == "stale"
-    assert "Verify" in contract["suggestion"]
+    assert "verify stale" in brief["implementation_advice"]["steps"][0]["suggestion"]
     assert changed == before
 
 

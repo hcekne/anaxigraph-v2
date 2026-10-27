@@ -284,6 +284,7 @@ else:
     assert '--sandbox' in sys.argv and 'read-only' in sys.argv
     assert 'model_reasoning_effort="xhigh"' in sys.argv
     assert 'CODEX_THREAD_ID' not in os.environ
+    assert 'ANAXIGRAPH_HTTP_TOKEN' not in os.environ
     payload = sys.stdin.read()
     assert 'BEHAVIOR ONLY' in payload and 'secret.py' not in payload
     target = pathlib.Path(sys.argv[sys.argv.index('--output-last-message')+1])
@@ -294,6 +295,7 @@ else:
     executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
     monkeypatch.setenv("CODEX_THREAD_ID", "must-not-reach-worker")
+    monkeypatch.setenv("ANAXIGRAPH_HTTP_TOKEN", "must-not-reach-worker")
     _verified.cache_clear()
     request = {
         "request_id": "r",

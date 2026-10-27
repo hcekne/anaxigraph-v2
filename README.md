@@ -1,367 +1,92 @@
-# AnaxiGraph V2
+# AnaxiGraph
 
-AnaxiGraph helps people and coding agents write better code, make sound architecture decisions,
-and leave subsequent changes straightforward.
+AnaxiGraph helps people and coding agents understand a codebase, choose useful architectural
+improvements, and keep later changes manageable.
 
-Its architectural advice favors clear ownership, small public contracts and independently testable
-components. The map measures public surfaces, private cross-module references, dependency cycles and
-observed test links. These are evidence for decisions, not proof that a change cannot break callers.
-Functions, objects and modular monoliths are all valid ways to preserve a useful boundary.
-The [component architecture principles](docs/component-architecture-principles.md) explain the
-house analogy: cohesive packages can be independent units of change and verification within one
-process. Behavioral contracts and shared data/configuration matter as well as method signatures.
-Current test links guide investigation; they do not generate a verified CI selection.
-New Pattern runs also execute three targeted architectural scouts and one root CI/CD review:
-component boundaries, standalone packages/repositories, independent verification and the delivery
-pipeline. Their current findings feed change
-guidance; plan assessment requires an adopt/defer/reject reason for material recommendations.
-The [scout workflow and limits](docs/change-request-architecture-scouts.md) distinguish those
-mechanical requirements from verified implementation or automatic CI selection.
-Private-access checks cover resolved function, class and method references; private globals and
-instance attributes can be missed, so no finding does not establish complete boundary coverage.
+It combines a compact code graph with concise module explanations, focused architectural and
+pattern reviews, implementation-blind Fresh Eyes designs, and CI/CD guidance. Use the module table
+and dependency views yourself, or connect an agent through MCP. Both use the same saved understanding.
 
-This is the clean replacement core targeting **anaxigraph 1.0**. The first milestone is a local
-`1.0.0a1` alpha, separate from the existing 0.9.1 package. Features are added selectively; this
-folder does not import the old runtime or automatically replace an installed service.
+V2 is the replacement core targeting AnaxiGraph 1.0. This repository currently builds `1.0.0a1`;
+it has not replaced the published legacy package. Python/PYI is parsed; JavaScript/TypeScript
+files are tracked but their code relationships are not yet parsed.
 
-Standalone repository: [hcekne/anaxigraph-v2](https://github.com/hcekne/anaxigraph-v2).
-The local checkout is `~/repos/anaxigraph-v2`.
-
-## Run with uv
-
-From this repository:
+## Start with uv
 
 ```bash
-cd ~/repos/anaxigraph-v2
+git clone https://github.com/hcekne/anaxigraph-v2.git
+cd anaxigraph-v2
 uv sync --locked
 uv run anaxigraph scan --repo /absolute/path/to/your/repo
 uv run anaxigraph serve --repo /absolute/path/to/your/repo
 ```
 
-Open <http://127.0.0.1:8766>. The dashboard uses the same application as CLI and MCP. It includes a
-sortable module table, expandable evidence, focused dependency graph, agent-review workflows and
-change guidance. Structural results are available before semantic analysis.
+Open <http://127.0.0.1:8766>. Start **Mapping** to add semantic understanding; the structural map
+is available immediately after a scan. Authenticate your installed Codex or Claude CLI before
+running model workflows. The dashboard lets you choose models, reasoning effort and parallel workers.
 
-From another working directory, use `uv run --project /absolute/path/to/anaxigraph-v2 anaxigraph ...`.
-`--project` selects the environment; it does not change the working directory or the target repo.
-Always give `--repo` explicitly in agent configuration. See [uv's command reference](https://docs.astral.sh/uv/reference/cli/).
+To run from another directory, use `uv run --project /absolute/path/to/anaxigraph-v2 anaxigraph ...`.
+Give `--repo` explicitly so the right checkout is used.
 
-## Connect an agent through MCP
+## Connect a coding agent
 
-Use this stdio configuration, replacing both absolute paths:
+Replace the two paths in your MCP client's configuration:
 
 ```json
 {
   "mcpServers": {
-    "anaxigraph-v2": {
+    "anaxigraph": {
       "command": "uv",
       "args": [
         "run", "--project", "/absolute/path/to/anaxigraph-v2",
-        "anaxigraph", "--repo", "/absolute/path/to/your/repo", "mcp"
+        "anaxigraph", "mcp", "--repo", "/absolute/path/to/your/repo"
       ]
     }
   }
 }
 ```
 
-The everyday loop is `scan` → `prepare_change` → focused `inspect` → edit → `scan` →
-`validate_change`. `assess_plan` checks proposed file placement before a substantial change.
-Preparation pins the baseline for the current task and Git HEAD. A new task or HEAD starts a fresh
-comparison; repeated scans within the same task retain it. Use `continue_task=true` (CLI
-`--continue-task`) to explicitly continue across those changes, or select `baseline_id` directly.
-Validation reports both comparison identities.
-`modules` lists the inventory; `reviews` finds saved proposals. The server never executes target
-project code. Test/type/lint receipts supplied by an agent or CI are attributed reports, bound to
-the exact snapshot ID. Missing checks remain unchecked; stale receipts cannot pass the candidate.
+A running dashboard also serves MCP at `http://127.0.0.1:8766/mcp`. Verify that the agent can call
+`scan` and `prepare_change`; some clients require explicit authorization for MCP tools.
+See [connection and remote-access instructions](docs/usage.md#connections).
 
-`serve` also exposes the same MCP tools over Streamable HTTP at
-`http://127.0.0.1:8766/mcp` (or your selected port). A local shared service can keep an existing
-HTTP client connection while switching its runtime to V2; the dashboard and MCP use one Application.
-Stdio remains available for an agent tied to a specific checkout.
+## Recommended routine
 
-For unattended Codex use of your trusted local AnaxiGraph server, authorize its tools specifically:
+| When | Use AnaxiGraph to |
+| --- | --- |
+| First use or a fresh checkout | Scan and run Mapping. Reuse compatible records carried through Git. |
+| Each substantial coding task | Prepare the change, inspect relevant owners/contracts, then assess the plan. |
+| After editing | Scan again, run appropriate project checks, and validate against the original task baseline. |
+| A completed feature or meaningful refactor | Run Patterns to look for better boundaries, packages, tests and applicable patterns. |
+| A milestone, architectural change, or weekly on an active project | Run Fresh Eyes for three alternative designs based on functionality. |
+| Component, shared-build or pipeline changes | Review CI/CD and update the declared check policy where needed. |
 
-```toml
-[mcp_servers.anaxigraph]
-url = "http://127.0.0.1:8766/mcp"
-default_tools_approval_mode = "approve"
-```
+These are starting habits, not a requirement to run every model workflow after every edit.
+Mapping refreshes changed understanding; repeated unchanged workflows reuse compatible results.
+Pattern runs include focused architecture scouts and one CI/CD review. Fresh Eyes is separate.
 
-This scoped setting is separate from normal command approvals. Without it, a client configured
-to reject approval prompts can attach the server yet reject every tool call. Verify a successful
-`scan` and `prepare_change`, including server-side evidence, before relying on an automated trial.
+[The usage guide](docs/usage.md) includes an instruction block for your project's `AGENTS.md`,
+reviewing recommendations, choosing a sensible cadence, and collecting feedback from agents.
 
-When replacing an older service with custom source exclusions, pass
-`--exclusions /path/to/exclusions.json` on every CLI/server invocation. The JSON array contains
-repository-relative glob patterns. The same policy applies to scans and live-source checks;
-V2 does not silently interpret the legacy `.anaxigraph.yml` provider configuration.
+## Carry the understanding with your code
 
-## Run Mapping, Patterns, Component Architecture, CI/CD or Fresh Eyes
+Completed workflows export portable understanding to **`anaxigraph/record.json`**. Commit that
+folder to share compatible analyses between development machines and scheduled cloud jobs.
+Keep the local `.anaxigraph-v2/` cache out of Git. Ordinary structural scans do not publish a record;
+use `anaxigraph export` after manual analysis submissions.
 
-The dashboard's **Run full mapping**, **Run pattern analysis**, **Run full component review**,
-**Review CI/CD** and **Run full Fresh Eyes** buttons execute the five workflows. New defaults use **Luna/low** for mapping,
-architectural scouts and ID-only pattern
-screening, **Sol/medium** for shortlisted detailed reviews, and a pool of **32** independent workers.
-CI/CD review also starts with Luna/low. Positive architecture or CI/CD findings receive a separate
-Sol/medium review by default; keep/unknown-only drafts skip it. The finding review models are configurable; explicit ordered review
-passes replace its default. Recording an adopt decision still does not verify implementation.
-Existing explicit model selections remain unchanged. Choose Codex or Claude and a model for each stage, parallel workers
-(1–100), optional stronger fallbacks and ordered review passes. Installed provider CLIs must already
-be authenticated. A blank model uses the local CLI's selected default. Independent batches run in
-parallel; enabled OpenAI and Claude review passes remain ordered within each batch.
-The default model-call deadline is 600 seconds. Set `timeout_seconds` to `null` (leave the dashboard
-field blank) to wait without an elapsed deadline. Output/storage limits still apply. Codex workers
-can explicitly set `reasoning_effort` to `low`, `medium`, `high` or `xhigh`; the dashboard exposes the
-same choice. The evidence ledger distinguishes that requested CLI setting from an unverified
-provider default. Claude workers do not accept this Codex-specific setting.
-Modules containing only documentation, comments or `pass` are observed as inert: their annotations
-can have empty capabilities, and Fresh Eyes retains their coverage without inventing requirements.
-Capability and contract statements must be behavior-only; source references belong in separate
-evidence fields. Older briefs that leak implementation identities are marked stale individually.
-Portable analyses can survive unrelated documentation or Python changes when their rebuilt scoped
-inputs match exactly. Seed data, configuration, frontend resources and cited documents remain guarded;
-older records without that resource-context proof require a complete source match.
-Workflow status retains batch attempts, retries and recent failure details after a later success.
-`failed_attempts` counts recorded failures, including fallback candidates; it can exceed batch attempts.
-When `attempt_history_complete` is false, older failure details are unknown. Provider `model_call`
-completion and `analysis_result` acceptance/rejection are separate evidence events.
+AnaxiGraph favors cohesive components with clear public contracts and independent tests, usually
+composed in one process. Separate packages and repositories are options when they make maintenance
+and agent work easier. Recommendations are proposals to investigate; project checks establish
+whether the resulting implementation works.
 
-The same workflows are available to coding agents through MCP and the CLI:
+## Read further
 
-```bash
-uv run anaxigraph run mapping --repo /path/to/repo
-uv run anaxigraph run patterns --repo /path/to/repo
-uv run anaxigraph run architecture --repo /path/to/repo
-uv run anaxigraph run ci --repo /path/to/repo
-uv run anaxigraph run fresh-eyes --repo /path/to/repo
-uv run anaxigraph runs --repo /path/to/repo
-uv run anaxigraph resume RUN_ID --repo /path/to/repo
-```
+- [Usage and agent instructions](docs/usage.md)
+- [Component architecture principles](docs/component-architecture-principles.md)
+- [CI policy format and examples](docs/change-request-ci-delivery.md#declare-accepted-tasks)
+- [Architecture and component contracts](docs/architecture.md)
+- [Measured results and known limits](docs/evidence/ci-delivery-qualification.json)
 
-CLI runs wait for completion. HTTP/MCP runs return a durable run ID and progress. Progress shows
-completed/total batches, active workers, elapsed time, failures and **Final reconciliation**.
-Accepted results are saved immediately; resume retries unfinished batches. A repeated unchanged
-workflow reuses compatible accepted results with the same model/review pipeline.
-Per-batch timestamps and cumulative wall durations include failed attempts. Model-call time and
-tokens are separate from local/cache work. Pattern review shows screening and detailed review as
-separate phases. Three focused architecture scouts per group and one root CI/CD review run alongside screening. Fresh Eyes
-runs only when requested, outside the mapping-plus-Patterns path.
-
-Save model settings in the dashboard or through `workflow-config --file settings.json`. For example:
-
-```json
-{
-  "workers": 32,
-  "timeout_seconds": null,
-  "pattern_mode": "screened",
-  "stages": {
-    "annotate": {
-      "provider": "codex",
-      "model": "gpt-6-luna",
-      "reasoning_effort": "low",
-      "fallbacks": [{"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"}]
-    },
-    "pattern-screen": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
-    "architecture": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
-    "architecture-review": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
-    "delivery": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
-    "delivery-review": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
-    "patterns": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
-    "fresh-eyes": {"provider": "claude", "model": "YOUR_DESIGN_MODEL"}
-  },
-  "review_passes": []
-}
-```
-
-Use model names supported by your installed CLI. Workers receive only their evidence packet in an
-isolated temporary directory with tools, MCP integrations and repository instructions disabled.
-Fresh Eyes receives behavior and the source-independent charter, without source identities or topology. Its subsystem designs
-feed independent product-level design through functional briefs, preserving three alternatives at
-each level. Final reconciliation checks declared coverage; it does not prove novelty or correctness.
-
-Individual request/submit control remains available:
-
-```bash
-uv run anaxigraph request annotate --repo /path/to/repo --scope src/example.py > /tmp/task.json
-# Give the packet and response_schema to a coding agent; save its JSON response.
-uv run anaxigraph submit REQUEST_ID /tmp/result.json --repo /path/to/repo
-uv run anaxigraph request pattern-screen --repo /path/to/repo --scope src/example.py
-# For manual detail, pass selected catalogue IDs; omitting --pattern-ids requests an exhaustive task.
-uv run anaxigraph request patterns --repo /path/to/repo --scope src/example.py --pattern-ids adapter
-uv run anaxigraph request fresh-eyes --repo /path/to/repo
-uv run anaxigraph request delivery --repo /path/to/repo --scope .github/workflows/ci.yml
-uv run anaxigraph reviews --repo /path/to/repo
-uv run anaxigraph inspect review:REVIEW_ID --repo /path/to/repo
-```
-
-Requests survive application restart. Module scopes accept module IDs or relative paths.
-CI/CD scopes name pipeline paths and retain root analysis scope; this review needs no Python
-modules or semantic annotations and works on a JavaScript-only repository.
-Manual annotation requests default to the first module; pattern requests default to an eligible production
-module. Default Pattern workflows cover production modules, excluding tests and inert markers.
-Active package facades stay eligible, and explicit scopes may include tests. Set `pattern_mode` to
-`"exhaustive"` for the full written matrix. Neither exclusion nor non-selection proves irrelevance.
-Workflow annotation and Pattern jobs default to one module; blind subsystems default to sixteen.
-Budgets apply per job (configurable 2 MB input and 8 MB result defaults), rather than requiring a
-whole repository to fit in 256 KB. Large repositories are partitioned and reconciled. Ordinary
-inventories and review lists stay compact and paged.
-Saved reviews retain their original results and disclose stale source, semantic, catalogue or
-prompt inputs separately from structural readiness.
-
-- **Annotations:** one module sentence, a short paragraph, one sentence for every supplied function,
-  capabilities, uncertainty and contracts with declared/inferred basis and source references.
-- **Patterns:** cheaply screen the 133-card reference catalogue using the architecture charter,
-  structural evidence and concise module understanding. Return only zero to ten plausible IDs;
-  write detailed ratings, benefits, costs, alternatives and evidence for those selections. Empty
-  shortlists make no strong-model call. Reconciliation distinguishes screened, selected, detailed
-  and excluded scope. Positive ratings require a concrete incremental improvement. Explicit
-  exhaustive requests remain available; missing or duplicate declared detail pairs are rejected.
-- **Fresh Eyes:** functional statements with opaque requirement IDs and the source-independent
-  charter. Give the returned packet
-  to a fresh worker **without repository/source tools**. Do not append source or dependency context.
-  Each of three alternatives must cover all supplied requirements, explain tradeoffs and include a
-  high-level Mermaid diagram. Internal workers have tool access disabled. An externally supplied
-  agent remains responsible for honoring its packet's isolation requirements. The service cannot
-  prove architectural novelty; it retains all alternatives and separates later source-aware comparison.
-- **CI/CD:** inspect captured GitHub Actions jobs, dependencies, conditions, output mappings,
-  literal path-filter rules, matrices, commands,
-  caches and local reusable workflows/actions, alongside declared task policy and inferred component
-  context. Return at most three actionable recommendations with a fast path, widening conditions,
-  cache strategy, parallelism, deployment checks, retained obligations and next steps. Captured
-  script fingerprints invalidate advice when selectors change; script bodies, remote actions,
-  dynamic expressions and missing timings remain unknown. Truncated evidence is labelled partial.
-
-The dashboard can copy these tasks, accept result JSON and display saved proposals. Pattern ratings
-remain hypotheses. Source-aware verification of a frozen alternative is separate from blind design.
-The [architecture-scout qualification](docs/change-request-architecture-scouts.md) records the earlier,
-**pre-CI/CD** workflow on an isolated twelve-module Snow Rankings copy: **107.2 seconds** for a cold map plus
-Patterns including mandatory scouts, then **1.1 seconds** unchanged with no model calls. Its single
-portable record stayed at **109,914 bytes**. Small recognition cases retain both a failed initial
-recommendation and the subsequent reviewed results. These are measured examples, not general
-latency or code-quality guarantees. Targets do not impose worker deadlines.
-The [earlier focused-review qualification](docs/change-request-focused-reviews.md#completed-qualification--27-october-2026)
-preserves the preceding protocol's 83.1-second result and 63.5-second leaf edit; that workload did
-not include the new scouts. Neither workload included the new root CI/CD review; those measurements
-do not establish the current workflow's latency.
-
-## Plan focused CI checks
-
-CI/CD is an architectural concern: a component should have a small executable verification target,
-and its public contracts, consumers and shared inputs should explain when checks must widen.
-Run **CI/CD review** to inspect the actual pipeline before proposing changes. It recognizes existing
-selectors and task commands; it does not execute project code or edit CI configuration.
-
-Accept concrete task declarations in **`anaxigraph/ci-policy.json`**, then preview a change plan:
-
-```bash
-uv run anaxigraph scan --repo /path/to/repo
-uv run anaxigraph ci-plan --repo /path/to/repo --base-ref main
-```
-
-The plan identifies the base and candidate, selected commands, dependency layers, reasons for
-widening, unresolved paths and retained scheduled/release tasks. `needs` orders prerequisites;
-`consumes` also propagates changed output to consumers. Shared inputs widen selection. Unknown
-ownership uses only the declared fallback and remains incomplete. Neither unchanged signatures nor
-the map's two-level neighborhood establishes safe CI scope.
-
-Cache fingerprints are computed only from declared inputs, consumed producers and supplied runtime
-context; they are neither cache hits nor passed checks. Commands and deployments are never run by
-the planner. Re-evaluate the CI design when component agreements, shared infrastructure or CI/task
-configuration changes. The [CI/CD change request and policy example](docs/change-request-ci-delivery.md)
-document the format, constraints and next steps for adopting a plan in your existing runner.
-The [completed CI/CD qualification](docs/change-request-ci-delivery.md#qualification-and-limits)
-records three real model-reviewed cases, zero-call unchanged repeats and local portable/MCP/browser
-checks. It recognizes existing optimizations and conditional opportunities; no application pipeline
-was changed and equivalent assurance or delivery-time savings have not been measured.
-
-## What the first milestone supports
-
-Python/PYI structure, signatures, scoped imports/calls/references, module dependency projections,
-observed test links, compact saved semantics, basic lexical/symbol guidance, placement assessment,
-current/previous comparison, and agent/CI check attribution. Source is parsed, never imported.
-
-Working-tree fingerprints include eligible untracked changes and distinguish exact worktrees.
-Status describes the saved snapshot; scan after editing to refresh source facts.
-Dynamic targets, parse errors and unsupported languages remain explicit. JavaScript/TypeScript
-are fingerprinted but **not parsed** yet. Missing references do not establish dead code. Placement
-assessment is advisory; behavioral correctness and architectural usefulness require real review.
-
-Unchanged files reuse verified fingerprints and parser observations within the service. Annotation
-writes update one search document. Dependency freshness uses public signatures, docstrings and
-exports. Body-only changes preserve caller annotations and separately flag changed implementations;
-preserved annotations do not prove unchanged behavior. Own-source edits still invalidate that module.
-Fresh CLI processes start with cold caches.
-
-## Carry understanding through Git
-
-After an explicit export or full workflow, the target repository contains **`anaxigraph/record.json`**. It carries
-concise module/function understanding, saved analyses, input identities and provenance. It contains
-no source bodies, SQL database, deterministic dependency graph or search cache. Commit and push
-`anaxigraph/` with your normal Git workflow. Another clone builds its local structural index and
-automatically reuses compatible annotations and analyses from this record without new model calls.
-Changed inputs remain stale; local current understanding takes precedence. Product reviews retain
-their subsystem lineage. Unchanged exports are byte-stable and create no additional partitions.
-
-```bash
-uv run anaxigraph export --repo /path/to/repo
-uv run anaxigraph import --repo /path/to/repo
-uv run anaxigraph scan --export --repo /path/to/repo
-```
-
-Manual submissions save locally; export explicitly after a manual session. Full workflows export
-at completion or failure, preserving accepted batches. Mapping, exporting and committing/pushing
-are separate states. Status measures the record against the local Git commit and configured
-remote-tracking reference, explicitly reporting unknowns and that no remote was contacted. Ordinary
-scans update the local index and may reuse an existing record; they do not create one automatically.
-Source packages named `anaxigraph` remain indexable alongside recognized portable artifacts.
-Ignore `.anaxigraph-v2/` in Git for local caches and trial state; track `anaxigraph/` when you
-explicitly publish portable understanding.
-
-Local state lives in `.anaxigraph-v2/knowledge.sqlite`: current and previous graphs plus one pinned
-change baseline, canonical annotations and compressed review packets. Current batch results are
-retained by scope rather than discarded after twenty reviews. The SQLite ceiling is 100 MB;
-portable publication also budgets for active local state, targeting 100 MB combined. Workflow
-progress has bounded file count and size, with a 200 MB retained-state guard. Capacity failure
-preserves the last valid record. A schema migration keeps one pre-migration SQLite backup.
-
-Legacy paid-analysis import, shared worktree bases, production deployment and additional languages
-remain later choices. Existing legacy saved analyses are left intact. Full old-feature parity is not
-the objective. See the [change request and acceptance checks](docs/change-request-workflows.md).
-
-## Components and tests
-
-Eight components have explicit boundaries: contracts, indexing, storage, analysis, workflow execution,
-local evidence, application and interfaces. See [architecture and packaging direction](docs/architecture.md).
-
-Task preparation, explicitly inspected entities, validation reports and actual model calls produce
-bounded local evidence in `.anaxigraph-v2/trial.sqlite` (5 MB). Supplied context and requested
-inspections are distinct; neither proves the agent understood a result. Codex/Claude CLI usage is
-captured when reported; missing tokens or dollar costs remain unknown. Read or export it with
-`anaxigraph evidence` / `anaxigraph evidence --export`, or the equivalent MCP/HTTP tools. No external
-telemetry is sent; `ANAXIGRAPH_EVIDENCE=off` disables recording. The separate
-[Snow Rankings experiment](docs/snow-rankings-experiment.md) compares the same product tasks with
-and without AnaxiGraph using the same GPT-6.1-Sol/xhigh coding model.
-
-From this folder:
-
-```bash
-uv sync --locked --extra dev
-uv run pytest
-uv run ruff check src tests
-uv run mypy
-uv run python scripts/quality.py
-uv build
-```
-
-Tests cover actual Git/worktrees, unresolved references, malformed/incomplete results, dependency
-freshness, interrupted/repeated persistence, storage-full rollback, source-blind packets, receipts,
-transport contracts and component import boundaries. Browser and actual MCP stdio smoke evidence
-is recorded separately from unit tests and live model behavior. No claim of improved agent success
-or architectural novelty is made from these checks alone.
-
-## PyPI destination
-
-The existing project name remains `anaxigraph`; this folder has its own uv environment and alpha
-metadata. Once the selected product is qualified, it can replace the release-root implementation
-and publish as `anaxigraph==1.0.0` using the existing publisher. Older versions need not be deleted.
-No new release is published by this milestone.
+For development: `uv sync --locked --extra dev`, then `uv run pytest`, `uv run ruff check src tests`,
+`uv run mypy` and `uv run python scripts/quality.py`. Slow checks stay in CI rather than pre-push hooks.

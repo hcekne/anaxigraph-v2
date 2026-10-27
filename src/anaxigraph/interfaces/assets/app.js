@@ -420,6 +420,7 @@ const workflowStatuses = new Map();
 
 function renderModelSettings(config) {
   workflowSettings = config;
+  $("#finding-review-policy").textContent = config.effective_finding_review || "Review the configured stage and ordered review models below.";
   $("#workflow-workers").value = config.workers;
   $("#workflow-timeout").value = config.timeout_seconds ?? "";
   $("#workflow-exhaustive").checked = config.pattern_mode === "exhaustive";
@@ -561,6 +562,7 @@ async function refreshWorkflows() {
       heading.append(button);
     }
     card.append(heading, textElement("p", run.phase, "run-phase"));
+    if (run.effective_finding_review) card.append(textElement("p", run.effective_finding_review, "section-note"));
     const progress = document.createElement("progress");
     progress.max = Math.max(1, run.total_batches);
     progress.value = run.completed_batches;
@@ -700,7 +702,7 @@ $("#validate-change").addEventListener("click", () => action($("#validate-change
   const receipts = $("#receipts").value.trim() ? JSON.parse($("#receipts").value) : null;
   $("#change-validation").textContent = formatJSON(await api("/api/validate", { receipts }));
 }));
-AnaxiGraphCI.bindPlanForm({ $, api, action, textElement, formatJSON, lines, notice });
+AnaxiGraphCI.bindPlanForm({ $, api, action, textElement, formatJSON, lines, notice, reviewTradeoffs });
 refresh().catch((error) => notice(error.message, true));
 api("/api/workflows/config").then(renderModelSettings).catch((error) => notice(error.message, true));
 refreshWorkflows().catch((error) => notice(error.message, true));

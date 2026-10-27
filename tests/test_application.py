@@ -90,6 +90,9 @@ def fresh_result(request: dict) -> dict:
     requirements = [item["id"] for item in request["packet"]["requirements"]]
     return {
         "producer": "fixture-agent/fixture-model",
+        "functional_summary": "Validate requests and persist the promised results.",
+        "functional_requirements": ["Preserve accepted input guarantees and durable results."],
+        "functional_coverage": [requirements.copy()],
         "alternatives": [
             {
                 "name": name,

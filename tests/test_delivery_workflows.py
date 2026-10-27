@@ -275,7 +275,9 @@ def test_ci_plan_transports_preserve_declared_changes_and_runtime_inputs(tmp_pat
         ),
     )
     assert result == expected
-    client = TestClient(create_app(application))
+    client = TestClient(
+        create_app(application), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
+    )
     assert client.post("/api/ci/plan", json=expected["options"]).json() == expected
     assert client.post("/api/ci/plan", json={"cadence": "never"}).status_code == 422
     assert "Review CI/CD" in client.get("/").text

@@ -82,21 +82,17 @@ def test_bounded_retention_is_disclosed_and_pages_and_exports_are_real(tmp_path)
     assert evidence.path.stat().st_size <= evidence.max_bytes
 
 
-def test_real_sqlite_capacity_error_preserves_prior_events_and_budget(tmp_path):
-    evidence = Evidence(tmp_path, max_bytes=65_536, max_events=100)
-    evidence.record("workflow", {"status": "initial"})
-    previous = None
+def test_byte_retention_precedes_event_cap_and_keeps_recording(tmp_path):
+    evidence = Evidence(tmp_path, max_bytes=65_536, max_events=5000)
+    ids = []
     for i in range(100):
-        previous = evidence.events()["total"]
-        try:
-            evidence.record("workflow", {"notes": "x" * 4000, "run_id": str(i)})
-        except ValueError:
-            break
-    else:
-        pytest.fail("Fixture did not exercise the actual SQLite capacity limit")
-    assert evidence.events()["total"] == previous
-    assert evidence.events()["items"][0]["payload"]["status"] == "initial"
+        ids.append(evidence.record("workflow", {"notes": "x" * 4000, "run_id": str(i)})["id"])
+    assert ids == sorted(set(ids))
+    assert evidence.events()["items"][-1]["payload"]["run_id"] == "99"
+    assert evidence.summary()["dropped_events"] > 0
+    assert evidence.summary()["complete"] is False
     assert evidence.path.stat().st_size <= 65_536
+    evidence.export(tmp_path / "trial.json")
 
 
 def test_concurrent_workers_save_every_event_without_losing_task_attribution(tmp_path):

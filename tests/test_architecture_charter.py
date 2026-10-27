@@ -135,7 +135,9 @@ def test_component_tests_and_consumer_checks_are_distinct_observations(tmp_path)
     application = Application(tmp_path)
     application.scan()
     brief = application.prepare_change("change save")
-    assert len(brief["implementation_advice"]["principles"]) == len(CHARTER) == 10
+    assert brief["implementation_advice"]["principles_ref"] == "charter"
+    assert len(application.inspect("charter")["entity"]["data"]["principles"]) == len(CHARTER) == 10
+    assert "principles" not in brief["implementation_advice"]
     check = next(
         item
         for item in brief["implementation_advice"]["steps"]
@@ -146,9 +148,9 @@ def test_component_tests_and_consumer_checks_are_distinct_observations(tmp_path)
     assert "required project checks" in check["suggestion"]
     assert (
         application.assess_plan("change save", ["store.py"])["brief"]["implementation_advice"][
-            "principles"
+            "principles_ref"
         ]
-        == brief["implementation_advice"]["principles"]
+        == brief["implementation_advice"]["principles_ref"]
     )
     assert len(json.dumps(brief, indent=2).encode()) <= 8000
 

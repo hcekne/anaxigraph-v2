@@ -1,11 +1,12 @@
 # Working in AnaxiGraph V2
 
-This is the standalone replacement core targeting the existing `anaxigraph` PyPI project at 1.0.
-The legacy code lives separately in `~/repos/anaxigraph`; do not import its runtime.
+This standalone replacement targets the existing `anaxigraph` PyPI project at 1.0. The legacy
+checkout is `~/repos/anaxigraph`; do not import its runtime or change its services for V2 work.
+Build useful capabilities selectively rather than restoring every legacy feature.
 
-Commit and push directly to `main` when finishing authorized work. Keep slow checks in CI rather
-than adding pre-push gates. Run file-writing automation end to end before reporting it working.
-Report measured results and distinguish local checks, CI, live model work and publication.
+Commit and push directly to `main` when finishing authorized work. Keep slow checks in CI,
+not pre-push. Exercise file-writing automation end to end. Distinguish local checks, CI,
+live model results, deployment and publication. Do not publish a release unless requested.
 
 Use this checkout's uv environment:
 
@@ -13,28 +14,30 @@ Use this checkout's uv environment:
 uv sync --locked --extra dev
 uv run pytest
 uv run ruff check src tests
+uv run mypy
+uv run python scripts/quality.py
 ```
 
-Keep the component boundaries in `docs/architecture.md`: shared records, indexing, storage,
-analysis, workflow execution, application and interfaces. CLI, HTTP and MCP delegate to one application. Source parsing
-does not execute target code; observations, interpretations, supplied check reports and proposals
-retain different meanings. Store current understanding canonically with bounded retained state.
+Keep the boundaries in [architecture.md](docs/architecture.md). One Application serves CLI,
+MCP and HTTP. Parsing never executes project code. Facts, inferred understanding, proposed
+changes and supplied check reports retain distinct provenance. Store current understanding
+canonically with bounded retention; portable records carry analyses, not rebuildable caches.
 
-Fresh Eyes receives behavior only, without current source, identifiers or topology. Default pattern
-review screens the catalogue cheaply and evaluates only selected opportunities in detail. A screen
-is not a rating or proof of irrelevance. Preserve explicit exhaustive reviews as an opt-in mode;
-every pair declared for detailed evaluation still needs a rating or unknown, tradeoffs and evidence.
-Prefer clear ownership, small public contracts and independently testable components. Functions and
-modular monoliths are valid choices; do not manufacture abstractions or force package extraction.
-Use `docs/component-architecture-principles.md`: components are independent units of change and
-verification, usually composed in process. Behavioral contracts and shared resources determine
-impact; unchanged signatures and bounded test-reference lists do not establish complete CI scope.
-New Pattern runs include mandatory architecture scouts for boundaries, standalone packages/repos
-and independent verification, plus one root CI/CD review. Preserve their coverage and portable
-identities. Use `docs/change-request-ci-delivery.md`: re-evaluate CI with architectural, shared-input
-or pipeline changes; `ci-plan` follows authored task inputs and never silently skips required checks.
-Material
-plan findings need explicit adopt/defer/reject reasons; decisions never prove implementation.
+Prefer cohesive components, small public behavioral contracts and independent tests. Local or
+separate-repository packages can compose in process. Functions and modular monoliths are valid;
+do not manufacture abstractions or services. Shared data/configuration can widen impact even
+with unchanged signatures. See [component principles](docs/component-architecture-principles.md).
 
-The maintainer selected a clean slate and selective MVP capabilities. Do not treat every legacy
-feature as mandatory. Do not publish a release or alter the legacy service merely to move files.
+Fresh Eyes receives behavior only, without source identities or topology, and retains three
+alternatives. Default Patterns screen cheaply, review selected opportunities, and include
+architecture scouts plus CI/CD. Preserve explicit exhaustive/selected reviews and portable
+identities. Material plan findings need adopt/defer/reject reasons; decisions do not prove implementation.
+
+Use the [recommended routine](docs/usage.md): scan and prepare a substantial task, inspect and
+assess its plan, then scan/check/validate against the original baseline. Run Patterns after
+meaningful changes, Fresh Eyes at milestones and regularly on active projects, and CI review
+when component or pipeline assumptions change. Judge usefulness through actual coding outcomes
+and feedback from agents. Keep the README introductory and link deeper operational details.
+
+Work within the current source budget. Simplify duplicated machinery before adding layers;
+do not silently raise limits or pack code to game the count. Report measured size changes.

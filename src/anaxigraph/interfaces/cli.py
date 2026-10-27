@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -147,6 +148,12 @@ def parser() -> argparse.ArgumentParser:
         elif name == "serve":
             command.add_argument("--host", default="127.0.0.1")
             command.add_argument("--port", type=int, default=8766)
+            command.add_argument(
+                "--allow-origin",
+                action="append",
+                default=[],
+                help="Exact trusted server URL; LAN requires ANAXIGRAPH_HTTP_TOKEN",
+            )
     return result
 
 
@@ -250,7 +257,16 @@ def main(argv: list[str] | None = None) -> int:
 
             from anaxigraph.interfaces.http import create_app
 
-            uvicorn.run(create_app(application), host=args.host, port=args.port)
+            token = os.environ.get("ANAXIGRAPH_HTTP_TOKEN")
+            if args.host not in {"127.0.0.1", "localhost", "::1"} and (
+                not token or not args.allow_origin
+            ):
+                raise ValueError("LAN serving requires --allow-origin and ANAXIGRAPH_HTTP_TOKEN")
+            uvicorn.run(
+                create_app(application, allowed_origins=args.allow_origin, auth_token=token),
+                host=args.host,
+                port=args.port,
+            )
         elif args.command == "mcp":
             from anaxigraph.interfaces.mcp import create_mcp
 

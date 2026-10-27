@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from functools import wraps
+from typing import Any, Callable, TypeVar, cast
 
 from anaxigraph.contracts import Graph
 
@@ -11,6 +12,28 @@ from .architecture import FINDING_FIELDS, validate_architecture
 from .behavior import check_annotation_behaviors
 from .delivery import canonical_delivery, validate_delivery
 from .packets import DEFAULT_RESULT_BYTES, _check_behavior
+
+_Validator = TypeVar("_Validator", bound=Callable[..., Any])
+
+
+class ModelOutputError(ValueError):
+    """The supplied model output failed its contract; another worker may repair it."""
+
+    model_request_id: str | None = None
+
+
+def _model_output(operation: _Validator) -> _Validator:
+    @wraps(operation)
+    def checked(*args, **kwargs):
+        try:
+            return operation(*args, **kwargs)
+        except ValueError as error:
+            request = args[0] if args else kwargs["request"]
+            failure = ModelOutputError(str(error))
+            failure.model_request_id = request.get("request_id")
+            raise failure from error
+
+    return cast(_Validator, checked)
 
 
 def _project(value: Any, fields: set[str], children: dict[str, Any] | None = None) -> Any:
@@ -73,6 +96,7 @@ def _validate_execution(value: dict[str, Any]) -> None:
         _execution(value["execution"])
 
 
+@_model_output
 def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     """Project validated model output onto the portable analysis contract.
 
@@ -307,8 +331,34 @@ def _patterns(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> 
             _text(evaluation.get("proposed_change"), "proposed_change", 1000)
 
 
+def _functional_coverage(result, expected):
+    coverage, brief = result["functional_coverage"], result.get("functional_requirements")
+    if (
+        not isinstance(brief, list)
+        or not isinstance(coverage, list)
+        or len(coverage) != len(brief)
+        or any(
+            not isinstance(group, list)
+            or not group
+            or any(not isinstance(item, str) for item in group)
+            for group in coverage
+        )
+    ):
+        raise ValueError(
+            "functional_coverage must align requirement IDs with functional_requirements"
+        )
+    if set(item for group in coverage for item in group) != expected:
+        raise ValueError("Functional brief coverage must preserve every requirement")
+
+
 def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> None:
     expected = {item["id"] for item in request["packet"]["requirements"]}
+    fields = ("functional_summary", "functional_requirements", "functional_coverage")
+    missing = set(fields).intersection(request.get("response_schema", {})).difference(result)
+    if missing:
+        raise ValueError(
+            "Fresh Eyes missing required behavior brief fields: " + ", ".join(sorted(missing))
+        )
     if "functional_summary" in result:
         _check_behavior(graph, _text(result["functional_summary"], "functional_summary", 600))
     if "functional_requirements" in result:
@@ -318,24 +368,7 @@ def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -
         for statement in brief:
             _check_behavior(graph, _text(statement, "functional requirement", 600))
     if "functional_coverage" in result:
-        coverage = result["functional_coverage"]
-        brief = result.get("functional_requirements")
-        if (
-            not isinstance(brief, list)
-            or not isinstance(coverage, list)
-            or len(coverage) != len(brief)
-            or any(
-                not isinstance(group, list)
-                or not group
-                or any(not isinstance(item, str) for item in group)
-                for group in coverage
-            )
-        ):
-            raise ValueError(
-                "functional_coverage must align requirement IDs with functional_requirements"
-            )
-        if set(item for group in coverage for item in group) != expected:
-            raise ValueError("Functional brief coverage must preserve every requirement")
+        _functional_coverage(result, expected)
     alternatives = result.get("alternatives")
     if not isinstance(alternatives, list) or len(alternatives) != 3:
         raise ValueError("Fresh Eyes requires three alternatives, retained independently")
@@ -364,6 +397,7 @@ def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -
         raise ValueError("Alternatives must have distinct names and design descriptions")
 
 
+@_model_output
 def validate_result(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> None:
     """Validation establishes shape and coverage, not truth or model originality."""
     maximum = request.get("max_result_bytes", DEFAULT_RESULT_BYTES)

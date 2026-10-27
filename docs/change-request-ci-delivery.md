@@ -43,10 +43,10 @@ or copying their bodies. Remote actions/workflows and dynamic expressions stay o
 values, credential-related text and URLs are omitted from command previews.
 
 Accepted CI policy and inferred top-level source areas accompany those facts. Inferred areas are
-not accepted component boundaries. Public-interface/test-topology identity makes structural design
-changes visible without refreshing the review for every private Python body edit. CI, package,
-selector or accepted-policy changes invalidate their corresponding evidence. Reusing advice never
-reuses a test result.
+not accepted component boundaries. Source inventory and component/test topology make changes to
+verification structure visible; hidden signature fingerprints no longer refresh an otherwise
+identical CI design packet. CI, package, selector or accepted-policy changes invalidate the review.
+Declared test inputs still use their full source fingerprints. Reusing advice never reuses a test result.
 
 The default draft worker is **Luna/low**. A draft with positive recommendations receives a separate
 **Sol/medium** review; keep/unknown-only drafts make no extra strong-model call. Configure `delivery`

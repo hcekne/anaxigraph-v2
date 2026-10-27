@@ -90,7 +90,9 @@ def test_cli_reads_submission_and_receipts_without_reinterpreting_them(tmp_path:
 
 def test_dashboard_assets_and_bounded_http_dispatch() -> None:
     application = RecordingApplication()
-    client = TestClient(create_app(application))
+    client = TestClient(
+        create_app(application), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
+    )
     assert "Module map" in client.get("/").text
     assert "drawGraph" in client.get("/assets/app.js").text
     assert client.get("/assets/styles.css").status_code == 200
@@ -146,7 +148,9 @@ def test_dashboard_assets_and_bounded_http_dispatch() -> None:
     ],
 )
 def test_http_actions_delegate(path, body, operation, expected) -> None:
-    client = TestClient(create_app(RecordingApplication()))
+    client = TestClient(
+        create_app(RecordingApplication()), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
+    )
     assert client.post(f"/api/{path}", json=body).json() == {
         "operation": operation,
         "arguments": expected,
@@ -158,7 +162,9 @@ def test_http_reports_stale_analysis_as_a_client_error() -> None:
         def submit_analysis(self, *_args):
             raise ValueError("This request belongs to an older source fingerprint")
 
-    client = TestClient(create_app(StaleApplication()))
+    client = TestClient(
+        create_app(StaleApplication()), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
+    )
     response = client.post("/api/analysis/submit", json={"request_id": "r", "result": {}})
     assert response.status_code == 400
     assert "older source fingerprint" in response.json()["detail"]
@@ -219,7 +225,9 @@ def test_http_real_application_keeps_snapshot_and_analysis_evidence_honest(tmp_p
     export.write_text(
         "from billing import list_invoices\n\ndef export_invoices():\n    return list_invoices()\n"
     )
-    client = TestClient(create_app(Application(tmp_path)))
+    client = TestClient(
+        create_app(Application(tmp_path)), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
+    )
     assert client.get("/api/status").json()["snapshot"] is None
     mapped = client.post("/api/scan").json()
     assert mapped["mapped_locally"] is True
@@ -277,7 +285,9 @@ def test_full_saved_review_is_an_explicit_expansion_and_keeps_staleness(tmp_path
         "fresh-eyes",
         {"basis": "agent-reported-proposal", "result": result},
     )
-    client = TestClient(create_app(application))
+    client = TestClient(
+        create_app(application), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
+    )
     listed = client.get("/api/reviews").json()["items"][0]
     assert listed["producer"] == "synthetic-interface-fixture"
     assert "result" not in listed

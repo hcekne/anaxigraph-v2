@@ -9,6 +9,7 @@ import math
 import re
 from collections import defaultdict
 from functools import lru_cache
+from graphlib import CycleError, TopologicalSorter
 from typing import Any
 
 CADENCES = {"change", "release", "scheduled"}
@@ -133,28 +134,18 @@ def _target(value: Any, always: list[str]) -> dict:
 
 
 def _layers(targets: dict[str, dict], selected: set[str]) -> list[list[str]]:
-    dependencies = {
-        key: (set(targets[key]["needs"]) | set(targets[key]["consumes"])) & selected
-        for key in selected
-    }
-    followers: dict[str, set[str]] = defaultdict(set)
-    for key, values in dependencies.items():
-        for parent in values:
-            followers[parent].add(key)
-    ready = sorted(key for key, values in dependencies.items() if not values)
-    layers, visited = [], set()
-    while ready:
+    graph = TopologicalSorter(
+        {key: set(targets[key]["needs"] + targets[key]["consumes"]) & selected for key in selected}
+    )
+    try:
+        graph.prepare()
+    except CycleError as error:
+        raise ValueError("CI needs/consumes dependencies contain a cycle") from error
+    layers = []
+    while graph.is_active():
+        ready = sorted(graph.get_ready())
         layers.append(ready)
-        following = set()
-        for key in ready:
-            visited.add(key)
-            for child in followers[key]:
-                dependencies[child].remove(key)
-                if not dependencies[child]:
-                    following.add(child)
-        ready = sorted(following)
-    if visited != selected:
-        raise ValueError("CI needs/consumes dependencies contain a cycle")
+        graph.done(*ready)
     return layers
 
 
@@ -199,45 +190,33 @@ def validate_policy(value: Any) -> dict:
 def _invalidation(
     targets: dict[str, dict], paths: list[str], shared: list[str]
 ) -> tuple[set[str], dict[str, list[str]]]:
-    affected, reasons = set(), defaultdict(list)
-    for key, target in targets.items():
+    affected: set[str] = set()
+    reasons: dict[str, list[str]] = defaultdict(list)
+    graph = TopologicalSorter({key: target["consumes"] for key, target in targets.items()})
+    for key in graph.static_order():
+        target = targets[key]
         changed = [path for path in paths if _matches_any(target["inputs"], path)]
-        if changed or shared:
+        producers = set(target["consumes"]) & affected
+        if changed or shared or producers:
             affected.add(key)
             reasons[key].extend([f"Changed input: {path}" for path in changed[:4]])
             reasons[key].extend([f"Shared input: {path}" for path in shared[:4]])
-    pending = list(affected)
-    while pending:
-        parent = pending.pop()
-        for key, target in targets.items():
-            if parent in target["consumes"]:
-                reasons[key].append(f"Consumes changed output of {parent}")
-                if key not in affected:
-                    affected.add(key)
-                    pending.append(key)
+            reasons[key].extend(f"Consumes changed output of {parent}" for parent in producers)
     return affected, reasons
 
 
-def _coverage(targets: dict[str, dict], eligible: set[str], layers: list[list[str]]) -> set[str]:
-    reachable = set(eligible)
-    for layer in reversed(layers):
-        for key in layer:
-            if key in reachable:
-                reachable.update(targets[key]["consumes"])
-    return reachable
-
-
-def _prerequisites(
-    targets: dict[str, dict], selected: set[str], reasons: dict[str, list[str]]
-) -> None:
+def _expand(targets: dict, selected: set, fields: tuple, reasons: dict | None = None) -> set:
     pending = list(selected)
     while pending:
         child = pending.pop()
-        for parent in set(targets[child]["needs"] + targets[child]["consumes"]):
-            reasons[parent].append(f"Prerequisite of selected target {child}")
+        parents = [parent for field in fields for parent in targets[child][field]]
+        for parent in parents:
+            if reasons is not None:
+                reasons[parent].append(f"Prerequisite of selected target {child}")
             if parent not in selected:
                 selected.add(parent)
                 pending.append(parent)
+    return selected
 
 
 def _runtime(value: Any) -> dict | None:
@@ -273,7 +252,7 @@ def _cache(
 ) -> tuple[str | None, str]:
     patterns = target["inputs"] + policy["shared_inputs"]
     matches = {path: digest for path, digest in files.items() if _matches_any(patterns, path)}
-    missing = any(not any(_matches(pattern, path) for path in files) for pattern in patterns)
+    missing = any(not any(_matches(pattern, path) for path in matches) for pattern in patterns)
     deleted = any(path not in files and _matches_any(patterns, path) for path in paths)
     producers = {key: rows[key]["cache_key"] for key in target["consumes"]}
     if not target["cache"] or target["kind"] == "deploy":
@@ -300,12 +279,9 @@ def _cache(
 
 
 def _fingerprinted(runtime: dict | None, producers: dict[str, str | None]) -> bool:
-    return (
-        runtime is not None
-        and bool(runtime)
-        and all(value is not None for value in runtime.values())
-        and all(value is not None for value in producers.values())
-    )
+    if not runtime:
+        return False
+    return None not in (*runtime.values(), *producers.values())
 
 
 def _review_reasons(paths: list[str], shared: list[str], uncovered: list[str]) -> list[str]:
@@ -352,7 +328,7 @@ def _selection(
 ) -> tuple[set, dict, list[str], list[str], list[str]]:
     shared = [path for path in paths if _matches_any(policy["shared_inputs"], path)]
     affected, reasons = _invalidation(targets, paths, shared)
-    reachable = _coverage(targets, eligible | set(policy["always"]), _layers(targets, set(targets)))
+    reachable = _expand(targets, eligible | set(policy["always"]), ("consumes",))
     uncovered, ignored = _uncovered(policy, paths, targets, reachable, shared)
     selected = (affected.intersection(eligible) if cadence == "change" else set(eligible)) | set(
         policy["always"]
@@ -366,7 +342,7 @@ def _selection(
         selected.update(policy["fallback"])
         for key in policy["fallback"]:
             reasons[key].append("Declared fallback for unresolved change ownership")
-    _prerequisites(targets, selected, reasons)
+    _expand(targets, selected, ("needs", "consumes"), reasons)
     return selected, reasons, shared, uncovered, ignored
 
 

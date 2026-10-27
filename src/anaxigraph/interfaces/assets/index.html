@@ -84,7 +84,7 @@
         </div>
         <label><span><input id="workflow-exhaustive" type="checkbox"> Review every catalogue pattern in detail (slower)</span></label>
         <div id="stage-models" class="model-settings"></div>
-        <p class="section-note">Architecture and CI/CD finding reviews run only when a worker proposes a change. Enabled ordered review passes replace those default reviewers.</p>
+        <p id="finding-review-policy" class="section-note">Architecture and CI/CD finding reviews run only when a worker proposes a change. Enabled ordered review passes replace those default reviewers.</p>
         <details><summary>Ordered review passes</summary><p class="section-note">Independent batches run in parallel. Within each batch, enabled review passes run in this order.</p>
           <div class="model-settings"><label><span><input id="review-codex-enabled" type="checkbox"> 1. OpenAI / Codex review</span><input id="review-codex-model" placeholder="Configured Codex model"></label><label><span><input id="review-claude-enabled" type="checkbox"> 2. Claude review</span><input id="review-claude-model" placeholder="Configured Claude model"></label></div>
         </details>

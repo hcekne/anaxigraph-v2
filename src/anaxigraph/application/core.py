@@ -14,21 +14,32 @@ from typing import Any
 from anaxigraph import __version__
 from anaxigraph.analysis.behavior import annotation_behavior_problems
 from anaxigraph.analysis.changes import change_review
-from anaxigraph.analysis.charter import module_facts
+from anaxigraph.analysis.charter import CHARTER, module_facts
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
 from anaxigraph.application import architecture as component_architecture
-from anaxigraph.application import delivery, records, reviews
+from anaxigraph.application import delivery, records
+from anaxigraph.application import reviews as review_operations
 from anaxigraph.application.context import (
     _bounds,
     context_fingerprints,
     dependency_implementation_fingerprints,
 )
-from anaxigraph.contracts import Graph
+from anaxigraph.contracts import Graph, Node
 from anaxigraph.evidence import Evidence
 from anaxigraph.indexing import IndexSession
 from anaxigraph.storage import Store
 from anaxigraph.workflows.engine import WorkflowRunner
+
+
+def _record_view(identity, kind, name, data, snapshot=None) -> dict:
+    return {
+        "entity": asdict(Node(identity, kind, name, "", data=data)),
+        "incoming": [],
+        "outgoing": [],
+        "neighbors": [],
+        "snapshot_id": snapshot,
+    }
 
 
 class Application:
@@ -223,6 +234,10 @@ class Application:
         }
 
     def inspect(self, entity_id: str, limit: int = 30) -> dict[str, Any]:
+        if entity_id == "charter":
+            return _record_view(
+                "charter", "charter", "Architecture principles", {"principles": CHARTER}
+            )
         graph = self._current()
         if entity_id.startswith("review:"):
             row = next(
@@ -237,20 +252,8 @@ class Application:
                 raise ValueError("Saved review not found")
             row = self._review_state(row, graph)
             self.evidence.consulted(entity_id, graph.snapshot.id)
-            return {
-                "entity": {
-                    "id": entity_id,
-                    "kind": "review",
-                    "name": row["kind"],
-                    "path": "",
-                    "line": 1,
-                    "data": row,
-                },
-                "incoming": [],
-                "outgoing": [],
-                "neighbors": [],
-                "snapshot_id": graph.snapshot.id,
-            }
+            return _record_view(entity_id, "review", row["kind"], row, graph.snapshot.id)
+
         result = neighborhood(graph, entity_id, _bounds(limit))
         result["snapshot_id"] = graph.snapshot.id
         entity = result["entity"]
@@ -281,14 +284,16 @@ class Application:
             raise ValueError("task must be nonempty text of at most 4,000 characters")
         graph = self._current()
         self._require_live(graph)
-        matches = self.store.search(str(self.root), task, _bounds(limit, 30))
-        statuses = {
-            n.path: n.data.get("annotation_status", "missing")
-            for n in graph.nodes
-            if n.kind == "module"
-        }
+        limit = _bounds(limit, 30)
+        matches = self.store.search(str(self.root), task, limit * 3)
+        statuses = {n.path: n.data for n in graph.nodes if n.kind == "module"}
+        matches = sorted(matches, key=lambda m: bool(statuses.get(m["path"], {}).get("is_test")))[
+            :limit
+        ]
         for match in matches:
-            match["annotation_status"] = statuses.get(match["path"], "missing")
+            match["annotation_status"] = statuses.get(match["path"], {}).get(
+                "annotation_status", "missing"
+            )
         task_key = hashlib.sha256(" ".join(task.casefold().split()).encode()).hexdigest()
         pinned = self.store.pin_baseline(
             str(self.root),
@@ -318,9 +323,6 @@ class Application:
             graph, matches, task, reviews=review_rows, delivery_advice=delivery.advice(self, graph)
         ) | {
             "baseline_id": pinned,
-            "baseline_basis": "pinned-change-baseline",
-            "task_key": task_key,
-            "baseline_note": "Preserved for this task and HEAD. A new task or HEAD starts a new baseline; continue_task explicitly keeps the existing change.",
         }
         result["task_id"] = self.evidence.start_task(
             task, graph.snapshot.revision, graph.snapshot.id, pinned, continue_task=continue_task
@@ -344,7 +346,7 @@ class Application:
             not isinstance(p, str) or Path(p).is_absolute() or ".." in Path(p).parts for p in files
         ):
             raise ValueError("Plan files must be repository-relative paths")
-        brief = self.prepare_change(task)
+        brief = self.prepare_change(task, continue_task=True)
         existing = {node["path"] for node in brief["likely_owners"]}
         findings = []
         for path in files:
@@ -435,48 +437,19 @@ class Application:
     def export_evidence(self) -> dict[str, Any]:
         return self.evidence.export()
 
-    def analysis_request(
-        self, kind: str, scope: list[str] | None = None, **options: Any
-    ) -> dict[str, Any]:
-        return reviews.analysis_request(self, kind, scope, **options)
-
-    def submit_analysis(self, request_id: str, result: dict[str, Any]) -> dict[str, Any]:
-        return reviews.submit_analysis(self, request_id, result)
-
-    def reviews(self, kind: str | None = None, limit: int = 12, offset: int = 0) -> dict[str, Any]:
-        return reviews.reviews(self, kind, limit, offset)
-
-    def _review_state(self, row: dict[str, Any], graph: Graph) -> dict[str, Any]:
-        return reviews._review_state(self, row, graph)
-
-    def _rebuild_request(self, graph: Graph, kind: str, body: dict[str, Any]) -> dict[str, Any]:
-        return reviews._rebuild_request(self, graph, kind, body)
-
-    def analysis_product_request(self, review_ids: list[str]) -> dict[str, Any]:
-        return reviews.analysis_product_request(self, review_ids)
-
-    def analysis_saved(self, request_id: str, pipeline: dict[str, Any] | None = None) -> bool:
-        return reviews.analysis_saved(self, request_id, pipeline)
-
-    def analysis_selection(self, request_id: str) -> list[dict[str, Any]]:
-        return reviews.analysis_selection(self, request_id)
-
-    def analysis_reconcile(
-        self, kind: str, review_ids: list[str], scope: list[str] | None = None
-    ) -> dict[str, Any]:
-        return reviews.analysis_reconcile(self, kind, review_ids, scope)
-
-    def portable_status(self) -> dict[str, Any]:
-        return records.portable_status(self)
-
-    def _portable_token(self) -> tuple:
-        return records._portable_token(self)
-
-    def export_record(self) -> dict[str, Any]:
-        return records.export_record(self)
-
-    def import_record(self) -> dict[str, Any]:
-        return records.import_record(self)
+    analysis_request = review_operations.analysis_request
+    submit_analysis = review_operations.submit_analysis
+    reviews = review_operations.reviews
+    _review_state = review_operations._review_state
+    _rebuild_request = review_operations._rebuild_request
+    analysis_product_request = review_operations.analysis_product_request
+    analysis_saved = review_operations.analysis_saved
+    analysis_selection = review_operations.analysis_selection
+    analysis_reconcile = review_operations.analysis_reconcile
+    portable_status = records.portable_status
+    _portable_token = records._portable_token
+    export_record = records.export_record
+    import_record = records.import_record
 
     @property
     def _workflows(self) -> WorkflowRunner:

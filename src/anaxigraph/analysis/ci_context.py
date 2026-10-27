@@ -11,8 +11,9 @@ from anaxigraph.contracts import Graph
 
 
 def _area(path: str) -> str:
-    parts = PurePosixPath(path).parts
-    return parts[0] if len(parts) > 1 else "."
+    parts = PurePosixPath(path).parts[:-1]
+    depth = parts.index("src") + 3 if "src" in parts else 2
+    return "/".join(parts[:depth]) or "."
 
 
 def _area_dependencies(graph: Graph) -> list:
@@ -30,36 +31,26 @@ def _area_dependencies(graph: Graph) -> list:
 
 
 def component_context(graph: Graph) -> dict:
-    modules = [node for node in graph.nodes if node.kind == "module"]
-    groups: dict[str, list] = defaultdict(list)
-    for node in modules:
-        groups[_area(node.path)].append(node)
-    links = _area_dependencies(graph)
-    tests = sorted(node.path for node in modules if node.data.get("is_test"))
-    unparsed = sorted(
+    modules = {node.path: node for node in graph.nodes if node.kind == "module"}
+    sources = set(modules) | {
         path
         for path in graph.snapshot.files
         if PurePosixPath(path).suffix in {".js", ".jsx", ".ts", ".tsx"}
-    )
-    identity = {
-        "interfaces": sorted(
-            (node.path, node.data.get("interface_fingerprint")) for node in modules
-        ),
-        "test_paths": tests,
-        "unparsed_source_paths": unparsed,
-        "area_dependencies": links,
     }
-    return {
-        "basis": "Inferred top-level source areas, not accepted component or test-ownership declarations.",
-        "identity": hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(),
+    groups: dict[str, list] = defaultdict(list)
+    for path in sorted(sources):
+        groups[_area(path)].append(path)
+    links = _area_dependencies(graph)
+    tests = {path for path, node in modules.items() if node.data.get("is_test")}
+    context = {
+        "basis": "Provisional source-root/package/directory areas, not accepted component or test-ownership declarations.",
         "areas": [
             {
                 "root": area,
-                "modules": len(items),
-                "sample_paths": sorted(node.path for node in items)[:8],
-                "observed_test_paths": [node.path for node in items if node.data.get("is_test")][
-                    :8
-                ],
+                "modules": sum(path in modules for path in items),
+                "unparsed_source_count": sum(path not in modules for path in items),
+                "sample_paths": items[:8],
+                "observed_test_paths": [path for path in items if path in tests][:8],
             }
             for area, items in sorted(groups.items())[:100]
         ],
@@ -67,7 +58,10 @@ def component_context(graph: Graph) -> dict:
         "areas_truncated": len(groups) > 100,
         "area_dependencies": links[:300],
         "dependencies_truncated": len(links) > 300,
-        "observed_test_paths": tests[:30],
-        "unparsed_source_count": len(unparsed),
-        "limitations": "Imports omit dynamic/data dependencies; test references do not establish coverage. Use declared task inputs for check selection.",
+        "observed_test_paths": sorted(tests)[:30],
+        "unparsed_source_count": len(sources) - len(modules),
+        "limitations": "JS/TS areas are inventory only. Imports omit dynamic/data dependencies; names and unchanged topology do not establish interface compatibility or test coverage. Use declared task inputs for check selection.",
+    }
+    return context | {
+        "identity": hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
     }

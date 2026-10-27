@@ -7,6 +7,22 @@ import time
 from typing import Any
 
 
+def plan_batch(run, kind, scope, **options):
+    if "next_batch_id" not in run:
+        run["next_batch_id"] = max((batch["id"] for batch in run["batches"]), default=0) + 1
+    batch = {
+        "id": run["next_batch_id"],
+        "kind": kind,
+        "scope": scope,
+        "status": "pending",
+        "attempts": 0,
+        **options,
+    }
+    run["next_batch_id"] += 1
+    run["batches"].append(batch)
+    return batch
+
+
 def attempt_summary(run: dict[str, Any]) -> dict[str, Any]:
     """Count recorded failures, including fallback candidates, without inventing old history."""
     batches = run["batches"]

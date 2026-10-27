@@ -215,9 +215,10 @@ class Module:
     names: set[str]
     nodes: list[Node] = field(default_factory=list)
     definitions: dict[str, Node] = field(default_factory=dict)
-    bindings: dict[str, dict[str, tuple[str, str, str]]] = field(
+    bindings: dict[str, dict[str, list[tuple[str, str, str]]]] = field(
         default_factory=lambda: defaultdict(dict)
     )
+    conditional_bindings: set[tuple[str, str]] = field(default_factory=set)
     bound: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     scopes: dict[int, str] = field(default_factory=dict)
     exports: set[str] | None = None
@@ -257,14 +258,20 @@ def parse_module(
     }
     try:
         tree = ast.parse(source, filename=path, type_comments=True)
-    except (SyntaxError, ValueError) as exc:
+        module = Module(path, tree, name, origin, {name, ".".join(parts)})
+        _populate(module, data)
+    except (SyntaxError, ValueError, RecursionError) as exc:
         data["parse_status"] = "error"
         return (
             None,
             Node(module_id(path), "module", name, path, 1, data),
             f"{path}: {type(exc).__name__}: {exc}",
         )
-    module = Module(path, tree, name, origin, {name, ".".join(parts)})
+    return module, Node(module_id(path), "module", name, path, 1, data), None
+
+
+def _populate(module: Module, data: dict) -> None:
+    tree = module.tree
     data["inert_module"] = _inert_module(tree)
     # A dependency's comments, whitespace and source locations do not change its
     # semantics. Preserve behavior-sensitive invalidation without fanning out model
@@ -280,7 +287,33 @@ def parse_module(
     data["class_count"] = sum(node.kind in {"class", "interface"} for node in module.nodes)
     data["docstring"] = (ast.get_docstring(tree) or "")[:600]
     data["truncated_fields"] = ["docstring"] if len(ast.get_docstring(tree) or "") > 600 else []
-    return module, Node(module_id(path), "module", name, path, 1, data), None
+
+
+def import_module(module: Module, node: ast.ImportFrom) -> str:
+    package = module.package.split(".") if module.package else []
+    if not node.level:
+        return node.module or ""
+    package = package[: len(package) - node.level + 1] if node.level <= len(package) else []
+    return ".".join([*package, *([node.module] if node.module else [])])
+
+
+def _annotation_children(node: ast.AST) -> list[ast.AST]:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        try:
+            return [ast.parse(node.value, mode="eval").body]
+        except (SyntaxError, ValueError, RecursionError):
+            return []
+    if isinstance(node, ast.Subscript):
+        arguments = list(node.slice.elts) if isinstance(node.slice, ast.Tuple) else [node.slice]
+        form = reference_name(node.value).split(".")[-1]
+        if form == "Literal":
+            arguments = []
+        elif form == "Annotated":
+            arguments = arguments[:1]
+        return [node.value, *arguments]
+    if isinstance(node, ast.Call):
+        return [node.func]  # Factory arguments are values, not declared type references.
+    return list(ast.iter_child_nodes(node))
 
 
 def _common_metadata(module: Module, node, qualified: str) -> dict:
@@ -359,6 +392,22 @@ class _Definitions(ast.NodeVisitor):
     def __init__(self, module: Module):
         self.module = module
         self.scope = ""
+        self.conditional = 0
+
+    def _conditional(self, node: ast.AST) -> None:
+        self.conditional += 1
+        self.generic_visit(node)
+        self.conditional -= 1
+
+    visit_If = visit_Try = visit_TryStar = visit_For = _conditional
+    visit_AsyncFor = visit_While = visit_Match = _conditional
+
+    def _bind(self, name: str, binding: tuple[str, str, str]) -> None:
+        candidates = self.module.bindings[self.scope].setdefault(name, [])
+        if binding not in candidates:
+            candidates.append(binding)
+        if self.conditional:
+            self.module.conditional_bindings.add((self.scope, name))
 
     def _symbol(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
         qualified = f"{self.scope}.{node.name}".strip(".")
@@ -397,26 +446,16 @@ class _Definitions(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             local = alias.asname or alias.name.split(".")[0]
-            self.module.bindings[self.scope][local] = (
-                "module",
-                alias.name if alias.asname else local,
-                "",
-            )
+            self._bind(local, ("module", alias.name if alias.asname else local, ""))
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module == "__future__":
             return
-        package = self.module.package.split(".") if self.module.package else []
-        if node.level:
-            package = package[: len(package) - node.level + 1] if node.level <= len(package) else []
-            target = ".".join([*package, *([node.module] if node.module else [])])
-        else:
-            target = node.module or ""
+        target = import_module(self.module, node)
         for alias in node.names:
-            self.module.bindings[self.scope][alias.asname or alias.name] = (
-                "symbol",
-                target,
-                alias.name,
+            self._bind(
+                alias.asname or alias.name,
+                ("symbol", target, alias.name),
             )
 
 
@@ -459,6 +498,34 @@ class Relationships(ast.NodeVisitor):
         )
         return identity
 
+    def _reference(self, name: str, kind: str, line: int, unknown: bool = True) -> None:
+        for target, status in self.resolver.targets(name, self.module, self.scope):
+            if target or unknown:
+                self.emit(target or self.unknown(name), kind, line, status)
+
+    def _annotation(self, node: ast.AST | None) -> None:
+        pending = [node] if node is not None else []
+        line = getattr(node, "lineno", 1)
+        while pending:
+            part = pending.pop()
+            if isinstance(part, (ast.Name, ast.Attribute)):
+                self._reference(reference_name(part), "references", line)
+            else:
+                pending.extend(_annotation_children(part))
+
+    def _headers(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                self._reference(expression(base), "inherits", base.lineno)
+                self._annotation(base)
+            return
+        for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs):
+            self._annotation(arg.annotation)
+        for optional_arg in (node.args.vararg, node.args.kwarg):
+            if optional_arg is not None:
+                self._annotation(optional_arg.annotation)
+        self._annotation(node.returns)
+
     def _symbol(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
         qualified = self.module.scopes[id(node)]
         symbol = next(
@@ -467,20 +534,6 @@ class Relationships(ast.NodeVisitor):
             if n.line == node.lineno and n.data["qualified_name"] == qualified
         )
         self.emit(symbol.id, "contains", node.lineno)
-        if isinstance(node, ast.ClassDef):
-            for base in node.bases:
-                name = expression(base)
-                target, status = self.resolver.target(name, self.module, self.scope)
-                self.edges.append(
-                    Edge(
-                        symbol.id,
-                        target or self.unknown(name),
-                        "inherits",
-                        self.module.path,
-                        base.lineno,
-                        status,
-                    )
-                )
         # Decorators/defaults execute in the enclosing scope, not inside the new function.
         for decorator in node.decorator_list:
             self.visit(decorator)
@@ -488,7 +541,9 @@ class Relationships(ast.NodeVisitor):
             for default in [*node.args.defaults, *(d for d in node.args.kw_defaults if d)]:
                 self.visit(default)
         previous = self.scope, self.owner
-        self.scope, self.owner = qualified, symbol.id
+        self.owner = symbol.id
+        self._headers(node)  # Type names bind in the enclosing scope, even with future annotations.
+        self.scope = qualified
         for statement in node.body:
             self.visit(statement)
         self.scope, self.owner = previous
@@ -499,16 +554,19 @@ class Relationships(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         name = reference_name(node.func)
-        target, status = self.resolver.target(name, self.module, self.scope)
-        self.emit(target or self.unknown(name), "calls", node.lineno, status)
+        self._reference(name, "calls", node.lineno)
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
         if not isinstance(node.ctx, ast.Load):
             return
-        target, status = self.resolver.target(node.id, self.module, self.scope)
-        if target:
-            self.emit(target, "references", node.lineno, status)
+        self._reference(node.id, "references", node.lineno, unknown=False)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self._annotation(node.annotation)
+        self.visit(node.target)
+        if node.value is not None:
+            self.visit(node.value)
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -521,9 +579,12 @@ class Relationships(ast.NodeVisitor):
             )
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module == "__future__":
+            return
         for alias in node.names:
-            local = alias.asname or alias.name
-            target, status = self.resolver.target(local, self.module, self.scope)
+            target, status = self.resolver.import_target(
+                ("symbol", import_module(self.module, node), alias.name), [], self.module
+            )
             self.emit(
                 target or self.unknown("." * node.level + (node.module or "") + "." + alias.name),
                 "imports",

@@ -1,0 +1,190 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-27",
+  "scope": "Audit fixes and reconstruction of an earlier experiment; current local checks and historical runtime results are separate.",
+  "current_changes": {
+    "source_commit": null,
+    "source_commit_basis": "Fixes locally qualified; final commit, CI and deployment are managed separately.",
+    "bugs_fixed": [
+      "Trusted Host/Origin and authenticated explicit LAN access.",
+      "assess_plan baseline continuation.",
+      "Fresh Eyes required behavioral briefs and legacy resume repair.",
+      "Byte-based evidence pruning before SQLite capacity.",
+      "Per-file recursion containment.",
+      "Type-reference and conditional-import edges.",
+      "Local failures do not trigger paid model fallbacks."
+    ],
+    "pattern_scouts_and_ci_defaults_preserved": true,
+    "cadence_guidance": "Patterns after meaningful changes; Fresh Eyes at milestones and regularly on active projects; CI when component or pipeline assumptions change.",
+    "effective_ordered_review_override_explicit": true,
+    "local_checks": {
+      "core_tests_passed": 636,
+      "focused_checks_passed": 103,
+      "experiment_harness_tests_passed": 29,
+      "counts_are_overlapping_not_additive": true
+    },
+    "final_ci": "pending separate verification",
+    "deployment": "pending separate verification",
+    "production_physical_lines": 12050,
+    "unchanged_source_line_budget": 12050,
+    "new_dependencies": 0,
+    "deduplication": "Removed duplicated helper, facade, planner and workflow machinery.",
+    "readme": {
+      "before_words": 2963,
+      "before_bytes": 23502,
+      "after_words": 599,
+      "after_bytes": 4574
+    },
+    "context_response": {
+      "source": "Same twelve-module Snow Rankings copy.",
+      "before_bytes": 7102,
+      "after_bytes": 3457,
+      "model_calls": 0
+    },
+    "usage_guide": "../usage.md",
+    "copyable_agents_block": true
+  },
+  "historical_run": {
+    "experiment_id": "snow-rankings-verified-2026-10-26",
+    "runtime_commit": "bc7790e4518176cee5753ec021852a9d27e78b15",
+    "coding_model": "gpt-6.1-sol",
+    "coding_reasoning_effort": "xhigh",
+    "analysis_reasoning_effort": null,
+    "analysis_effort_basis": "Not independently recorded in the analysis call ledger; blank model configuration inherits runtime defaults.",
+    "meaning_of_51": "Successful MCP calls during the ranking milestone only; neither whole-run tool count nor model-call count.",
+    "mcp": {
+      "invocations": 110,
+      "successes": 103,
+      "failures": 7,
+      "tool_counts": {
+        "scan": 15,
+        "prepare_change": 4,
+        "inspect": 11,
+        "assess_plan": 4,
+        "validate_change": 9,
+        "workflow_start": 12,
+        "workflow_status": 48,
+        "reviews": 7
+      }
+    },
+    "recorded_analysis_outcomes": [
+      {
+        "stage": "annotate",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "recorded_outcomes": 27,
+        "summed_call_seconds": 2984.216,
+        "known_input_tokens": 410402,
+        "known_output_tokens": 51924,
+        "unknown_usage_outcomes": 0
+      },
+      {
+        "stage": "annotate",
+        "model": "gpt-6.1-sol",
+        "status": "failed",
+        "recorded_outcomes": 3,
+        "summed_call_seconds": 1800.778,
+        "known_input_tokens": 0,
+        "known_output_tokens": 0,
+        "unknown_usage_outcomes": 3
+      },
+      {
+        "stage": "fresh-eyes",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "recorded_outcomes": 1,
+        "summed_call_seconds": 63.025,
+        "known_input_tokens": 10612,
+        "known_output_tokens": 2317,
+        "unknown_usage_outcomes": 0
+      },
+      {
+        "stage": "patterns",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "recorded_outcomes": 3,
+        "summed_call_seconds": 1175.234,
+        "known_input_tokens": 111863,
+        "known_output_tokens": 53149,
+        "unknown_usage_outcomes": 0
+      }
+    ],
+    "recorded_analysis_outcome_count": 34,
+    "analysis_call_limit_seconds": 600,
+    "analysis_timeout_outcomes": 3,
+    "coding_tasks_timed_out": 2,
+    "coding_task_limit_seconds": 1200,
+    "other_failure_categories": [
+      "Source changed during analysis.",
+      "Completed Pattern result rejected after snapshot became stale.",
+      "Workflow starts rejected while another workflow was active.",
+      "Inspection of an entity outside the graph.",
+      "Malformed supplied check receipts."
+    ],
+    "fresh_eyes": {
+      "saved_subsystem_results": 1,
+      "completed_product_reconciliation": false
+    },
+    "saved_artifacts": [
+      {
+        "kind": "fresh-eyes",
+        "saved_envelope_uncompressed_bytes": 11394,
+        "canonical_result_json_bytes": 11096
+      },
+      {
+        "kind": "patterns",
+        "saved_envelope_uncompressed_bytes": 74017,
+        "canonical_result_json_bytes": 73719
+      },
+      {
+        "kind": "patterns",
+        "saved_envelope_uncompressed_bytes": 79730,
+        "canonical_result_json_bytes": 79434
+      }
+    ],
+    "saved_pattern_evaluations": 266,
+    "saved_pattern_ratings": {
+      "zero": 178,
+      "one": 29,
+      "two": 15,
+      "three": 1,
+      "unknown": 43
+    },
+    "portable_record_bytes": 223623,
+    "historical_mcp_wire_bytes": null,
+    "adoption": {
+      "structured_events": 0,
+      "agent_narrative_records": 4,
+      "independently_verified_recommendation_to_patch_links": 0,
+      "reviews_can_be_retrospective": true
+    },
+    "acceptance": {
+      "treatment_passed": 29,
+      "treatment_total": 29,
+      "control_passed": 29,
+      "control_total": 29,
+      "causal_quality_advantage_established": false
+    },
+    "recorded_dollar_cost_usd": null
+  },
+  "limitations": [
+    "The historical runtime predates these fixes; its failures and outputs are not current-version qualification.",
+    "Thirty-four means recorded completed/failed analysis outcomes. Unfinished calls may have no recorded outcome.",
+    "Summed elapsed times include concurrent calls and are not workflow or application wall time.",
+    "All recorded dollar costs are unknown; token usage for three failed annotation outcomes is unknown.",
+    "Saved artifact bytes are not MCP wire-reply sizes; bounded historical logs cannot reconstruct those replies.",
+    "Tool consultation and agent-authored adoption narratives do not establish independent recommendation-to-patch linkage or architectural benefit.",
+    "One matched pair, coding timeouts and missing resource data do not establish a causal advantage or a cost comparison.",
+    "Dependency observations, including newly captured types/imports, remain incomplete."
+  ],
+  "feedback": {
+    "guide": "../usage.md#learning-from-real-use",
+    "questions": [
+      "What context was consulted?",
+      "Which recommendation changed the patch?",
+      "What was rejected or missed?",
+      "Was the next change easier?",
+      "What time and cost did using the tool add?"
+    ]
+  }
+}

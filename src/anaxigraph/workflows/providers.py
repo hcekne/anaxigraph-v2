@@ -242,7 +242,13 @@ def execute(
         )
         packet["previous_pass"] = draft
     environment = dict(os.environ)
-    for key in ("CODEX_THREAD_ID", "CLAUDECODE", "CLAUDE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT"):
+    for key in (
+        "CODEX_THREAD_ID",
+        "CLAUDECODE",
+        "CLAUDE_SESSION_ID",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "ANAXIGRAPH_HTTP_TOKEN",
+    ):
         environment.pop(key, None)
     with tempfile.TemporaryDirectory(prefix="anaxigraph-worker-") as temporary:
         directory = Path(temporary)
