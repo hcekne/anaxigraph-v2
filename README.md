@@ -161,6 +161,7 @@ Save model settings in the dashboard or through `workflow-config --file settings
     },
     "pattern-screen": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
     "architecture": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
+    "architecture-review": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
     "patterns": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
     "fresh-eyes": {"provider": "claude", "model": "YOUR_DESIGN_MODEL"}
   },
@@ -218,12 +219,15 @@ prompt inputs separately from structural readiness.
 
 The dashboard can copy these tasks, accept result JSON and display saved proposals. Pattern ratings
 remain hypotheses. Source-aware verification of a frozen alternative is separate from blind design.
-The [focused-review qualification](docs/change-request-focused-reviews.md#completed-qualification--27-october-2026)
-records the design, baseline and measured results on an isolated twelve-module Snow Rankings copy:
-83.1 seconds for mapping plus focused Patterns, 0.7 seconds unchanged with no model calls, and
-63.5 seconds after a leaf edit. The edit missed the 60-second target. These small-repository results
-are not latency guarantees or proof of recommendation quality; the record includes known misses
-and model-profile differences. Targets do not impose worker deadlines.
+The [architecture-scout qualification](docs/change-request-architecture-scouts.md) records the current
+workflow on an isolated twelve-module Snow Rankings copy: **107.2 seconds** for a cold map plus
+Patterns including mandatory scouts, then **1.1 seconds** unchanged with no model calls. Its single
+portable record stayed at **109,914 bytes**. Small recognition cases retain both a failed initial
+recommendation and the subsequent reviewed results. These are measured examples, not general
+latency or code-quality guarantees. Targets do not impose worker deadlines.
+The [earlier focused-review qualification](docs/change-request-focused-reviews.md#completed-qualification--27-october-2026)
+preserves the preceding protocol's 83.1-second result and 63.5-second leaf edit; that workload did
+not include the new scouts. A controlled edit cycle has not been remeasured for the new protocol.
 
 ## What the first milestone supports
 

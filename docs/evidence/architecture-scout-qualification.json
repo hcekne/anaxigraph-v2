@@ -1,0 +1,604 @@
+{
+  "schema_version": 1,
+  "qualified_on": "2026-10-27",
+  "basis": "Actual provider calls on two synthetic recognition fixtures, separate software transport/browser checks and different-path reuse. Not a causal development experiment or a general architecture-quality benchmark.",
+  "packages": {
+    "version": "1.0.0a1",
+    "initial_commit": "c8b62797002338d7be22beec90596ed69799eb86",
+    "initial_wheel_sha256": "8d5941f54e869c71685f55017efff1e730e9481a20efaa9c1e415523afa98994",
+    "reviewed_commit": "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+    "reviewed_wheel_sha256": "a5d2c7efcd486ab02f0c97a47f538f463590c1442049b652b5a6d0079a203ab1",
+    "reviewed_change": "Fingerprint the incremental-benefit review policy and review positive scout drafts with a configured stronger worker; preserve keep/unknown without an extra review call.",
+    "final_binding_commit": "5d461e34f6ebaa4c1298c63de2236524343294f4",
+    "final_binding_change": "Guidance-only compact scout previews and owner protection; actual binding proof preserves the qualified model inputs, pipelines and accepted results without new provider calls.",
+    "final_binding_wheel_sha256": "981966e9562855f93bfaa918434e3c8694d879dc50b579745ecbd016357ae7ee"
+  },
+  "ci": [
+    {
+      "commit": "c8b62797002338d7be22beec90596ed69799eb86",
+      "url": "https://github.com/hcekne/anaxigraph-v2/actions/runs/40526659840",
+      "conclusion": "success",
+      "core_tests_per_python": 462,
+      "harness_tests_per_python": 29
+    },
+    {
+      "commit": "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+      "url": "https://github.com/hcekne/anaxigraph-v2/actions/runs/40529143859",
+      "conclusion": "success",
+      "core_tests_per_python": 468,
+      "harness_tests_per_python": 29
+    },
+    {
+      "commit": "5d461e34f6ebaa4c1298c63de2236524343294f4",
+      "url": "https://github.com/hcekne/anaxigraph-v2/actions/runs/40531055123",
+      "conclusion": "success",
+      "core_tests_per_python": 468,
+      "harness_tests_per_python": 29
+    }
+  ],
+  "ci_scope": {
+    "python": [
+      "3.11",
+      "3.12"
+    ],
+    "ruff": true,
+    "mypy_source_files": 43,
+    "source_and_wheel_builds": true,
+    "installed_wheel_uvx_checks": true
+  },
+  "implementation_size": {
+    "baseline_production_physical_lines": 9067,
+    "reviewed_production_physical_lines": 10117,
+    "growth_lines": 1080,
+    "production_ceiling": 10150,
+    "new_complexity_allowances": false,
+    "existing_provider_runner_store_and_portable_format_reused": true,
+    "reviewed_growth_lines": 1050,
+    "final_production_physical_lines": 10147
+  },
+  "initial_live": {
+    "commit": "c8b62797002338d7be22beec90596ed69799eb86",
+    "worker": "gpt-6-luna",
+    "reasoning_effort": "low",
+    "workers": 32,
+    "timeout_seconds": null,
+    "actual_provider_calls": 17,
+    "accepted_analyses": 17,
+    "all_calls_match_nonreuse_ledger_receipts": true,
+    "reused_receipts": 9,
+    "fallback_attempts": 0,
+    "usage_by_stage": {
+      "annotate": {
+        "calls": 8,
+        "input_tokens": 82798,
+        "output_tokens": 3792,
+        "cached_input_tokens": 60416,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 86590,
+        "parsed_answer_json_bytes": 14820
+      },
+      "architecture": {
+        "calls": 9,
+        "input_tokens": 125400,
+        "output_tokens": 6618,
+        "cached_input_tokens": 67968,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 132018,
+        "parsed_answer_json_bytes": 28523
+      }
+    },
+    "cases": {
+      "case-a": {
+        "actual_provider_calls": 6,
+        "reused_receipts": 3,
+        "accepted_analyses": 6,
+        "failed_attempts": 0,
+        "mapping_seconds": 11.9033,
+        "scouts_seconds": 19.4591,
+        "unchanged_scouts_seconds": 0.1055,
+        "unchanged_provider_calls": 0,
+        "saved_scout_results_json_bytes": 12554,
+        "portable_record_bytes": 24318,
+        "local_sqlite_bytes": 159744,
+        "source_and_manifests_unchanged": true,
+        "primary_production_modules": 2,
+        "assessed_module_lens_pairs": 6,
+        "findings": 4,
+        "outcomes": {
+          "finding": 6
+        }
+      },
+      "case-b": {
+        "actual_provider_calls": 11,
+        "reused_receipts": 6,
+        "accepted_analyses": 11,
+        "failed_attempts": 0,
+        "mapping_seconds": 14.6224,
+        "scouts_seconds": 14.1295,
+        "unchanged_scouts_seconds": 0.1909,
+        "unchanged_provider_calls": 0,
+        "saved_scout_results_json_bytes": 14971,
+        "portable_record_bytes": 32909,
+        "local_sqlite_bytes": 196608,
+        "source_and_manifests_unchanged": true,
+        "primary_production_modules": 4,
+        "assessed_module_lens_pairs": 12,
+        "findings": 4,
+        "outcomes": {
+          "finding": 8,
+          "keep": 4
+        }
+      }
+    },
+    "positive_result": {
+      "status": "opportunities recognized with residual noise",
+      "recognized": [
+        "Shared behavior behind a public operation instead of private helper imports.",
+        "Focused behavior and contract checks without initializing persistence.",
+        "Application-owned queries instead of exposing a database connection."
+      ],
+      "limitations": [
+        "One extraction proposal combines pure calculations with persistence queries; source judgment is still needed.",
+        "A proposed comparison check already exists."
+      ]
+    },
+    "negative_result": {
+      "status": "partial; false positive retained",
+      "preserved": "The boundary scout kept the existing isolated library.",
+      "false_positives": [
+        "The package scout recommended a material workspace-distribution change despite existing declared distribution metadata and no demonstrated additional release need.",
+        "The verification scout proposed checks already present, interpreting empty observed test links as a gap.",
+        "A small example consumer received debatable material extraction/injection advice."
+      ],
+      "source_coverage_gap": "Public re-exports are unresolved, so some actual consumer and test links are absent. Missing references are not proof of missing checks."
+    },
+    "cost_usd": null,
+    "output_bytes_basis": "Compact UTF-8 parsed-answer JSON before canonicalization; saved canonical-result sizes are reported separately. Transport wire bytes and dollar cost are unavailable."
+  },
+  "reviewed_live": {
+    "status": "completed",
+    "commit": "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+    "mapping_basis": "All eight accepted source annotations were reused; mapping times measure warm bookkeeping, not a cold map.",
+    "scout_worker": "gpt-6-luna",
+    "scout_reasoning_effort": "low",
+    "positive_finding_reviewer": "gpt-6.1-sol",
+    "review_reasoning_effort": "medium",
+    "actual_provider_calls": 13,
+    "accepted_analyses": 9,
+    "rejected_analyses": 1,
+    "reused_receipts": 9,
+    "provider_transport_failures": 0,
+    "validation_failed_attempts": 1,
+    "actual_calls_match_nonreuse_ledger_receipts": true,
+    "usage_by_role": {
+      "luna_scout": {
+        "calls": 9,
+        "input_tokens": 127189,
+        "output_tokens": 4183,
+        "cached_input_tokens": 60416,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 131372,
+        "parsed_answer_json_bytes": 17141
+      },
+      "positive_finding_judge": {
+        "calls": 3,
+        "input_tokens": 52237,
+        "output_tokens": 4683,
+        "cached_input_tokens": 24960,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 491,
+        "total_tokens": 56920,
+        "parsed_answer_json_bytes": 18037
+      },
+      "validation_fallback": {
+        "calls": 1,
+        "input_tokens": 15166,
+        "output_tokens": 714,
+        "cached_input_tokens": 8320,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 198,
+        "total_tokens": 15880,
+        "parsed_answer_json_bytes": 2367
+      }
+    },
+    "cases": {
+      "case-a": {
+        "mapped_annotations_reused": 3,
+        "mapping_provider_calls": 0,
+        "mapping_reconciliation_seconds": 0.3308,
+        "scouts_seconds": 70.82,
+        "unchanged_scouts_seconds": 0.3242,
+        "unchanged_provider_calls": 0,
+        "actual_provider_calls": 6,
+        "provider_calls_by_role": {
+          "luna_scout": 3,
+          "positive_finding_judge": 3
+        },
+        "accepted_analyses": 3,
+        "rejected_analyses": 0,
+        "reused_receipts": 3,
+        "failed_attempts": 0,
+        "source_and_manifests_unchanged": true,
+        "saved_scout_results_json_bytes": 16339,
+        "portable_record_bytes": 28103,
+        "local_sqlite_bytes": 188416,
+        "primary_production_modules": 2,
+        "assessed_module_lens_pairs": 6,
+        "findings": 4,
+        "outcomes": {
+          "finding": 6
+        }
+      },
+      "case-b": {
+        "mapped_annotations_reused": 5,
+        "mapping_provider_calls": 0,
+        "mapping_reconciliation_seconds": 0.3307,
+        "scouts_seconds": 35.8327,
+        "unchanged_scouts_seconds": 0.6021,
+        "unchanged_provider_calls": 0,
+        "actual_provider_calls": 7,
+        "provider_calls_by_role": {
+          "luna_scout": 6,
+          "validation_fallback": 1
+        },
+        "accepted_analyses": 6,
+        "rejected_analyses": 1,
+        "reused_receipts": 6,
+        "failed_attempts": 1,
+        "source_and_manifests_unchanged": true,
+        "saved_scout_results_json_bytes": 6094,
+        "portable_record_bytes": 24032,
+        "local_sqlite_bytes": 233472,
+        "primary_production_modules": 4,
+        "assessed_module_lens_pairs": 12,
+        "findings": 0,
+        "outcomes": {
+          "keep": 9,
+          "unknown": 3
+        }
+      }
+    },
+    "positive_result": {
+      "status": "Four useful optional opportunities retained; no material rewrite demanded.",
+      "all_priorities": 1,
+      "recognized": [
+        "Public operation for shared pricing behavior instead of importing private helpers.",
+        "Application-owned data access behind its existing facade.",
+        "Cohesive local importable pricing capability with persistence kept under its existing owner."
+      ],
+      "limits": [
+        "Overlapping lens suggestions still require source judgment and an extraction-cost decision.",
+        "No material plan dispositions were required for this fixture."
+      ]
+    },
+    "negative_result": {
+      "status": "Existing library retained; example consumer remains unknown.",
+      "core_library_keep_checks": 9,
+      "example_consumer_unknown_checks": 3,
+      "findings": 0,
+      "validation_recovery": "One Luna packages result exceeded or failed its uncertainty-text contract; configured Sol/medium fallback returned valid keep outcomes.",
+      "not_all_sol_calls_were_judges": true,
+      "limits": "Public re-export and test-reference resolution remains incomplete; this is one negative example."
+    },
+    "cost_usd": null,
+    "comparison_limit": "The same source and eight annotations were reused, while prompt and conditional-review policy changed together. This is descriptive qualification, not a causal improvement estimate."
+  },
+  "actual_live_result_plan_connection": {
+    "commit": "c8b62797002338d7be22beec90596ed69799eb86",
+    "basis": "Software CLI and actual MCP ClientSession applied real accepted model findings; no LLM coding caller.",
+    "actual_cli_commands": 3,
+    "successful_mcp_calls": 5,
+    "material_dispositions": 3,
+    "decision_required_then_explicit_deferral": true,
+    "implementation_status": "unverified",
+    "behavioral_status": "unchecked",
+    "same_snapshot_new_task_plan_isolated": true,
+    "new_model_calls": 0
+  },
+  "different_path_record_reuse": {
+    "commit": "c8b62797002338d7be22beec90596ed69799eb86",
+    "basis": "Different-path filesystem copies of actual accepted model records; not a remote GitHub round trip.",
+    "cases": {
+      "case-a": {
+        "annotations_imported": 3,
+        "analyses_imported": 3,
+        "provider_invocations": 0,
+        "record_bytes": 24318,
+        "record_sha256": "fa0855944ea8de9ec45ea96667cd9a4fdb31f84619428730f67dae22806aca07",
+        "three_unchanged_cycles_byte_and_sqlite_stable": true,
+        "source_input_identities_and_lens_provenance_preserved": true,
+        "reused_workflow_seconds": 0.6602
+      },
+      "case-b": {
+        "annotations_imported": 5,
+        "analyses_imported": 6,
+        "provider_invocations": 0,
+        "record_bytes": 32909,
+        "record_sha256": "2e043a9eaab73c9591bbd0d9583a07a2f6b63a6e37254584b1aa02ba9c877a70",
+        "three_unchanged_cycles_byte_and_sqlite_stable": true,
+        "source_input_identities_and_lens_provenance_preserved": true,
+        "reused_workflow_seconds": 1.0511
+      }
+    },
+    "new_model_calls": 0,
+    "fresh_eyes_included": false
+  },
+  "initial_browser_check": {
+    "commit": "c8b62797002338d7be22beec90596ed69799eb86",
+    "provider": "synthetic",
+    "paid_model_calls": 0,
+    "four_workflow_cards": true,
+    "three_lenses_reconciled": true,
+    "contract_options_and_verification_rendered": true,
+    "decisions_with_reason_recorded": true,
+    "desktop_mobile_no_horizontal_overflow": true,
+    "browser_errors": 0
+  },
+  "initial_installed_mcp_check": {
+    "commit": "c8b62797002338d7be22beec90596ed69799eb86",
+    "basis": "Actual installed-wheel stdio MCP software client; accepted synthetic preparations, not an LLM caller.",
+    "successful_calls": 10,
+    "failed_calls": 0,
+    "reused_batches": 3,
+    "assessed_module_lens_pairs": 6,
+    "proposal_delivery": true,
+    "decision_required_then_recorded": true,
+    "implementation_status": "unverified",
+    "paid_model_calls": 0
+  },
+  "limitations": [
+    "Only two small synthetic recognition cases; no claim of faster delivery or stronger maintainability in arbitrary repositories.",
+    "Directory groups are provisional; neighbor context, source references and test links are incomplete.",
+    "Root package declarations do not prove publication, installed versions or independent ownership of every nested component.",
+    "Workers receive summaries and metadata, not complete test/CI source. Verification suggestions are proposals, not executed checks or an authoritative CI selection.",
+    "The initial false positives remain recorded. The reviewed round kept the isolated library, but two fixtures do not establish generally reliable recommendation quality.",
+    "Disposition records show consideration and intent, not implementation; an unrelated coding harness can bypass the tools.",
+    "Records were copied through the local filesystem; a remote GitHub round trip was not tested.",
+    "Prior mapping-plus-Patterns latency measurements predate the mandatory scouts and cannot describe this workload.",
+    "Dollar cost is unknown, not zero.",
+    "The reviewed mapping reused existing annotations. Three strong positive reviews and one validation fallback added latency; the positive architecture workflow took70.82 seconds."
+  ],
+  "reviewed_different_path_record_reuse": {
+    "commit": "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+    "basis": "Different-path filesystem copies of actual accepted model records; not a remote GitHub round trip.",
+    "cases": {
+      "case-a": {
+        "annotations_imported": 3,
+        "analyses_imported": 3,
+        "provider_invocations": 0,
+        "record_bytes": 28103,
+        "record_sha256": "51eac2f71af083803739a427de0c015e25f693cba1a91867f4993d8e448a23d6",
+        "three_unchanged_cycles_byte_and_sqlite_stable": true,
+        "source_input_identities_and_lens_provenance_preserved": true,
+        "reused_workflow_seconds": 0.2
+      },
+      "case-b": {
+        "annotations_imported": 5,
+        "analyses_imported": 6,
+        "provider_invocations": 0,
+        "record_bytes": 24032,
+        "record_sha256": "a4e4e992b3703cabf2e81036a51483c6c8038a2773bc1166b2b1f3deee5397ef",
+        "three_unchanged_cycles_byte_and_sqlite_stable": true,
+        "source_input_identities_and_lens_provenance_preserved": true,
+        "reused_workflow_seconds": 0.3
+      }
+    },
+    "new_model_calls": 0,
+    "fresh_eyes_included": false
+  },
+  "reviewed_live_result_plan_connection": {
+    "commit": "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+    "basis": "Actual installed CLI and software-client MCP calls using reviewed real findings; no LLM coding caller.",
+    "successful_mcp_calls": 5,
+    "material_requirements": 0,
+    "plan_status": "no_current_material_proposals",
+    "recorded_dispositions": 0,
+    "implementation_status": "unverified",
+    "same_snapshot_new_task_plan_isolated": true,
+    "source_and_metadata_unchanged": true,
+    "new_model_calls": 0,
+    "note": "All current findings are optional priority1, so the current fixture legitimately requires no material dispositions. The initial round separately exercised three real material dispositions; current synthetic integration tests also cover the gate."
+  },
+  "reviewed_browser_check": {
+    "commit": "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+    "basis": "Actual UI with synthetic providers; no paid model calls.",
+    "paid_model_calls": 0,
+    "conditional_review_checked": true,
+    "provider_callback_counts": {
+      "mapping": 2,
+      "luna_scouts": 3,
+      "positive_sol_review": 1
+    },
+    "configured_reviewer": "gpt-6.1-sol",
+    "desktop_viewport_width": 1440,
+    "mobile_viewport_width": 390,
+    "browser_errors": 0,
+    "owned_service_closed": true,
+    "implementation_attested": false
+  },
+  "local_deployment": {
+    "commit": "5d461e34f6ebaa4c1298c63de2236524343294f4",
+    "wheel_sha256": "981966e9562855f93bfaa918434e3c8694d879dc50b579745ecbd016357ae7ee",
+    "checked_at": "2026-10-27T15:30:38.358416+00:00",
+    "installed_sources_match": true,
+    "existing_settings_unchanged": true,
+    "architecture_defaults_added": true,
+    "annotations_preserved": true,
+    "record_unchanged": true,
+    "model_jobs_started": 0,
+    "preview_active": "active",
+    "connected_services": 2,
+    "pypi_published": false
+  },
+  "real_repository_cold_run": {
+    "commit": "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+    "wheel_sha256": "a5d2c7efcd486ab02f0c97a47f538f463590c1442049b652b5a6d0079a203ab1",
+    "repository": "snow-rankings-v2",
+    "source_revision": "af50630b4854c4e29bf755735a891181c7610227",
+    "basis": "Genuine cold mapping and the new full Pattern workflow, including mandatory architecture scouts, on an isolated unchanged source copy.",
+    "all_source_fingerprints_match_preserved_record": true,
+    "snapshot_file_count": 34,
+    "mapped_python_modules": 12,
+    "current_annotations": {
+      "current": 12,
+      "stale": 0,
+      "missing": 0
+    },
+    "cold_mapping_seconds": 50.2,
+    "cold_patterns_seconds": 57.0,
+    "cold_mapping_plus_patterns_seconds": 107.2,
+    "production_pattern_modules": 6,
+    "catalogue_exposure_pairs": 798,
+    "selected_and_detailed_pairs": 38,
+    "excluded_test_modules": 5,
+    "excluded_inert_markers": 1,
+    "architecture": {
+      "scout_batches": 3,
+      "assessed_module_lens_pairs": 18,
+      "findings": 0,
+      "outcomes": {
+        "keep": 18
+      },
+      "positive_review_calls": 0
+    },
+    "provider_callbacks": 28,
+    "provider_callback_outcomes": {
+      "provider_returned": 28
+    },
+    "calls_by_stage_and_role": {
+      "annotate:worker": 13,
+      "pattern-screen:worker": 6,
+      "architecture:worker": 3,
+      "patterns:worker": 6
+    },
+    "acceptance_outcomes": {
+      "accepted": 27,
+      "rejected": 1
+    },
+    "failed_attempts": {
+      "cold_mapping": 1,
+      "cold_patterns": 0,
+      "unchanged_patterns": 0
+    },
+    "recovered_mapping_failure": "One Luna annotation answer failed its producer-text validation; configured Sol/medium fallback supplied an accepted annotation. Provider completion and result acceptance remain separate.",
+    "model_profiles": {
+      "annotate | worker | gpt-6-luna | low": {
+        "calls": 12,
+        "summed_provider_seconds": 170.6414,
+        "parsed_result_bytes": 49390,
+        "known_input_tokens": 191807,
+        "known_output_tokens": 10886,
+        "unknown_usage_calls": 0
+      },
+      "annotate | worker | gpt-6.1-sol | medium": {
+        "calls": 1,
+        "summed_provider_seconds": 32.0042,
+        "parsed_result_bytes": 6180,
+        "known_input_tokens": 17416,
+        "known_output_tokens": 1548,
+        "unknown_usage_calls": 0
+      },
+      "pattern-screen | worker | gpt-6-luna | low": {
+        "calls": 6,
+        "summed_provider_seconds": 35.402,
+        "parsed_result_bytes": 6029,
+        "known_input_tokens": 107980,
+        "known_output_tokens": 1158,
+        "unknown_usage_calls": 0
+      },
+      "architecture | worker | gpt-6-luna | low": {
+        "calls": 3,
+        "summed_provider_seconds": 23.6728,
+        "parsed_result_bytes": 3788,
+        "known_input_tokens": 97785,
+        "known_output_tokens": 993,
+        "unknown_usage_calls": 0
+      },
+      "patterns | worker | gpt-6.1-sol | medium": {
+        "calls": 6,
+        "summed_provider_seconds": 207.8229,
+        "parsed_result_bytes": 32486,
+        "known_input_tokens": 135428,
+        "known_output_tokens": 9382,
+        "unknown_usage_calls": 0
+      }
+    },
+    "unchanged_seconds": 1.1,
+    "unchanged_model_calls": 0,
+    "unchanged_reused_batches": 15,
+    "canonical_review_counts": {
+      "pattern-screen": 6,
+      "patterns": 6,
+      "architecture": 3
+    },
+    "canonical_review_counts_stable_after_repeat": true,
+    "minified_saved_result_bytes": {
+      "pattern-screen": 3148,
+      "patterns": 28116,
+      "architecture": 2712
+    },
+    "portable_bytes": 109914,
+    "portable_sha256": "cc952069c8425cb3bec8fc8c55a47ca836bbb821d29f1ec5d231759bc10ae5e9",
+    "portable_file_count": 1,
+    "portable_unchanged_after_repeat": true,
+    "detailed_opportunity_ratings": {
+      "zero": 24,
+      "one": 10,
+      "unknown": 4
+    },
+    "original_checkout_clean": true,
+    "original_portable_unchanged": true,
+    "harness_correction": "After cold mapping finished, measurement code corrected keyword-only batch pagination arguments and read the saved completed result without repeating accepted work.",
+    "limits": [
+      "One real small repository, with Python parsing; non-Python resources remain fingerprinted rather than parsed.",
+      "The earlier83.1-second result had no mandatory scouts and is a different workload.",
+      "Catalogue exposure does not establish detailed review of every card.",
+      "No Fresh Eyes, controlled edit cycle, target-project tests, source edits or deployment were performed by this run.",
+      "Optional clock-input and projection-isolation suggestions had modest potential benefits and costs; no material architecture improvement was established.",
+      "No latency, recall, maintainability or equivalent-CI-assurance guarantee.",
+      "Dollar cost unknown."
+    ]
+  },
+  "final_runtime_binding": {
+    "commit": "5d461e34f6ebaa4c1298c63de2236524343294f4",
+    "wheel_sha256": "981966e9562855f93bfaa918434e3c8694d879dc50b579745ecbd016357ae7ee",
+    "qualified_model_commit": "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+    "installed_files_match_wheel": true,
+    "installed_files_checked": 46,
+    "all_nine_current_reviews_preserved": true,
+    "actual_model_calls": 0,
+    "old_qualification_artifacts_unchanged": true,
+    "cases": {
+      "case-a": {
+        "current_reviews": 3,
+        "input_identities_match_reviewed_runtime": true,
+        "accepted_results_unchanged": true,
+        "provider_invocations": 0,
+        "unchanged_workflow_seconds": 0.1532,
+        "source_and_manifests_unchanged": true
+      },
+      "case-b": {
+        "current_reviews": 6,
+        "input_identities_match_reviewed_runtime": true,
+        "accepted_results_unchanged": true,
+        "provider_invocations": 0,
+        "unchanged_workflow_seconds": 0.2393,
+        "source_and_manifests_unchanged": true
+      }
+    },
+    "guidance_delivery": {
+      "successful_software_mcp_calls": 4,
+      "cli_stdout_bytes": 6982,
+      "likely_owner_entries": 2,
+      "owner_locators_preserved": true,
+      "compact_architecture_preview": true,
+      "expanded_package_options": 4,
+      "implementation_status": "unverified",
+      "source_and_manifests_unchanged": true,
+      "new_model_calls": 0
+    }
+  }
+}

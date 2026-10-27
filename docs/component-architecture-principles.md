@@ -11,10 +11,10 @@ This records the maintainer's house analogy and sharpens the existing ten-princi
 The subsequent [architecture scout implementation](change-request-architecture-scouts.md) turns
 these principles into mandatory focused jobs, including standalone libraries in separate repos,
 and explicit dispositions during plan assessment.
-The charter and agent change guidance express this policy now. Component declarations, complete
-resource-aware impact analysis and automatic CI selection are proposed capabilities below; they
-are not implemented by this documentation or by changing the advice. No project CI checks are
-removed, and no extra compulsory model stage is introduced.
+The charter and agent change guidance express this policy. The subsequent scouts make focused
+review jobs mandatory in new Pattern workflows. Component declarations, complete resource-aware
+impact analysis and automatic CI selection remain proposed capabilities below; the scouts do not
+implement those capabilities or remove project CI checks.
 
 ## The house story
 
