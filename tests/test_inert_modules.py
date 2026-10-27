@@ -105,7 +105,12 @@ def test_whole_mapping_patterns_and_fresh_eyes_cover_marker_without_inventing_re
     mapping = runner.start("mapping", background=False)
     assert mapping["status"] == "completed", mapping
     assert mapping["reconciliation"]["annotated_modules"] == 2
-    patterns = runner.start("patterns", background=False)
+    patterns = runner.start(
+        "patterns",
+        {"pattern_mode": "exhaustive"},
+        scope=["package/__init__.py", "package/application.py"],
+        background=False,
+    )
     assert patterns["status"] == "completed", patterns
     assert patterns["reconciliation"]["evaluated_pairs"] == 266
     fresh = runner.start("fresh-eyes", background=False)

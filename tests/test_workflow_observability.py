@@ -87,7 +87,14 @@ def test_attempt_history_is_bounded_but_counts_survive_resume_and_reload(tmp_pat
         )
 
     runner = WorkflowRunner(application, provider)
-    result = runner.start("patterns", background=False)
+    result = runner.start(
+        "patterns",
+        {
+            "pattern_mode": "exhaustive",
+            "stages": {"patterns": {"provider": "codex", "model": "fixture"}},
+        },
+        background=False,
+    )
     for _ in range(4):
         result = runner.resume(result["run_id"], background=False)
     loaded = WorkflowRunner(application, provider).status(result["run_id"])
@@ -172,7 +179,11 @@ def test_validation_message_is_sanitized_and_ledger_failure_never_retries_paid_w
 
     monkeypatch.setattr(application, "submit_analysis", reject)
     runner = WorkflowRunner(application, lambda request, *_args, **_kwargs: answer(request))
-    rejected = runner.start("mapping", background=False)
+    rejected = runner.start(
+        "mapping",
+        {"stages": {"annotate": {"provider": "codex", "model": "fixture"}}},
+        background=False,
+    )
     assert rejected["failed_attempts"] == 1
     assert "[redacted]" in rejected["attempt_failures"][0]["error"]
     assert "PRIVATE_" not in json.dumps(application.evidence.events(100))

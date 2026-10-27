@@ -36,8 +36,9 @@ class ValidationInput(Input):
 
 
 class AnalysisInput(Input):
-    kind: str = Field(pattern="^(annotate|patterns|fresh-eyes)$")
+    kind: str = Field(pattern="^(annotate|pattern-screen|patterns|fresh-eyes)$")
     scope: list[str] | None = Field(default=None, max_length=100)
+    pattern_ids: list[str] | None = Field(default=None, max_length=133)
 
 
 class SubmissionInput(Input):
@@ -131,6 +132,8 @@ def create_app(application: Any) -> FastAPI:
 
     @server.post("/api/analysis/request")
     def analysis_request(body: AnalysisInput) -> dict:
+        if body.pattern_ids is not None:
+            return application.analysis_request(body.kind, body.scope, pattern_ids=body.pattern_ids)
         return application.analysis_request(body.kind, body.scope)
 
     @server.post("/api/analysis/submit")
@@ -138,8 +141,12 @@ def create_app(application: Any) -> FastAPI:
         return application.submit_analysis(body.request_id, body.result)
 
     @server.get("/api/workflows")
-    def workflows(run_id: str | None = None) -> dict:
-        return application.workflow_status(run_id)
+    def workflows(
+        run_id: str | None = None,
+        batch_offset: int = Query(default=0, ge=0, le=100_000),
+        batch_limit: int = Query(default=10, ge=1, le=50),
+    ) -> dict:
+        return application.workflow_status(run_id, batch_offset, batch_limit)
 
     @server.get("/api/workflows/config")
     def workflow_config() -> dict:

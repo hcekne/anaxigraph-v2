@@ -45,6 +45,7 @@
             <th scope="col"><button data-sort="path">Module <span aria-hidden="true">↕</span></button></th>
             <th scope="col"><button data-sort="loc">Lines <span aria-hidden="true">↕</span></button></th>
             <th scope="col"><button data-sort="functions">Functions <span aria-hidden="true">↕</span></button></th>
+            <th scope="col">Public names</th><th scope="col">Boundary concerns</th>
           </tr></thead><tbody id="module-rows"></tbody></table></div>
           <p id="module-empty" class="empty" hidden>Build the structural map to explore modules here.</p>
           <footer class="pagination"><button id="previous" class="quiet">← Previous</button><span id="page-label">0–0</span><button id="next" class="quiet">Next →</button></footer>
@@ -67,26 +68,27 @@
       <div class="panel-heading workflow-intro"><div><p class="eyebrow">BUILD UNDERSTANDING, THEN CHALLENGE IT</p><h2>Run the full analysis, one saved batch at a time</h2></div></div>
       <div class="workflow-grid">
         <article class="panel workflow-card"><span class="step">01</span><h3>Mapping</h3><p>Refresh the source graph, annotate only missing or stale modules, then reconcile the current map.</p><button class="primary" data-run="mapping">Run full mapping →</button><small>Current annotations are reused.</small></article>
-        <article class="panel workflow-card"><span class="step">02</span><h3>Pattern discovery</h3><p>Review every catalogue pattern against every selected module. Save explicit ratings, alternatives and trade-offs.</p><button class="primary" data-run="patterns">Run full pattern analysis →</button><small>Missing mapping runs first.</small></article>
+        <article class="panel workflow-card"><span class="step">02</span><h3>Pattern discovery</h3><p>Screen the catalogue quickly, then review useful candidates in detail. Save ratings, alternatives and trade-offs.</p><button class="primary" data-run="patterns">Run pattern analysis →</button><small>Production modules by default. Missing mapping runs first. Fresh Eyes runs separately.</small></article>
         <article class="panel workflow-card"><span class="step">03</span><h3>Fresh Eyes</h3><p>Explore three designs per subsystem, then reconcile a product design from behavior alone. Workers cannot inspect source.</p><button class="primary" data-run="fresh-eyes">Run full Fresh Eyes →</button><small>Subsystem designs feed a final product review.</small></article>
       </div>
       <section class="panel workflow-settings">
         <div class="panel-heading"><h2>Models and parallel workers</h2><button id="save-workflow-settings" class="secondary">Save choices</button></div>
         <p class="section-note">Each stage uses the model you choose. A blank model uses that CLI's configured default. Installed Codex or Claude CLI authentication is required.</p>
         <div class="model-settings">
-          <label>Parallel workers<input id="workflow-workers" type="number" min="1" max="100" value="8"></label>
+          <label>Parallel workers<input id="workflow-workers" type="number" min="1" max="100" value="32"></label>
           <label>Seconds per model call (blank means no deadline)<input id="workflow-timeout" type="number" min="30" max="3600" value="600" placeholder="No deadline"></label>
         </div>
+        <label><span><input id="workflow-exhaustive" type="checkbox"> Review every catalogue pattern in detail (slower)</span></label>
         <div id="stage-models" class="model-settings"></div>
         <details><summary>Ordered review passes</summary><p class="section-note">Independent batches run in parallel. Within each batch, enabled review passes run in this order.</p>
           <div class="model-settings"><label><span><input id="review-codex-enabled" type="checkbox"> 1. OpenAI / Codex review</span><input id="review-codex-model" placeholder="Configured Codex model"></label><label><span><input id="review-claude-enabled" type="checkbox"> 2. Claude review</span><input id="review-claude-model" placeholder="Configured Claude model"></label></div>
         </details>
-        <label for="workflow-scope">Optional scope <span class="muted">module paths, one per line; blank means the whole repository</span></label><textarea id="workflow-scope" rows="2" placeholder="Leave blank for all modules"></textarea>
+        <label for="workflow-scope">Optional scope <span class="muted">module paths, one per line; blank uses the workflow default (Patterns: production modules)</span></label><textarea id="workflow-scope" rows="2" placeholder="Leave blank for the default scope"></textarea>
       </section>
       <section class="panel"><div class="panel-heading"><h2>Workflow progress</h2><button id="load-workflows" class="quiet">Refresh progress</button></div><div id="workflow-runs" class="empty" aria-live="polite">No workflows started.</div></section>
       <section class="panel"><div class="panel-heading"><div><h2>Portable understanding</h2><p class="section-note">Current analyses travel with your repository in <code>anaxigraph/</code>. Commit and push that folder through your normal Git workflow.</p></div></div><div class="record-actions"><button id="export-record" class="secondary">Save portable record</button><button id="import-record" class="secondary">Reuse record from this repo</button></div><p id="portable-state" class="section-note">Mapped locally, exported, and committed/pushed are reported separately.</p></section>
       <details class="panel manual-analysis"><summary>Advanced: prepare and submit an individual agent task</summary>
-        <div class="record-actions"><button class="secondary" data-kind="annotate">Prepare annotation task</button><button class="secondary" data-kind="patterns">Prepare Patterns task</button><button class="secondary" data-kind="fresh-eyes">Prepare blind design task</button></div>
+        <div class="record-actions"><button class="secondary" data-kind="annotate">Prepare annotation task</button><button class="secondary" data-kind="patterns">Prepare exhaustive pattern task</button><button class="secondary" data-kind="fresh-eyes">Prepare blind design task</button></div>
       <section class="panel analysis-workspace">
         <div class="panel-heading"><div><p class="eyebrow">AGENT REVIEW</p><h2 id="analysis-title">Prepare a task to begin</h2></div><span id="analysis-state" class="pill">No task selected</span></div>
         <p class="section-note">Use these packets with an independent agent when you want direct control. Full workflows above run and save their batches automatically.</p>

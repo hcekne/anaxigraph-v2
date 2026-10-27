@@ -22,6 +22,7 @@ def configuration():
     }
     reviewer = {"provider": "codex", "model": "reviewer", "reasoning_effort": "medium"}
     return {
+        "pattern_mode": "exhaustive",
         "timeout_seconds": None,
         "stages": {kind: deepcopy(worker) for kind in ("annotate", "patterns", "fresh-eyes")},
         "review_passes": [reviewer],

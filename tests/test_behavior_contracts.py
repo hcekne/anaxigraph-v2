@@ -23,12 +23,24 @@ LEAKS = {
     "part3.py": "Expose the fields in Resort.model_fields.",
 }
 CONFIG = {
+    "pattern_mode": "exhaustive",
     "timeout_seconds": None,
     "stages": {
         kind: {"provider": "codex", "model": "fixture", "reasoning_effort": "xhigh"}
         for kind in ("annotate", "patterns", "fresh-eyes")
     },
 }
+
+
+def test_empty_root_package_name_does_not_match_ordinary_punctuation(tmp_path):
+    (tmp_path / "__init__.py").write_text('"""Package marker."""\n')
+    (tmp_path / "component.py").write_text("def send_result():\n    return 1\n")
+    app = Application(tmp_path)
+    app.scan()
+    graph = app._current()
+    behavior.check_behaviors(graph, ["Provide an observable result to a caller."])
+    with pytest.raises(ValueError, match="source identity"):
+        behavior.check_behaviors(graph, ["Invoke send_result() for the caller."])
 
 
 def application(tmp_path):

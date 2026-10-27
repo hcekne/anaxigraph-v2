@@ -80,8 +80,11 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--receipts", type=Path, help="JSON array of check receipts")
             command.add_argument("--baseline-id", help="Compare against this retained snapshot")
         elif name == "request":
-            command.add_argument("kind", choices=("annotate", "patterns", "fresh-eyes"))
+            command.add_argument(
+                "kind", choices=("annotate", "pattern-screen", "patterns", "fresh-eyes")
+            )
             command.add_argument("--scope", nargs="+")
+            command.add_argument("--pattern-ids", nargs="*", help="Explicit detailed-review cards")
         elif name == "submit":
             command.add_argument("request_id")
             command.add_argument(
@@ -97,6 +100,8 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--config", type=Path, help="Workflow settings JSON")
         elif name == "runs":
             command.add_argument("--run-id")
+            command.add_argument("--batch-offset", type=int, default=0)
+            command.add_argument("--batch-limit", type=int, default=10)
         elif name == "resume":
             command.add_argument("run_id")
         elif name == "workflow-config":
@@ -144,6 +149,8 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
             return application.validate_change(receipts, args.baseline_id)
         return application.validate_change(receipts)
     if args.command == "request":
+        if args.pattern_ids is not None:
+            return application.analysis_request(args.kind, args.scope, pattern_ids=args.pattern_ids)
         return application.analysis_request(args.kind, args.scope)
     if args.command == "submit":
         return application.submit_analysis(args.request_id, _read_json(args.result, dict))
@@ -155,7 +162,7 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
         config = _read_json(args.config, dict) if args.config else None
         return application.workflow_start(args.kind, config, args.scope, True)
     if args.command == "runs":
-        return application.workflow_status(args.run_id)
+        return application.workflow_status(args.run_id, args.batch_offset, args.batch_limit)
     if args.command == "resume":
         return application.workflow_resume(args.run_id, True)
     if args.command == "workflow-config":

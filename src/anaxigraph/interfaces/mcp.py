@@ -69,9 +69,13 @@ def create_mcp(application: Any) -> FastMCP:
 
     @server.tool()
     def analysis_request(
-        kind: Literal["annotate", "patterns", "fresh-eyes"], scope: list[str] | None = None
+        kind: Literal["annotate", "pattern-screen", "patterns", "fresh-eyes"],
+        scope: list[str] | None = None,
+        pattern_ids: list[str] | None = None,
     ) -> dict:
-        """Prepare an annotation, catalogue-pattern or blind Fresh Eyes worker packet."""
+        """Prepare a concise map, ID-only screen, focused pattern or blind Fresh Eyes packet."""
+        if pattern_ids is not None:
+            return application.analysis_request(kind, scope, pattern_ids=pattern_ids)
         return application.analysis_request(kind, scope)
 
     @server.tool()
@@ -96,9 +100,11 @@ def create_mcp(application: Any) -> FastMCP:
         return application.workflow_start(kind, config, scope)
 
     @server.tool()
-    def workflow_status(run_id: str | None = None) -> dict:
-        """Show completed/total batches, active workers, elapsed time and final reconciliation."""
-        return application.workflow_status(run_id)
+    def workflow_status(
+        run_id: str | None = None, batch_offset: int = 0, batch_limit: int = 10
+    ) -> dict:
+        """Show progress; select a run and page its measured batch timings with batch_offset."""
+        return application.workflow_status(run_id, batch_offset, batch_limit)
 
     @server.tool()
     def workflow_resume(run_id: str) -> dict:

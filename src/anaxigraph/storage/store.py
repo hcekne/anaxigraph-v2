@@ -613,6 +613,19 @@ class Store:
         rows = self.reviews(root, kind, review_id=review_id)
         return rows[0] if rows else None
 
+    def find_review(
+        self, root: str, kind: str, scope: list[str], options: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Find one logical scope using the existing index, across snapshot changes."""
+        key = _encode({"scope": scope, "options": options})
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT id FROM reviews WHERE root=? AND kind=? AND scope_key=? "
+                "ORDER BY updated_at DESC LIMIT 1",
+                (_root(root), kind, key),
+            ).fetchone()
+        return self.get_review(root, row["id"], kind) if row else None
+
     def reviews(
         self,
         root: str,

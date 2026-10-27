@@ -41,7 +41,7 @@ def behavior_matcher(graph: Graph) -> Matcher:
         identities.update(path for path in graph.snapshot.files if "/" in path or "." in path)
         names = set()
         for node in graph.nodes:
-            if node.kind == "external":
+            if node.kind == "external" or not node.name:
                 continue
             if "_" in node.name or re.search(r"[a-z0-9][A-Z]|[A-Z]{2}[a-z]|\.", node.name):
                 identities.add(node.name)

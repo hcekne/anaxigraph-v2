@@ -58,8 +58,8 @@ contracts without forcing their callers to know internal implementations.
 4. Pin a change baseline at preparation and compare subsequent candidates against it; attribute
    supplied check reports to the exact candidate.
 5. Generate an annotation task with every supplied function and accept only complete results.
-6. Generate a pattern task accounting for every catalogue card for the selected modules, including
-   ratings, pros, cons, simpler alternatives and unknown evidence.
+6. Cheaply screen catalogue IDs for production modules, then judge only shortlisted opportunities
+   with ratings, costs, simpler alternatives and evidence. Retain exhaustive review as an opt-in.
 7. Generate a behavior-only Fresh Eyes task retaining three independently described alternatives,
    complete declared requirement coverage, tradeoffs and high-level Mermaid diagrams.
 8. Explore the same saved understanding through a sortable table, focused graph and review workflow.
@@ -71,6 +71,15 @@ starts. Accepted batches commit immediately. Run progress retains identities and
 another copy of source/results. Interrupted runs retry unfinished work; compatible accepted results
 are reused only for the requested pipeline. Final reconciliation verifies module/catalogue coverage
 or the blind product hierarchy. It is not an extra unverified claim that a review happened.
+
+The [27 October focused-review decision](change-request-focused-reviews.md) sharpens this architecture:
+a ten-principle charter favors explicit ownership, small public contracts and independently testable
+components. Structural public-surface, private-reference, cycle and test-link observations inform
+advice. Narrow Luna tasks map concisely and select plausible catalogue IDs; a stronger model judges
+only those selections. Tests and inert markers remain mapped but leave the default pattern scope.
+Screening is not evidence that every unselected pattern is irrelevant. Source-aware judgments remain
+proposals, and required project checks remain authoritative. Existing explicit model profiles and
+exhaustive results are preserved. Fresh Eyes stays independently requested.
 
 Annotation validity includes its own source and public interfaces of resolved outgoing dependencies.
 Comment and body-only dependency edits preserve callers; changed signatures, documentation and

@@ -39,6 +39,17 @@ def answer(request):
                 for module in packet["modules"]
             ],
         }
+    if kind == "pattern-screen":
+        return {
+            "producer": "synthetic-workflow-fixture",
+            "selections": [
+                {
+                    "module_id": module["id"],
+                    "pattern_ids": [card["id"] for card in packet["catalogue"][:2]],
+                }
+                for module in packet["modules"]
+            ],
+        }
     if kind == "patterns":
         return {
             "producer": "synthetic-workflow-fixture",
@@ -98,7 +109,11 @@ def test_failed_batches_preserve_success_and_resume_only_failed(tmp_path):
         return answer(request)
 
     runner = WorkflowRunner(application, provider)
-    first = runner.start("mapping", background=False)
+    first = runner.start(
+        "mapping",
+        {"stages": {"annotate": {"provider": "codex", "model": "fixture"}}},
+        background=False,
+    )
     assert first["status"] == "failed"
     assert first["completed_batches"] == 1
     assert application.status()["annotations"]["current"] == 1
@@ -189,11 +204,11 @@ def test_patterns_and_blind_hierarchical_design_are_saved_and_reused(tmp_path):
         return answer(request)
 
     runner = WorkflowRunner(application, provider)
-    patterns = runner.start("patterns", background=False)
+    patterns = runner.start("patterns", {"pattern_mode": "exhaustive"}, background=False)
     assert patterns["status"] == "completed", patterns
     assert patterns["reconciliation"]["evaluated_pairs"] == 266
     previous = calls.copy()
-    repeated = runner.start("patterns", background=False)
+    repeated = runner.start("patterns", {"pattern_mode": "exhaustive"}, background=False)
     assert repeated["status"] == "completed", repeated
     assert repeated["reused_batches"] == 2
     assert calls == previous

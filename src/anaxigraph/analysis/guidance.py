@@ -10,6 +10,8 @@ from typing import Any
 
 from anaxigraph.contracts import Graph, Node
 
+from .charter import CHARTER, boundary_findings, module_facts
+
 
 def module_for(graph: Graph, value: str) -> Node | None:
     return next(
@@ -247,6 +249,7 @@ def _coding_steps(
             }
         ]
     owner = candidates[0]
+    facts = module_facts(graph, owner)
     by_id = {node.id: node for node in graph.nodes}
     reusable = next(
         (
@@ -270,10 +273,15 @@ def _coding_steps(
             "basis": "candidate-owner-and-source-observations",
             "owner": owner.id,
             "suggestion": _short(
-                f"Start by inspecting {owner.path}.{reuse} Keep a local change unless an independently changing responsibility needs a new boundary.",
+                f"Start by inspecting {owner.path}.{reuse} Keep implementation details behind a small public contract; extract a boundary when a responsibility changes independently.",
                 500,
             ),
             "evidence": [{"path": owner.path, "line": reusable.line if reusable else owner.line}],
+            "public_interface": {
+                "basis": facts["public_surface"]["basis"],
+                "count": facts["public_surface"]["count"],
+                "names": facts["public_surface"]["names"][:6],
+            },
         }
     ]
     if contracts:
@@ -298,9 +306,11 @@ def _coding_steps(
         {
             "kind": "compatibility-and-tests",
             "basis": "heuristic-backed-by-observed-consumers",
-            "suggestion": "Keep existing consumer-facing behavior stable; add a regression for the requested change and run the related checks. Observed test references do not prove coverage.",
+            "suggestion": "Develop and check the owning component locally. Preserve its public behavior; when that contract changes, check consumers too. Observed test links do not prove coverage or replace required project checks.",
             "consumers": consumers,
             "tests": tests[:4],
+            "component_tests": facts["observed_test_paths"][:4],
+            "consumer_tests": facts["consumer_test_paths"][:4],
             "evidence": [],
         }
     )
@@ -419,6 +429,7 @@ def prepare(
         "tests": sorted(set(tests))[:20],
         "tests_total": len(set(tests)),
         "implementation_advice": {
+            "principles": [{"id": item["id"], "principle": item["principle"]} for item in CHARTER],
             "steps": _coding_steps(graph, candidates, matches, contracts, tests, impacted),
             "review_proposals": proposals,
             "review_scope": "At most two owner-scoped proposals; expand saved reviews for other options. A proposal is not an instruction to rewrite.",
@@ -473,4 +484,4 @@ def structural_findings(graph: Graph) -> list[dict[str, Any]]:
                     "message": "Check public contract stability before changing this shared dependency.",
                 }
             )
-    return findings
+    return findings + boundary_findings(graph)

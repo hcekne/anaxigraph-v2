@@ -14,12 +14,20 @@ from anaxigraph.analysis import (
     validate_result,
 )
 from anaxigraph.analysis.packets import catalogue
+from anaxigraph.analysis.patterns import (
+    actionable_opportunities,
+    excluded_modules,
+    production_modules,
+    reconcile_patterns,
+    review_summary,
+)
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION, input_identity
 from anaxigraph.application.context import (
     _bounds,
     context_fingerprints,
     dependency_implementation_fingerprints,
 )
+from anaxigraph.application.reuse import reuse_analysis, review_context
 from anaxigraph.contracts import Graph, Node
 from anaxigraph.indexing import capture_sources
 
@@ -142,6 +150,7 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
                 "request_options": request.get("request_options", {}),
                 "children": request.get("children", []),
                 "input_identity": input_identity(request),
+                "resource_context": review_context(app, graph, request["scope"]),
                 "result": result,
             },
         )
@@ -171,15 +180,14 @@ def reviews(
             {key: value for key, value in row.items() if key != "result"}
             | {
                 "producer": row["result"].get("result", {}).get("producer"),
-                "summary": "Three alternatives"
-                if row["kind"] == "fresh-eyes"
-                else "Complete declared catalogue matrix",
+                "summary": review_summary(row),
             }
             for row in rows
         ],
         "total": len(saved),
         "offset": offset,
         "next_offset": offset + len(rows) if offset + len(rows) < len(saved) else None,
+        "opportunities": actionable_opportunities(rows),
     }
 
 
@@ -264,6 +272,8 @@ def analysis_saved(
             for node in current
         )
     row = app.store.get_review(str(app.root), request_id, request["result"]["kind"])
+    if row is None or app._review_state(row, app._current())["status"] != "current":
+        return reuse_analysis(app, request["result"], pipeline)
     return bool(
         row
         and app._review_state(row, app._current())["status"] == "current"
@@ -272,6 +282,30 @@ def analysis_saved(
             or row["result"]["result"].get("execution", {}).get("pipeline") == pipeline
         )
     )
+
+
+def analysis_selection(app: Application, request_id: str) -> list[dict[str, Any]]:
+    graph = app._current()
+    app._require_live(graph)
+    row = app.store.get_review(str(app.root), request_id, "pattern-screen")
+    if row is None or app._review_state(row, graph)["status"] != "current":
+        raise ValueError("Pattern screening is missing or stale; run screening again")
+    return [
+        {"module_id": item["module_id"], "pattern_ids": list(item["pattern_ids"])}
+        for item in row["result"]["result"]["selections"]
+    ]
+
+
+def _reconciliation_rows(app, graph: Graph, kind: str, review_ids: list[str]) -> list[dict]:
+    rows = []
+    for identity in review_ids:
+        row = app.store.get_review(str(app.root), identity, kind)
+        if row is None and kind == "patterns":
+            row = app.store.get_review(str(app.root), identity, "pattern-screen")
+        if row is None or app._review_state(row, graph)["status"] != "current":
+            raise ValueError("Reconciliation found a missing or stale review batch")
+        rows.append(row)
+    return rows
 
 
 def analysis_reconcile(
@@ -283,6 +317,8 @@ def analysis_reconcile(
         for n in graph.nodes
         if n.kind == "module" and (not scope or n.id in scope or n.path in scope)
     }
+    if kind == "patterns" and not scope:
+        selected = {node.id for node in production_modules(graph)}
     base = {
         "status": "completed",
         "phase": "Final reconciliation",
@@ -298,22 +334,15 @@ def analysis_reconcile(
         if selected - current:
             raise ValueError("Mapping reconciliation found missing or stale module understanding")
         return base | {"annotated_modules": len(selected)}
-    rows = []
-    for identity in review_ids:
-        row = app.store.get_review(str(app.root), identity, kind)
-        if row is None or app._review_state(row, graph)["status"] != "current":
-            raise ValueError("Reconciliation found a missing or stale review batch")
-        rows.append(row)
+    rows = _reconciliation_rows(app, graph, kind, review_ids)
     if kind == "patterns":
-        pairs = {
-            (item["module_id"], item["pattern_id"])
-            for row in rows
-            for item in row["result"]["result"]["evaluations"]
-        }
-        expected = {(module, card["id"]) for module in selected for card in catalogue()}
-        if pairs != expected:
-            raise ValueError("Pattern reconciliation found incomplete catalogue/module coverage")
-        return base | {"evaluated_pairs": len(pairs), "expected_pairs": len(expected)}
+        return (
+            base
+            | reconcile_patterns(selected, rows, {card["id"] for card in catalogue()})
+            | {
+                "excluded_modules": excluded_modules(graph) if not scope else [],
+            }
+        )
     products = [
         row
         for row in rows

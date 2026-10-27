@@ -15,8 +15,9 @@ from typing import Any
 from anaxigraph.contracts import Graph, Node
 
 from .behavior import check_behaviors as _check_behaviors
+from .patterns import production_modules
 
-KINDS = {"annotate", "patterns", "fresh-eyes"}
+KINDS = {"annotate", "pattern-screen", "patterns", "fresh-eyes"}
 DEFAULT_PACKET_BYTES = 2_000_000
 DEFAULT_RESULT_BYTES = 8_000_000
 
@@ -26,12 +27,27 @@ def catalogue() -> list[dict[str, Any]]:
     return json.loads(content)["cards"]
 
 
+def _default_scope(graph: Graph, kind: str) -> list[str]:
+    modules = (
+        production_modules(graph)
+        if kind in {"patterns", "pattern-screen"}
+        else [node for node in graph.nodes if node.kind == "module"]
+    )
+    if not modules:
+        raise ValueError("No production modules available; request an explicit module scope")
+    return (
+        [node.id for node in modules]
+        if kind in {"fresh-eyes", "pattern-screen"}
+        else [modules[0].id]
+    )
+
+
 def _scope(graph: Graph, requested: list[str] | None, kind: str) -> list[Node]:
     modules = [node for node in graph.nodes if node.kind == "module"]
     if not modules:
         raise ValueError("No supported source modules are mapped; scan Python source first")
     if not requested:
-        requested = [modules[0].id] if kind != "fresh-eyes" else [node.id for node in modules]
+        requested = _default_scope(graph, kind)
     chosen = [node for node in modules if node.id in requested or node.path in requested]
     matched = {value for value in requested if any(value in (n.id, n.path) for n in chosen)}
     if len(matched) != len(set(requested)):
@@ -80,7 +96,10 @@ def plan_scopes(
     size = batch_size if batch_size is not None else (16 if kind == "fresh-eyes" else 1)
     if type(size) is not int or size < 1:
         raise ValueError("batch_size must be a positive integer")
-    selected = _scope(graph, scope or [n.id for n in graph.nodes if n.kind == "module"], kind)
+    if kind in {"patterns", "pattern-screen"} and not scope:
+        selected = production_modules(graph)
+    else:
+        selected = _scope(graph, scope or [n.id for n in graph.nodes if n.kind == "module"], kind)
     if kind == "annotate" and not include_current:
         selected = [node for node in selected if not _annotation_current(node)]
     return _batches(selected, size, kind)
@@ -97,8 +116,10 @@ def _annotation_packet(
     inert = all(node.data.get("inert_module") is True for node in chosen)
     packet: dict[str, Any] = {
         "instruction": (
-            "Explain behavior concisely: one module overview sentence and short paragraph, "
-            "one sentence for EVERY supplied function, capabilities and behavioral contracts. "
+            "Explain behavior concisely: an overview of about 20 words, a short paragraph of "
+            "about 60–90 words, and about 15 words for EVERY supplied function. Give 3–6 key "
+            "capabilities and only the few essential behavioral contracts; avoid repeating "
+            "every helper as another capability or obligation. "
             "Use source evidence for claims; distinguish declared from inferred obligations. "
             "Capabilities AND contract statements must describe observable behavior without "
             "implementation names, internal classes/methods, source paths or current module "
@@ -147,18 +168,25 @@ def _annotation_packet(
     return packet, schema
 
 
+def _pattern_cards(pattern_ids: list[str] | None) -> list[dict[str, Any]]:
+    cards = catalogue()
+    if pattern_ids is not None:
+        if not isinstance(pattern_ids, list) or any(not isinstance(p, str) for p in pattern_ids):
+            raise ValueError("pattern_ids must name distinct catalogue cards")
+        wanted = set(pattern_ids)
+        if len(wanted) != len(pattern_ids) or wanted - {c["id"] for c in cards}:
+            raise ValueError("pattern_ids must name distinct catalogue cards")
+        cards = [card for card in cards if card["id"] in wanted]
+    return cards
+
+
 def _pattern_packet(
     graph: Graph, chosen: list[Node], pattern_ids: list[str] | None = None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     selected_paths = {node.path for node in chosen}
     selected_ids = {node.id for node in graph.nodes if node.path in selected_paths}
     owners = {node.id: node.path for node in graph.nodes}
-    cards = catalogue()
-    if pattern_ids is not None:
-        wanted = set(pattern_ids)
-        if not wanted or len(wanted) != len(pattern_ids) or wanted - {c["id"] for c in cards}:
-            raise ValueError("pattern_ids must name distinct catalogue cards")
-        cards = [card for card in cards if card["id"] in wanted]
+    cards = _pattern_cards(pattern_ids)
     packet = {
         "instruction": (
             "Independently advocate for EACH catalogue pattern against EACH supplied module. "
@@ -173,7 +201,9 @@ def _pattern_packet(
             "language/framework guarantees before proposing equivalent behavior. No card or module may be skipped."
         ),
         "catalogue": cards,
-        "modules": [asdict(node) for node in chosen],
+        "modules": [asdict(node) for node in chosen]
+        if pattern_ids is None
+        else [_screen_module(graph, node) for node in chosen],
         "symbols": [
             asdict(node)
             for node in graph.nodes
@@ -208,6 +238,10 @@ def _pattern_packet(
         ][:300],
         "evidence_limit": "Static Python graph and saved annotations; inspect source for verification.",
     }
+    if pattern_ids is not None:
+        from .charter import CHARTER
+
+        packet["charter"] = CHARTER
     schema = {
         "evaluations": [
             {
@@ -225,6 +259,68 @@ def _pattern_packet(
         "producer": "agent/model identity",
     }
     return packet, schema
+
+
+def _screen_module(graph: Graph, node: Node) -> dict[str, Any]:
+    from .charter import module_facts
+
+    facts = module_facts(graph, node)
+    annotation = node.data.get("annotation", {})
+    dependencies = set(facts["dependency_paths"])
+    return {
+        "id": node.id,
+        "path": node.path,
+        "fingerprint": graph.snapshot.files[node.path],
+        "brief": {
+            key: annotation[key]
+            for key in ("overview", "detail", "capabilities", "contracts", "uncertainty")
+            if key in annotation
+        },
+        "facts": facts,
+        "neighbor_contracts": [
+            {
+                "path": peer.path,
+                "contracts": peer.data.get("annotation", {}).get("contracts", []),
+            }
+            for peer in graph.nodes
+            if peer.kind == "module" and peer.path in dependencies
+        ],
+    }
+
+
+def _screen_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dict[str, Any]]:
+    from .charter import CHARTER
+
+    missing = [node.path for node in chosen if not _annotation_current(node)]
+    if missing:
+        raise ValueError(
+            f"Pattern screening needs current module briefs; annotate first: {missing[:5]}"
+        )
+    return {
+        "instruction": (
+            "Consider EVERY compact catalogue card for EACH module against the architecture "
+            "charter, observed facts and current brief. Select only IDs worth a stronger detailed "
+            "review, normally 3–10 when justified, at most 10 and zero when no useful opportunity "
+            "merits review. Include plausible but uncertain candidates for stronger judgment; "
+            "an already proven problem is not required. Never force a minimum or manufacture "
+            "findings. An existing good fit "
+            "is not itself an improvement. Include opportunities for simpler local code and "
+            "clearer responsibilities/interfaces. Python functions and modules can implement "
+            "patterns without classes. No pattern is mechanically excluded here. Return IDs "
+            "only, with no ratings, prose or explanations; use pattern_ids: [] when none are "
+            "selected. Unselected is not proven irrelevant."
+        ),
+        "catalogue": [
+            {key: card[key] for key in ("id", "name", "intent", "questions")}
+            for card in catalogue()
+        ],
+        "charter": CHARTER,
+        "modules": [_screen_module(graph, node) for node in chosen],
+        "evidence_limit": "Observed source facts and saved interpretations; screening does not establish applicability.",
+    }, {
+        "producer": "agent/model identity",
+        "selections": [{"module_id": "module ID", "pattern_ids": ["catalogue ID"]}],
+    }
 
 
 def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -313,6 +409,8 @@ def build_request(
         packet, schema = _annotation_packet(graph, chosen, symbols, sources)
     elif kind == "patterns":
         packet, schema = _pattern_packet(graph, chosen, pattern_ids)
+    elif kind == "pattern-screen":
+        packet, schema = _screen_packet(graph, chosen)
     else:
         packet, schema = _fresh_packet(graph, chosen)
     options = {

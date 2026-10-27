@@ -53,7 +53,7 @@ def test_checkout_options_work_before_or_after_command(position: str, tmp_path: 
         (["request", "fresh-eyes"], "analysis_request", ("fresh-eyes", None)),
         (["reviews", "--kind", "patterns"], "reviews", ("patterns",)),
         (["run", "mapping"], "workflow_start", ("mapping", None, None, True)),
-        (["runs"], "workflow_status", (None,)),
+        (["runs"], "workflow_status", (None, 0, 10)),
         (["resume", "r"], "workflow_resume", ("r", True)),
         (["workflow-config"], "workflow_configure", (None,)),
         (["export"], "export_record", ()),

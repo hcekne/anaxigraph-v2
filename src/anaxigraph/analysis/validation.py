@@ -106,6 +106,10 @@ def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[st
     kind = request["kind"]
     fields, children = {
         "annotate": ({"producer", "annotations"}, {"annotations": annotation}),
+        "pattern-screen": (
+            {"producer", "selections"},
+            {"selections": lambda item: _project(item, {"module_id", "pattern_ids"})},
+        ),
         "patterns": (
             {"producer", "evaluations"},
             {
@@ -235,6 +239,21 @@ def _annotations(request: dict[str, Any], result: dict[str, Any], graph: Graph) 
     check_annotation_behaviors(graph, annotations)
 
 
+def _pattern_screen(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> None:
+    selections = result.get("selections")
+    if not isinstance(selections, list) or len(selections) != len(request["scope"]):
+        raise ValueError("Screening must cover every requested module exactly once")
+    if set(_identities(selections, "module_id")) != set(request["scope"]):
+        raise ValueError("Screening has missing, duplicate or unexpected module IDs")
+    catalogue_ids = {card["id"] for card in request["packet"]["catalogue"]}
+    for selection in selections:
+        ids = selection.get("pattern_ids")
+        if not isinstance(ids, list) or len(ids) > 10 or any(not isinstance(i, str) for i in ids):
+            raise ValueError("Screen selections must contain zero to ten catalogue IDs")
+        if len(set(ids)) != len(ids) or set(ids) - catalogue_ids:
+            raise ValueError("Screen selections contain duplicate or unknown catalogue IDs")
+
+
 def _patterns(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> None:
     evaluations = result.get("evaluations")
     patterns = {card["id"] for card in request["packet"]["catalogue"]}
@@ -332,7 +351,12 @@ def validate_result(request: dict[str, Any], result: dict[str, Any], graph: Grap
     _text(result.get("producer"), "producer", 200)
     _validate_execution(result)
     kind = request["kind"]
-    validators = {"annotate": _annotations, "patterns": _patterns, "fresh-eyes": _fresh_eyes}
+    validators = {
+        "annotate": _annotations,
+        "pattern-screen": _pattern_screen,
+        "patterns": _patterns,
+        "fresh-eyes": _fresh_eyes,
+    }
     if kind not in validators:
         raise ValueError("Unknown analysis result kind")
     validators[kind](request, result, graph)

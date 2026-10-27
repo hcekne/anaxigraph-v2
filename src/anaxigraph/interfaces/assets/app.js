@@ -122,6 +122,17 @@ function moduleRow(node) {
   for (const value of [node.data?.loc ?? "Unknown", parseFailed ? "Unknown" : (node.data?.function_count ?? "Unknown")]) {
     row.append(textElement("td", String(value)));
   }
+  const boundary = node.data?.boundary || {};
+  const publicNames = textElement("td", String(boundary.public_names ?? "Unknown"));
+  publicNames.title = `Public names observed using ${boundary.basis || "unrecorded"}. A count is not a behavioral contract.`;
+  const concerns = [];
+  if (boundary.private_accesses > 0) concerns.push(`${boundary.private_accesses} private accesses`);
+  if (boundary.cycle_size > 0) concerns.push(`${boundary.cycle_size}-module cycle`);
+  const boundaryCell = textElement("td", parseFailed ? "Unknown" : node.data?.is_test ? "Test observations" : (concerns.join(" · ") || "None observed"));
+  boundaryCell.title = node.data?.is_test
+    ? "Test imports are not classified as production boundary violations."
+    : "Observed private accesses and production dependency cycles. No observed concerns does not prove safety.";
+  row.append(publicNames, boundaryCell);
   return row;
 }
 
@@ -241,7 +252,7 @@ async function requestAnalysis(kind) {
   const scope = lines($("#analysis-scope").value);
   const packet = await api("/api/analysis/request", { kind, scope: scope.length ? scope : null });
   state.request = packet;
-  $("#analysis-title").textContent = { annotate: "Module annotation", patterns: "Pattern discovery", "fresh-eyes": "Blind Fresh Eyes design" }[kind];
+  $("#analysis-title").textContent = { annotate: "Module annotation", patterns: "Exhaustive pattern task", "fresh-eyes": "Blind Fresh Eyes design" }[kind];
   $("#analysis-state").textContent = "Awaiting agent result";
   $("#analysis-packet").textContent = formatJSON(packet);
   $("#blind-note").hidden = kind !== "fresh-eyes";
@@ -249,7 +260,9 @@ async function requestAnalysis(kind) {
   $("#copy-task").disabled = false;
   $("#analysis-result").value = "";
   switchPage("workflows");
-  notice("Task prepared. Give its packet and response schema to your agent.");
+  notice(kind === "patterns"
+    ? "Exhaustive task prepared: every catalogue pattern needs detailed evaluation. Run pattern analysis uses fast screening by default."
+    : "Task prepared. Give its packet and response schema to your agent.");
 }
 
 async function refreshReviews(append = false) {
@@ -378,7 +391,7 @@ async function refresh() {
   }
 }
 
-const stageLabels = { annotate: "Mapping", patterns: "Patterns", "fresh-eyes": "Fresh Eyes" };
+const stageLabels = { annotate: "Mapping", "pattern-screen": "Fast pattern screening", patterns: "Detailed pattern review", "fresh-eyes": "Fresh Eyes" };
 let workflowSettings = null;
 let workflowTimer = null;
 const workflowStatuses = new Map();
@@ -387,6 +400,7 @@ function renderModelSettings(config) {
   workflowSettings = config;
   $("#workflow-workers").value = config.workers;
   $("#workflow-timeout").value = config.timeout_seconds ?? "";
+  $("#workflow-exhaustive").checked = config.pattern_mode === "exhaustive";
   const parent = $("#stage-models");
   parent.replaceChildren();
   for (const [kind, label] of Object.entries(stageLabels)) {
@@ -438,7 +452,7 @@ function renderModelSettings(config) {
 function readWorkflowSettings() {
   if (!workflowSettings) throw new Error("Model settings are still loading.");
   const timeout = $("#workflow-timeout").value.trim();
-  const config = { workers: Number($("#workflow-workers").value), timeout_seconds: timeout === "" ? null : Number(timeout), stages: {}, review_passes: [] };
+  const config = { workers: Number($("#workflow-workers").value), timeout_seconds: timeout === "" ? null : Number(timeout), pattern_mode: $("#workflow-exhaustive").checked ? "exhaustive" : "screened", stages: {}, review_passes: [] };
   for (const kind of Object.keys(stageLabels)) {
     const provider = $(`#provider-${kind}`).value;
     config.stages[kind] = { provider, model: $(`#model-${kind}`).value.trim(), fallbacks: $(`#fallback-${kind}`).value.split(",").map((x) => x.trim()).filter(Boolean).map((model) => {
@@ -461,9 +475,49 @@ function readWorkflowSettings() {
   return config;
 }
 
+function workflowTiming(runId) {
+  const timing = document.createElement("details");
+  timing.dataset.runId = runId;
+  timing.append(textElement("summary", "Batch and model timing"));
+  const content = document.createElement("div");
+  const status = textElement("p", "Open to load recorded batch timings.", "section-note");
+  const more = textElement("button", "Load more batch timings", "quiet");
+  more.hidden = true;
+  let offset = 0, shown = 0, loading = false;
+  async function load(reset) {
+    if (loading) return;
+    loading = true;
+    status.textContent = "Loading timings…";
+    try {
+      const query = new URLSearchParams({ run_id: runId, batch_offset: reset ? 0 : offset, batch_limit: 10 });
+      const run = await api(`/api/workflows?${query}`);
+      if (reset) {
+        content.replaceChildren();
+        shown = 0;
+        if (run.timing_complete === false) content.append(textElement("p", "Earlier timing was not recorded; totals cover recorded work only.", "section-note"));
+        for (const stage of run.stage_timings || []) content.append(textElement("p", `${stageLabels[stage.stage] || stage.stage}: ${stage.completed_batches}/${stage.total_batches} batches · ${stage.elapsed_seconds.toFixed(2)} summed batch seconds · ${stage.model_calls} worker calls · ${stage.reused_batches} reused.`, "section-note"));
+        for (const model of run.model_usage || []) content.append(textElement("p", `${model.model || "Provider default"} ${model.reasoning_effort || ""}: ${model.calls} calls · ${model.elapsed_seconds.toFixed(2)} worker seconds · ${model.output_tokens === null ? `${model.known_output_tokens} known output tokens; ${model.unknown_output_calls} calls unknown` : `${model.output_tokens} output tokens`}.`, "section-note"));
+      }
+      for (const batch of run.batch_timings || []) content.append(textElement("p", `Batch ${batch.id} · ${stageLabels[batch.kind] || batch.kind} · ${Number.isFinite(batch.elapsed_seconds) ? batch.elapsed_seconds.toFixed(2) : "Unknown"} seconds · ${batch.model_calls ?? "Unknown"} worker calls${batch.reused ? " · saved result reused" : batch.skipped ? " · empty shortlist; no detail call" : ""}.`, "section-note"));
+      shown += (run.batch_timings || []).length;
+      offset = run.next_batch_offset;
+      more.hidden = offset === null;
+      status.textContent = `Showing ${shown} of ${run.batch_timings_total} batch timings.`;
+    } catch (error) {
+      status.textContent = "Timing could not load. Close and reopen to retry.";
+      notice(error.message, true);
+    } finally { loading = false; }
+  }
+  timing.addEventListener("toggle", () => { if (timing.open) load(true); });
+  more.addEventListener("click", () => action(more, () => load(false)));
+  timing.append(content, status, more);
+  return timing;
+}
+
 async function refreshWorkflows() {
   const data = await api("/api/workflows");
   const parent = $("#workflow-runs");
+  const timings = new Map([...parent.querySelectorAll("details[data-run-id]")].map((element) => [element.dataset.runId, element]));
   parent.replaceChildren();
   parent.classList.toggle("empty", !data.items.length);
   if (!data.items.length) parent.textContent = "No workflows started.";
@@ -474,7 +528,7 @@ async function refreshWorkflows() {
     workflowStatuses.set(run.run_id, run.status);
     const card = textElement("article", "", "run-card");
     const heading = textElement("div", "", "run-heading");
-    heading.append(textElement("h3", `${stageLabels[run.kind] || run.kind} · ${run.status}`));
+    heading.append(textElement("h3", `${run.kind === "patterns" ? "Pattern discovery" : stageLabels[run.kind] || run.kind} · ${run.status}`));
     if (["failed", "interrupted"].includes(run.status)) {
       const button = textElement("button", "Retry unfinished batches", "secondary");
       button.addEventListener("click", () => action(button, async () => {
@@ -493,7 +547,9 @@ async function refreshWorkflows() {
     if (run.batch_retries || run.failed_attempts) card.append(textElement("p", `${run.batch_retries || 0} batch retries · ${run.failed_attempts || 0} failed attempts recorded${run.attempt_history_complete ? "" : " · earlier failure details unavailable"}.`, "section-note"));
     for (const failure of run.failures || []) card.append(textElement("p", `Batch ${failure.batch_id}: ${failure.error}`, "run-error"));
     for (const failure of run.attempt_failures || []) card.append(textElement("p", `Earlier attempt ${failure.attempt}, batch ${failure.batch_id} (${failure.phase}): ${failure.error}`, "run-error"));
+    card.append(timings.get(run.run_id) || workflowTiming(run.run_id));
     if (run.reconciliation) card.append(textElement("p", `Final reconciliation: ${run.reconciliation.status}. ${run.record_exported ? "Portable record saved." : "Results saved locally."}`));
+    if (run.reconciliation?.mode === "screened") card.append(textElement("p", `${run.reconciliation.screened_pairs} module × pattern checks screened · ${run.reconciliation.selected_pairs} selected · ${run.reconciliation.detailed_pairs} evaluated in detail. Screening is not a detailed rating.`, "section-note"));
     parent.append(card);
     running ||= ["running", "queued"].includes(run.status);
   }

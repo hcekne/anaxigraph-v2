@@ -13,6 +13,7 @@ from anaxigraph.application import Application
 from anaxigraph.workflows.engine import WorkflowRunner
 
 CONFIG = {
+    "pattern_mode": "exhaustive",
     "timeout_seconds": None,
     "stages": {
         kind: {"provider": "codex", "model": "fixture", "reasoning_effort": "xhigh"}

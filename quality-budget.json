@@ -2,7 +2,7 @@
   "version": 1,
   "baseline_commit": "dcc1a68173c794fc37d9e83541fd3bb89b6eef2c",
   "limits": {
-    "production_physical_lines": 8000,
+    "production_physical_lines": 9000,
     "file_physical_lines": 800,
     "package_data_bytes": 200000,
     "new_function_complexity": 15
@@ -48,8 +48,8 @@
       "reason": "Opt-in portable publication and local evidence commands add flat transport cases. Direct argument registration and dispatch are clearer than forwarding helpers introduced only to lower this metric."
     },
     "src/anaxigraph/interfaces/cli.py:dispatch": {
-      "ceiling": 27,
-      "reason": "Opt-in portable publication and local evidence commands add flat transport cases. Direct argument registration and dispatch are clearer than forwarding helpers introduced only to lower this metric."
+      "ceiling": 28,
+      "reason": "Opt-in portable publication, local evidence and explicit selected-card requests add flat transport cases. Direct argument dispatch keeps CLI policy in the shared application; forwarding helpers solely to lower the metric would obscure it."
     }
   }
 }

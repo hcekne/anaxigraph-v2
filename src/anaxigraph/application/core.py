@@ -14,6 +14,7 @@ from typing import Any
 from anaxigraph import __version__
 from anaxigraph.analysis.behavior import annotation_behavior_problems
 from anaxigraph.analysis.changes import change_review
+from anaxigraph.analysis.charter import module_facts
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
 from anaxigraph.application import records, reviews
@@ -173,13 +174,15 @@ class Application:
             raise ValueError("offset must be a nonnegative integer")
         if sort not in {"path", "loc", "functions", "function_count"}:
             raise ValueError("sort must be path, loc or functions")
-        nodes = [node for node in self._current().nodes if node.kind == "module"]
+        graph = self._current()
+        nodes = [node for node in graph.nodes if node.kind == "module"]
         key = "function_count" if sort == "functions" else sort
         nodes.sort(
             key=lambda n: n.path if key == "path" else n.data.get(key, 0), reverse=descending
         )
         items: list[dict[str, Any]] = []
         for node in nodes[offset : offset + limit]:
+            facts = module_facts(graph, node)
             data = {
                 key: node.data[key]
                 for key in (
@@ -193,6 +196,14 @@ class Application:
                     "behavioral_validation",
                 )
                 if key in node.data
+            }
+            data["boundary"] = {
+                "public_names": facts["public_surface"]["count"],
+                "basis": facts["public_surface"]["basis"],
+                "dependencies": facts["dependency_count"],
+                "consumers": facts["consumer_count"],
+                "private_accesses": facts["private_access_count"],
+                "cycle_size": facts["cycle_size"],
             }
             annotation = node.data.get("annotation")
             if annotation:
@@ -408,6 +419,9 @@ class Application:
     def analysis_saved(self, request_id: str, pipeline: dict[str, Any] | None = None) -> bool:
         return reviews.analysis_saved(self, request_id, pipeline)
 
+    def analysis_selection(self, request_id: str) -> list[dict[str, Any]]:
+        return reviews.analysis_selection(self, request_id)
+
     def analysis_reconcile(
         self, kind: str, review_ids: list[str], scope: list[str] | None = None
     ) -> dict[str, Any]:
@@ -440,8 +454,10 @@ class Application:
     ) -> dict[str, Any]:
         return self._workflows.start(kind, config, scope, background=not wait)
 
-    def workflow_status(self, run_id: str | None = None) -> dict[str, Any]:
-        return self._workflows.status(run_id)
+    def workflow_status(
+        self, run_id: str | None = None, batch_offset: int = 0, batch_limit: int = 10
+    ) -> dict[str, Any]:
+        return self._workflows.status(run_id, batch_offset=batch_offset, batch_limit=batch_limit)
 
     def workflow_resume(self, run_id: str, wait: bool = False) -> dict[str, Any]:
         return self._workflows.resume(run_id, background=not wait)

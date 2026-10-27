@@ -19,6 +19,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from anaxigraph.analysis.packets import plan_scopes
+from anaxigraph.workflows.progress import (
+    attempt_summary,
+    finish_batch,
+    record_model,
+    start_batch,
+    timing_summary,
+)
 from anaxigraph.workflows.providers import configured_model, execute, reasoning_effort
 
 _MUTEX = threading.RLock()
@@ -31,11 +38,30 @@ KINDS = {
     "fresh-eyes": "fresh-eyes",
 }
 DEFAULTS: dict[str, Any] = {
-    "workers": 8,
+    "workers": 32,
     "timeout_seconds": 600,
+    "pattern_mode": "screened",
     "stages": {
-        kind: {"provider": "codex", "model": "", "fallbacks": []}
-        for kind in ("annotate", "patterns", "fresh-eyes")
+        **{
+            kind: {
+                "provider": "codex",
+                "model": "gpt-6-luna",
+                "reasoning_effort": "low",
+                "fallbacks": [
+                    {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"}
+                ],
+            }
+            for kind in ("annotate", "pattern-screen")
+        },
+        "patterns": {
+            "provider": "codex",
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "medium",
+            "fallbacks": [
+                {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "xhigh"}
+            ],
+        },
+        "fresh-eyes": {"provider": "codex", "model": "", "fallbacks": []},
     },
     "review_passes": [],
 }
@@ -60,28 +86,35 @@ def _selected_worker(value: dict[str, Any]) -> dict[str, Any]:
     return selected
 
 
+def _stage_choices(stages: Any) -> dict[str, Any]:
+    if not isinstance(stages, dict):
+        raise ValueError("stages must map analysis names to model choices")
+    selected = deepcopy(DEFAULTS["stages"])
+    for name, choice in stages.items():
+        if name not in KINDS and name != "pattern-screen":
+            raise ValueError("Unknown model stage")
+        fallbacks = choice.get("fallbacks", []) if isinstance(choice, dict) else []
+        if not isinstance(fallbacks, list) or len(fallbacks) > 4:
+            raise ValueError("Select at most four progressively stronger fallback workers")
+        selected[KINDS.get(name, name)] = _worker(choice) | {
+            "fallbacks": [_worker(x) for x in fallbacks]
+        }
+    return selected
+
+
 def _config(value: dict[str, Any] | None) -> dict[str, Any]:
     config = deepcopy(DEFAULTS)
     if value:
         if not isinstance(value, dict) or set(value) - set(DEFAULTS):
             raise ValueError(
-                "Workflow settings are workers, timeout_seconds, stages and review_passes"
+                "Workflow settings are workers, timeout_seconds, pattern_mode, stages and review_passes"
             )
-        config.update({k: v for k, v in value.items() if k != "stages"})
-        stages = value.get("stages", {})
-        if not isinstance(stages, dict):
-            raise ValueError("stages must map analysis names to model choices")
-        for name, choice in stages.items():
-            if name not in KINDS:
-                raise ValueError("Unknown model stage")
-            fallbacks = choice.get("fallbacks", []) if isinstance(choice, dict) else []
-            if not isinstance(fallbacks, list) or len(fallbacks) > 4:
-                raise ValueError("Select at most four progressively stronger fallback workers")
-            config["stages"][KINDS[name]] = _worker(choice) | {
-                "fallbacks": [_worker(x) for x in fallbacks]
-            }
+        config.update(value)
+        config["stages"] = _stage_choices(value.get("stages", {}))
     if type(config["workers"]) is not int or not 1 <= config["workers"] <= 100:
         raise ValueError("workers must be between 1 and 100")
+    if config["pattern_mode"] not in ("screened", "exhaustive"):
+        raise ValueError("pattern_mode must be screened or exhaustive")
     timeout = config["timeout_seconds"]
     if timeout is not None and (type(timeout) is not int or not 30 <= timeout <= 3600):
         raise ValueError("timeout_seconds must be null for no deadline, or between 30 and 3600")
@@ -101,25 +134,6 @@ def _failure_message(error: Exception, phase: str) -> str:
         "[redacted]",
         message,
     )[:200]
-
-
-def _attempt_summary(run: dict[str, Any]) -> dict[str, Any]:
-    """Count recorded failures, including fallback candidates, without inventing old history."""
-    batches = run["batches"]
-    failures = [
-        {"batch_id": batch["id"], **failure}
-        for batch in batches
-        for failure in batch.get("attempt_failures", [])
-    ]
-    count = sum(batch.get("failure_count", 0) for batch in batches)
-    return {
-        "batch_attempts": sum(batch["attempts"] for batch in batches),
-        "batch_retries": sum(max(0, batch["attempts"] - 1) for batch in batches),
-        "failed_attempts": count,
-        "attempt_history_complete": run.get("attempt_history_version") == 1,
-        "attempt_failures": sorted(failures, key=lambda failure: failure["at"], reverse=True)[:10],
-        "attempt_failures_truncated": count > min(len(failures), 10),
-    }
 
 
 class WorkflowRunner:
@@ -189,7 +203,13 @@ class WorkflowRunner:
         return method() if callable(method) else {}
 
     def _summary(
-        self, run: dict[str, Any], publication: dict[str, Any] | None = None
+        self,
+        run: dict[str, Any],
+        publication: dict[str, Any] | None = None,
+        *,
+        batch_offset: int = 0,
+        batch_limit: int = 10,
+        include_details: bool = True,
     ) -> dict[str, Any]:
         publication = self._publication() if publication is None else publication
         batches = run["batches"]
@@ -230,7 +250,8 @@ class WorkflowRunner:
             "committed": publication.get("committed"),
             "pushed": publication.get("pushed"),
             "committed_pushed": publication.get("committed_pushed"),
-            **_attempt_summary(run),
+            **attempt_summary(run),
+            **timing_summary(run, batch_offset, batch_limit, include_details=include_details),
         }
 
     def _process_alive(self, run: dict[str, Any]) -> bool:
@@ -250,16 +271,27 @@ class WorkflowRunner:
             except BlockingIOError:
                 return True
 
-    def status(self, run_id: str | None = None) -> dict[str, Any]:
+    def status(
+        self, run_id: str | None = None, *, batch_offset: int = 0, batch_limit: int = 10
+    ) -> dict[str, Any]:
+        if type(batch_offset) is not int or not 0 <= batch_offset <= 100_000:
+            raise ValueError("batch_offset must be between 0 and 100000")
+        if type(batch_limit) is not int or not 1 <= batch_limit <= 50:
+            raise ValueError("batch_limit must be between 1 and 50")
         with _MUTEX:
             if run_id:
-                return self._summary(self._load(run_id))
+                return self._summary(
+                    self._load(run_id), batch_offset=batch_offset, batch_limit=batch_limit
+                )
             paths = sorted(
                 self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
             )
             runs = [json.loads(p.read_text()) for p in paths if p.name != "settings.json"]
             publication = self._publication()
-            return {"items": [self._summary(run, publication) for run in runs], "total": len(runs)}
+            return {
+                "items": [self._summary(run, publication, include_details=False) for run in runs],
+                "total": len(runs),
+            }
 
     def start(
         self,
@@ -293,6 +325,7 @@ class WorkflowRunner:
                 "batches": [],
                 "stages_planned": [],
                 "attempt_history_version": 1,
+                "timing_version": 1,
                 "pid": os.getpid(),
             }
             self._save(run)
@@ -349,31 +382,18 @@ class WorkflowRunner:
                         "Checkout changed; start a new workflow for its current snapshot"
                     )
                 run["snapshot_id"] = snapshot
-                stages = ["annotate"] if run["kind"] == "annotate" else ["annotate", run["kind"]]
-                for stage in stages:
-                    self._stage(run, stage)
-                    if any(b["status"] == "failed" for b in run["batches"]):
-                        raise ValueError(
-                            "Some batches failed; completed results are saved. Retry failed batches."
-                        )
-                run["phase"] = "Final reconciliation"
-                self._save(run)
-                if run["kind"] == "fresh-eyes":
-                    self._product(run)
-                review_ids = [
-                    b["request_id"]
-                    for b in run["batches"]
-                    if b.get("request_id") and b["kind"] != "annotate"
-                ]
-                reconciliation = self.application.analysis_reconcile(
-                    run["kind"], review_ids, run["scope"]
-                )
-                run["reconciliation"] = reconciliation | {
-                    "status": "completed",
-                    "phase": "Final reconciliation",
-                    "review_ids": review_ids,
-                    "message": "Validated batches form one current map; all declared scopes are accounted for.",
-                }
+                if (
+                    run["kind"] == "patterns"
+                    and "pattern_mode" not in run["config"]
+                    and run["scope"] is None
+                ):
+                    # Old runs declared every module before production-only screening existed.
+                    run["scope"] = [
+                        node.id
+                        for node in self.application._current().nodes
+                        if node.kind == "module"
+                    ]
+                self._review(run)
                 run["status"] = "completed"
             except Exception as error:
                 run["status"], run["error"] = "failed", str(error)[:600]
@@ -396,29 +416,45 @@ class WorkflowRunner:
                 _RUNNING.pop((str(self.application.root), run_id), None)
                 _ACTIVE.discard((str(self.application.root), run_id))
 
+    def _review(self, run: dict[str, Any]) -> None:
+        stages = ["annotate"] if run["kind"] == "annotate" else ["annotate", run["kind"]]
+        if run["kind"] == "patterns" and run["config"].get("pattern_mode") == "screened":
+            stages.insert(1, "pattern-screen")
+        for stage in stages:
+            self._stage(run, stage)
+            if any(batch["status"] == "failed" for batch in run["batches"]):
+                raise ValueError(
+                    "Some batches failed; completed results are saved. Retry failed batches."
+                )
+        run["phase"] = "Final reconciliation"
+        self._save(run)
+        if run["kind"] == "fresh-eyes":
+            self._product(run)
+        review_ids = [
+            batch["request_id"]
+            for batch in run["batches"]
+            if batch.get("request_id") and batch["kind"] != "annotate"
+        ]
+        reconciliation = self.application.analysis_reconcile(run["kind"], review_ids, run["scope"])
+        run["reconciliation"] = reconciliation | {
+            "status": "completed",
+            "phase": "Final reconciliation",
+            "review_ids": review_ids,
+            "message": "Validated batches form one current map; all declared scopes are accounted for.",
+        }
+
     def _stage(self, run: dict[str, Any], kind: str) -> None:
         run["phase"] = {
             "annotate": "Mapping annotations",
+            "pattern-screen": "Fast catalogue screening",
             "patterns": "Catalogue review",
             "fresh-eyes": "Independent subsystem designs",
         }[kind]
         if kind not in run["stages_planned"]:
-            scopes = plan_scopes(
-                self.application._current(),
-                kind,
-                run["scope"],
-                include_current=kind == "annotate" and bool(run["config"]["review_passes"]),
-            )
-            for scope in scopes:
-                run["batches"].append(
-                    {
-                        "id": len(run["batches"]) + 1,
-                        "kind": kind,
-                        "scope": scope,
-                        "status": "pending",
-                        "attempts": 0,
-                    }
-                )
+            if kind == "patterns" and run["config"].get("pattern_mode") == "screened":
+                self._plan_details(run)
+            else:
+                self._plan_scopes(run, kind)
             run["stages_planned"].append(kind)
         self._save(run)
         pending = [b for b in run["batches"] if b["kind"] == kind and b["status"] != "completed"]
@@ -427,18 +463,74 @@ class WorkflowRunner:
             for job in as_completed(jobs):
                 job.result()
 
+    def _plan_scopes(self, run, kind):
+        graph = self.application._current()
+        scope = run["scope"]
+        if kind == "annotate" and run["kind"] == "patterns" and scope is None:
+            scope = [
+                identity for group in plan_scopes(graph, "pattern-screen") for identity in group
+            ]
+            if not scope:
+                return
+        scopes = plan_scopes(
+            graph,
+            kind,
+            scope,
+            include_current=kind == "annotate" and bool(run["config"]["review_passes"]),
+        )
+        for scope in scopes:
+            run["batches"].append(
+                {
+                    "id": len(run["batches"]) + 1,
+                    "kind": kind,
+                    "scope": scope,
+                    "status": "pending",
+                    "attempts": 0,
+                }
+            )
+
+    def _plan_details(self, run):
+        for batch in list(run["batches"]):
+            if batch["kind"] == "pattern-screen":
+                for selection in self.application.analysis_selection(batch["request_id"]):
+                    run["batches"].append(
+                        {
+                            "id": len(run["batches"]) + 1,
+                            "kind": "patterns",
+                            "scope": [selection["module_id"]],
+                            "screen_id": batch["request_id"],
+                            "status": "pending",
+                            "attempts": 0,
+                        }
+                    )
+
+    def _request(self, batch):
+        if "children" in batch:
+            return self.application.analysis_product_request(batch["children"])
+        if "screen_id" in batch:
+            selection = self.application.analysis_selection(batch["screen_id"])
+            patterns = next(
+                row["pattern_ids"] for row in selection if row["module_id"] in batch["scope"]
+            )
+            if not patterns:
+                batch["status"], batch["skipped"] = "completed", True
+                return None
+            return self.application.analysis_request(
+                "patterns", batch["scope"], pattern_ids=patterns
+            )
+        return self.application.analysis_request(batch["kind"], batch["scope"])
+
     def _batch(self, run: dict[str, Any], batch: dict[str, Any]) -> None:
         with _MUTEX:
+            started, calls_before = start_batch(batch)
             batch["status"], batch["attempts"] = "running", batch["attempts"] + 1
             batch.pop("error", None)
             self._save(run)
         phase, recorded = "request", False
         try:
-            request = (
-                self.application.analysis_product_request(batch["children"])
-                if "children" in batch
-                else self.application.analysis_request(batch["kind"], batch["scope"])
-            )
+            request = self._request(batch)
+            if request is None:
+                return
             with _MUTEX:
                 batch["request_id"] = request["request_id"]
                 self._save(run)
@@ -492,6 +584,10 @@ class WorkflowRunner:
                 self._record_failure(run, batch, error, phase)
             with _MUTEX:
                 batch["status"], batch["error"] = "failed", _failure_message(error, phase)
+                self._save(run)
+        finally:
+            with _MUTEX:
+                finish_batch(batch, started, calls_before)
                 self._save(run)
 
     def _record_failure(self, run, batch, error, phase):
@@ -581,23 +677,31 @@ class WorkflowRunner:
         review=False,
     ):
         evidence = getattr(self.application, "evidence", None)
-        if evidence is None:
-            return
         try:
-            evidence.model_call(
-                worker["provider"],
-                worker["model"],
-                request["kind"] + (":review" if review else ""),
-                status,
-                elapsed,
-                usage=usage,
-                request_id=request["request_id"],
-                reused=reused,
-                attempt=batch["attempts"],
-                reasoning_effort=worker.get("reasoning_effort"),
-            )
+            if evidence is not None:
+                evidence.model_call(
+                    worker["provider"],
+                    worker["model"],
+                    request["kind"] + (":review" if review else ""),
+                    status,
+                    elapsed,
+                    usage=usage,
+                    request_id=request["request_id"],
+                    reused=reused,
+                    attempt=batch["attempts"],
+                    reasoning_effort=worker.get("reasoning_effort"),
+                )
         except (ValueError, OSError) as error:
             # Do not pay for another model call because the separate ledger is full.
+            with _MUTEX:
+                run["evidence_error"] = str(error)[:300]
+        try:
+            with _MUTEX:
+                record_model(
+                    run, batch, request, worker, elapsed, usage, reused=reused, review=review
+                )
+                self._save(run)
+        except (ValueError, OSError) as error:
             with _MUTEX:
                 run["evidence_error"] = str(error)[:300]
 

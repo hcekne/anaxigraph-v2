@@ -140,6 +140,60 @@ def interface_fingerprint(tree: ast.Module) -> str:
     return hashlib.sha256(repr(value).encode()).hexdigest()
 
 
+def _assigns_exports(item: ast.Assign | ast.AnnAssign) -> bool:
+    targets = item.targets if isinstance(item, ast.Assign) else [item.target]
+    return any(isinstance(target, ast.Name) and target.id == "__all__" for target in targets)
+
+
+def _mutates_exports(item: ast.AST) -> bool:
+    if isinstance(item, ast.AugAssign):
+        return isinstance(item.target, ast.Name) and item.target.id == "__all__"
+    if isinstance(item, ast.Call) and isinstance(item.func, ast.Attribute):
+        return isinstance(item.func.value, ast.Name) and item.func.value.id == "__all__"
+    return False
+
+
+def _declared_exports(tree: ast.Module) -> tuple[set[str] | None, str]:
+    assignments = [
+        item
+        for item in ast.walk(tree)
+        if isinstance(item, (ast.Assign, ast.AnnAssign)) and _assigns_exports(item)
+    ]
+    if not assignments:
+        return None, "naming-convention"
+    if (
+        len(assignments) != 1
+        or assignments[0] not in tree.body
+        or any(_mutates_exports(item) for item in ast.walk(tree))
+    ):
+        return None, "dynamic-__all__"
+    try:
+        expression_node = assignments[0].value
+        value = ast.literal_eval(expression_node) if expression_node is not None else None
+        if isinstance(value, (list, tuple)) and all(isinstance(name, str) for name in value):
+            return set(value), "literal-__all__"
+    except (ValueError, TypeError, SyntaxError):
+        pass
+    return None, "dynamic-__all__"
+
+
+def _export_metadata(module: Module) -> dict[str, Any]:
+    names = module.exports
+    star_import = names is None and "*" in module.bindings[""]
+    if names is None:
+        names = {
+            name
+            for name in module.bound[""] | set(module.bindings[""]) | set(module.definitions)
+            if not name.startswith("_") and "." not in name and name != "*"
+        }
+    return {
+        "basis": "unresolved-star-import" if star_import else module.export_basis,
+        "count": None if star_import else len(names),
+        "names": [name[:160] for name in sorted(names)[:100]],
+        "truncated": len(names) > 100 or any(len(name) > 160 for name in names),
+    }
+
+
 def _inert_module(tree: ast.Module) -> bool:
     return all(
         isinstance(statement, ast.Pass)
@@ -166,6 +220,8 @@ class Module:
     )
     bound: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     scopes: dict[int, str] = field(default_factory=dict)
+    exports: set[str] | None = None
+    export_basis: str = "naming-convention"
 
     @property
     def package(self) -> str:
@@ -217,7 +273,9 @@ def parse_module(
         ast.dump(tree, annotate_fields=True, include_attributes=False).encode()
     ).hexdigest()
     data["interface_fingerprint"] = interface_fingerprint(tree)
+    module.exports, module.export_basis = _declared_exports(tree)
     _Definitions(module).visit(tree)
+    data["public_surface"] = _export_metadata(module)
     data["function_count"] = sum(node.kind == "function" for node in module.nodes)
     data["class_count"] = sum(node.kind in {"class", "interface"} for node in module.nodes)
     data["docstring"] = (ast.get_docstring(tree) or "")[:600]
@@ -234,7 +292,13 @@ def _common_metadata(module: Module, node, qualified: str) -> dict:
         truncated.append("decorators")
     return {
         "qualified_name": qualified,
-        "public": not node.name.startswith("_"),
+        "public": (
+            qualified.split(".")[0] in module.exports
+            and ("." not in qualified or not node.name.startswith("_"))
+            if module.exports is not None
+            else not node.name.startswith("_")
+        ),
+        "public_basis": module.export_basis,
         "basis": "observed",
         "end_line": node.end_lineno,
         "lines_of_code": (node.end_lineno or node.lineno) - node.lineno + 1,
@@ -340,6 +404,8 @@ class _Definitions(ast.NodeVisitor):
             )
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module == "__future__":
+            return
         package = self.module.package.split(".") if self.module.package else []
         if node.level:
             package = package[: len(package) - node.level + 1] if node.level <= len(package) else []

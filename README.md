@@ -3,6 +3,11 @@
 AnaxiGraph helps people and coding agents write better code, make sound architecture decisions,
 and leave subsequent changes straightforward.
 
+Its architectural advice favors clear ownership, small public contracts and independently testable
+components. The map measures public surfaces, private cross-module references, dependency cycles and
+observed test links. These are evidence for decisions, not proof that a change cannot break callers.
+Functions, objects and modular monoliths are all valid ways to preserve a useful boundary.
+
 This is the clean replacement core targeting **anaxigraph 1.0**. The first milestone is a local
 `1.0.0a1` alpha, separate from the existing 0.9.1 package. Features are added selectively; this
 folder does not import the old runtime or automatically replace an installed service.
@@ -82,7 +87,9 @@ V2 does not silently interpret the legacy `.anaxigraph.yml` provider configurati
 ## Run Mapping, Patterns or Fresh Eyes
 
 The dashboard's **Run full mapping**, **Run full pattern analysis** and **Run full Fresh Eyes**
-buttons execute the workflows. Choose Codex or Claude and a model for each stage, parallel workers
+buttons execute the workflows. New defaults use **Luna/low** for concise mapping and ID-only pattern
+screening, **Sol/medium** for shortlisted detailed reviews, and a pool of **32** independent workers.
+Existing explicit model selections remain unchanged. Choose Codex or Claude and a model for each stage, parallel workers
 (1–100), optional stronger fallbacks and ordered review passes. Installed provider CLIs must already
 be authenticated. A blank model uses the local CLI's selected default. Independent batches run in
 parallel; enabled OpenAI and Claude review passes remain ordered within each batch.
@@ -117,20 +124,26 @@ CLI runs wait for completion. HTTP/MCP runs return a durable run ID and progress
 completed/total batches, active workers, elapsed time, failures and **Final reconciliation**.
 Accepted results are saved immediately; resume retries unfinished batches. A repeated unchanged
 workflow reuses compatible accepted results with the same model/review pipeline.
+Per-batch timestamps and cumulative wall durations include failed attempts. Model-call time and
+tokens are separate from local/cache work. Pattern review shows screening and detailed review as
+separate phases. Fresh Eyes runs only when requested, outside the mapping-plus-Patterns path.
 
 Save model settings in the dashboard or through `workflow-config --file settings.json`. For example:
 
 ```json
 {
-  "workers": 16,
-  "timeout_seconds": 600,
+  "workers": 32,
+  "timeout_seconds": null,
+  "pattern_mode": "screened",
   "stages": {
     "annotate": {
       "provider": "codex",
-      "model": "YOUR_SMALL_MODEL",
-      "fallbacks": [{"provider": "codex", "model": "YOUR_STRONGER_MODEL"}]
+      "model": "gpt-6-luna",
+      "reasoning_effort": "low",
+      "fallbacks": [{"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"}]
     },
-    "patterns": {"provider": "codex", "model": "YOUR_REVIEW_MODEL"},
+    "pattern-screen": {"provider": "codex", "model": "gpt-6-luna", "reasoning_effort": "low"},
+    "patterns": {"provider": "codex", "model": "gpt-6.1-sol", "reasoning_effort": "medium"},
     "fresh-eyes": {"provider": "claude", "model": "YOUR_DESIGN_MODEL"}
   },
   "review_passes": []
@@ -149,14 +162,19 @@ Individual request/submit control remains available:
 uv run anaxigraph request annotate --repo /path/to/repo --scope src/example.py > /tmp/task.json
 # Give the packet and response_schema to a coding agent; save its JSON response.
 uv run anaxigraph submit REQUEST_ID /tmp/result.json --repo /path/to/repo
-uv run anaxigraph request patterns --repo /path/to/repo --scope src/example.py
+uv run anaxigraph request pattern-screen --repo /path/to/repo --scope src/example.py
+# For manual detail, pass selected catalogue IDs; omitting --pattern-ids requests an exhaustive task.
+uv run anaxigraph request patterns --repo /path/to/repo --scope src/example.py --pattern-ids adapter
 uv run anaxigraph request fresh-eyes --repo /path/to/repo
 uv run anaxigraph reviews --repo /path/to/repo
 uv run anaxigraph inspect review:REVIEW_ID --repo /path/to/repo
 ```
 
 Requests survive application restart. Explicit scopes accept module IDs or relative paths. Manual
-annotation/Pattern requests default to the first module; workflows cover all selected modules.
+annotation requests default to the first module; pattern requests default to an eligible production
+module. Default Pattern workflows cover production modules, excluding tests and inert markers.
+Active package facades stay eligible, and explicit scopes may include tests. Set `pattern_mode` to
+`"exhaustive"` for the full written matrix. Neither exclusion nor non-selection proves irrelevance.
 Workflow annotation and Pattern jobs default to one module; blind subsystems default to sixteen.
 Budgets apply per job (configurable 2 MB input and 8 MB result defaults), rather than requiring a
 whole repository to fit in 256 KB. Large repositories are partitioned and reconciled. Ordinary
@@ -166,11 +184,12 @@ prompt inputs separately from structural readiness.
 
 - **Annotations:** one module sentence, a short paragraph, one sentence for every supplied function,
   capabilities, uncertainty and contracts with declared/inferred basis and source references.
-- **Patterns:** every one of the 133 catalogue cards against every selected module, including a
-  rating or unknown, current fit, specific pros, costs, a simpler alternative and evidence. Positive
-  ratings require a proposed incremental change; an already useful pattern is not itself a reason
-  to rewrite. Validation rejects
-  missing or duplicate pairs. This establishes declared coverage, not recommendation quality.
+- **Patterns:** cheaply screen the 133-card reference catalogue using the architecture charter,
+  structural evidence and concise module understanding. Return only zero to ten plausible IDs;
+  write detailed ratings, benefits, costs, alternatives and evidence for those selections. Empty
+  shortlists make no strong-model call. Reconciliation distinguishes screened, selected, detailed
+  and excluded scope. Positive ratings require a concrete incremental improvement. Explicit
+  exhaustive requests remain available; missing or duplicate declared detail pairs are rejected.
 - **Fresh Eyes:** only functional statements with opaque requirement IDs. Give the returned packet
   to a fresh worker **without repository/source tools**. Do not append source or dependency context.
   Each of three alternatives must cover all supplied requirements, explain tradeoffs and include a
@@ -180,6 +199,9 @@ prompt inputs separately from structural readiness.
 
 The dashboard can copy these tasks, accept result JSON and display saved proposals. Pattern ratings
 remain hypotheses. Source-aware verification of a frozen alternative is separate from blind design.
+The [focused-review change request](docs/change-request-focused-reviews.md) records the design,
+Snow Rankings baseline, architectural charter and performance targets. Targets are not deadlines
+or measured guarantees; live timing and recommendation quality must be evaluated separately.
 
 ## What the first milestone supports
 
