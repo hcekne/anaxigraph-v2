@@ -45,6 +45,34 @@ def proposals(rows: list[dict[str, Any]], owners: set[str], limit: int = 2) -> l
     return items[:limit]
 
 
+def brief_proposals(rows: list[dict], owners: set[str]) -> list[dict]:
+    """Show the next action without displacing its responsibility owner."""
+    fields = {
+        "kind",
+        "proposal_id",
+        "review_id",
+        "lens",
+        "title",
+        "status",
+        "opportunity",
+        "placement",
+        "suggestion",
+        "evidence",
+        "expand",
+    }
+    return [
+        {key: value for key, value in item.items() if key in fields}
+        | {
+            "public_contract": item["public_contract"][:180],
+            "verification": item["verification"][:1],
+            "options": [
+                option for option in item["options"] if option["placement"] == item["placement"]
+            ],
+        }
+        for item in proposals(rows, owners)
+    ]
+
+
 def coverage(rows: list[dict], owners: set[str]) -> dict:
     pairs = {
         (item["module_id"], row["result"]["result"]["lens"])

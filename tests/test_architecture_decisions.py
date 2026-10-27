@@ -36,12 +36,11 @@ def test_ordinary_change_gets_current_scout_advice_without_architecture_keyword(
     proposals = brief["implementation_advice"]["review_proposals"]
     assert proposals and proposals[0]["kind"] == "architecture"
     assert proposals[0]["public_contract"]
-    assert {item["placement"] for item in proposals[0]["options"]} >= {
-        "in-place",
-        "local-package",
-        "workspace-distribution",
-        "separate-repository",
-    }
+    assert proposals[0]["options"][0]["placement"] == proposals[0]["placement"]
+    requirements = application.assess_plan("change produce", ["pkg/a.py"])["architecture"][
+        "requirements"
+    ]
+    assert len(requirements[0]["options"]) == 4
     assert brief["implementation_advice"]["architecture_review"]["status"] == "partial"
     assert "two reference levels" in " ".join(brief["uncertainty"])
 
@@ -73,6 +72,7 @@ def test_large_context_keeps_a_scout_action_in_the_default_brief(application):
     )
     assert brief["context_truncated"]
     assert brief["implementation_advice"]["review_proposals"][0]["kind"] == "architecture"
+    assert brief["likely_owners"][0]["path"] in {"pkg/a.py", "pkg/b.py"}
 
 
 @pytest.mark.parametrize("decision", ["adopt", "defer", "reject"])

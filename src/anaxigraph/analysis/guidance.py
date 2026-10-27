@@ -10,8 +10,8 @@ from typing import Any
 
 from anaxigraph.contracts import Graph, Node
 
+from .architecture_guidance import brief_proposals as architecture_proposals
 from .architecture_guidance import coverage as architecture_coverage
-from .architecture_guidance import proposals as architecture_proposals
 from .charter import CHARTER, boundary_findings, module_facts
 
 
@@ -323,13 +323,14 @@ def _coding_steps(
 def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
     """Keep the default expansion small; original source/reviews remain inspectable."""
     proposals = brief["implementation_advice"]["review_proposals"]
+    owners = brief["likely_owners"]
     collections = [
         proposals,
         brief["reuse_candidates"],
         brief["contracts"],
         brief["affected_paths"],
         brief["tests"],
-        brief["likely_owners"],
+        owners,
         brief["implementation_advice"]["steps"],
     ]
     while len(json.dumps(brief, ensure_ascii=False, indent=2).encode()) > 7000:
@@ -337,7 +338,7 @@ def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
             (
                 items
                 for items in collections
-                if items and (items is not proposals or len(items) > 1)
+                if items and ((items is not proposals and items is not owners) or len(items) > 1)
             ),
             proposals or None,
         )
