@@ -341,6 +341,8 @@ def _screen_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], di
 
 
 def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dict[str, Any]]:
+    from .charter import CHARTER
+
     missing = [n.path for n in chosen if not _annotation_current(n)]
     if missing:
         raise ValueError(
@@ -370,6 +372,8 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
             "source, repository files or existing architecture. Propose THREE materially different "
             "ways to deliver ALL requirements. Compare responsibility, state and failure ownership; "
             "justify added complexity and explain a minimal option. Preserve the original behavior. "
+            "Use the source-independent charter as design preferences, not evidence of how "
+            "the current system is built. "
             "Each design must list every requirement ID and supply its own high-level Mermaid diagram. "
             "Do not collapse the alternatives into a winner or claim tested implementation. "
             "Also return functional_summary (one sentence) and functional_requirements "
@@ -381,6 +385,7 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
             "it preserves, and their union must cover EVERY supplied requirement."
         ),
         "requirements": requirements,
+        "charter": CHARTER,
         "blindness": "No source, source paths, symbols, observed dependency topology or prior reviews.",
     }
     schema = {

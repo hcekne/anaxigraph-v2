@@ -299,6 +299,7 @@ def test_fresh_eyes_packet_is_blind_and_keeps_all_behavior_requirements(app: App
     annotate(app)
     request = app.analysis_request("fresh-eyes")
     assert set(request) == {"request_id", "kind", "packet", "response_schema"}
+    assert len(request["packet"]["charter"]) == 10
     packet = json.dumps(request)
     for implementation_detail in (
         str(app.root),

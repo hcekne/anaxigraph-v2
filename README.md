@@ -152,7 +152,7 @@ Save model settings in the dashboard or through `workflow-config --file settings
 
 Use model names supported by your installed CLI. Workers receive only their evidence packet in an
 isolated temporary directory with tools, MCP integrations and repository instructions disabled.
-Fresh Eyes receives behavior alone, without source identities or topology. Its subsystem designs
+Fresh Eyes receives behavior and the source-independent charter, without source identities or topology. Its subsystem designs
 feed independent product-level design through functional briefs, preserving three alternatives at
 each level. Final reconciliation checks declared coverage; it does not prove novelty or correctness.
 
@@ -190,7 +190,8 @@ prompt inputs separately from structural readiness.
   shortlists make no strong-model call. Reconciliation distinguishes screened, selected, detailed
   and excluded scope. Positive ratings require a concrete incremental improvement. Explicit
   exhaustive requests remain available; missing or duplicate declared detail pairs are rejected.
-- **Fresh Eyes:** only functional statements with opaque requirement IDs. Give the returned packet
+- **Fresh Eyes:** functional statements with opaque requirement IDs and the source-independent
+  charter. Give the returned packet
   to a fresh worker **without repository/source tools**. Do not append source or dependency context.
   Each of three alternatives must cover all supplied requirements, explain tradeoffs and include a
   high-level Mermaid diagram. Internal workers have tool access disabled. An externally supplied

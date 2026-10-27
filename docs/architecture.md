@@ -43,7 +43,7 @@ flowchart TB
 | `application/` | Shared facade, review operations and portable exchange; guard source/context identity and publish validated results | A separate store, parser, provider engine or transport-specific reasoning |
 | `workflows/` | Durable batch scheduling, bounded provider execution, ordered review passes and retries | Source indexing, SQL, architectural reasoning outside the analysis contract |
 | `evidence/` | Bounded local task, consultation, outcome and provider-usage records | Architectural reasoning, raw prompts/source, external telemetry or invented costs |
-| `interfaces/` | CLI, ten MCP tools, HTTP and dashboard over the same application | Independent ownership inference or analysis state |
+| `interfaces/` | CLI, MCP tools, HTTP and dashboard over the same application | Independent ownership inference or analysis state |
 
 These are logical Python packages with explicit records and functions, installed together. Separate
 distributions, services and plugin systems would add deployment work without helping this milestone.
@@ -91,8 +91,8 @@ source observations; contracts distinguish declared evidence from inference. Rev
 
 ## Fresh Eyes isolation
 
-The returned blind request contains opaque requirement IDs, behavior statements and the response
-contract. Source, module identities, symbols, dependency topology and prior recommendations are
+The returned blind request contains opaque requirement IDs, behavior statements, the source-independent
+charter and the response contract. Source, module identities, symbols, dependency topology and prior recommendations are
 excluded. Module IDs, source paths and code-shaped identities such as snake_case, CamelCase,
 dotted/backticked names and calls are rejected. Ordinary English words remain usable. Functional statements
 still require judgment: the validator cannot prove a sentence contains no conceptual implementation
