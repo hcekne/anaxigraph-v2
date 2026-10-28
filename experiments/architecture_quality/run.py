@@ -800,6 +800,32 @@ def source_hashes(root: Path):
     }
 
 
+def client_identity(config):
+    resolved = shutil.which(config.agent)
+    identity = {
+        "requested": config.agent,
+        "resolved_path": resolved,
+        "available": resolved is not None,
+        "version": None,
+    }
+    if not resolved:
+        identity["error"] = "configured coding client is not installed"
+    elif config.live and not config.synthetic_transport:
+        try:
+            reply = subprocess.run(
+                [resolved, "--version"], capture_output=True, text=True, timeout=15
+            )
+            identity.update(
+                available=reply.returncode == 0 and bool(reply.stdout.strip()),
+                version=reply.stdout.strip(),
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            identity.update(available=False, error=type(error).__name__)
+    else:
+        identity["version"] = "synthetic/custom transport"
+    return identity
+
+
 def resume_preparation(config, previous):
     if not config.live or previous.get("status") != "incomplete" or previous.get("pairs"):
         raise ValueError(
@@ -897,15 +923,7 @@ def run_trial(config):
         "scenarios": config.scenarios,
         "replicates": config.replicates,
         "control_mode": config.control_mode,
-        "client_identity": {
-            "requested": config.agent,
-            "resolved_path": shutil.which(config.agent),
-            "version": subprocess.run(
-                [config.agent, "--version"], capture_output=True, text=True, timeout=15
-            ).stdout.strip()
-            if config.live and not config.synthetic_transport
-            else "synthetic/custom transport",
-        },
+        "client_identity": client_identity(config),
         "benchmark_source_sha256": digest(source_hashes(Path(__file__).parent)),
         "budget_basis": "equal coding opportunities; analysis costs reported separately; no equal-total-token claim",
         "status": "qualifying",
@@ -926,6 +944,10 @@ def run_trial(config):
             )
     write(config.state / "run.private.json", manifest)
     if config.live:
+        if not manifest["client_identity"]["available"]:
+            manifest.update(status="preflight_failed", error="coding client unavailable")
+            write(config.state / "run.private.json", manifest)
+            return manifest
         if not config.runtime or not config.runtime.is_file():
             raise ValueError("Live runs require an explicit installed AnaxiGraph executable")
         proof = preflight(config)

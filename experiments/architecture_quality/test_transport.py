@@ -137,6 +137,7 @@ def test_fake_subprocess_preflight_freeze_reviews_coding_checks_and_provenance(t
 
 def test_synthetic_preflight_cannot_be_reused_to_qualify_a_live_run(tmp_path, monkeypatch):
     config = run.parser().parse_args(["--live", "--state", str(tmp_path), "--runtime", "/bin/true"])
+    monkeypatch.setattr(run, "client_identity", lambda config: {"available": True})
     monkeypatch.setattr(
         run, "preflight", lambda config: {"status": "passed", "evidence_kind": "synthetic"}
     )

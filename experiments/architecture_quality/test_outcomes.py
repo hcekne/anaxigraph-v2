@@ -215,6 +215,7 @@ def test_full_three_scenario_four_task_automation_is_explicitly_synthetic(tmp_pa
 def test_failed_real_capability_preflight_starts_no_pair(tmp_path):
     config = run.parser().parse_args(["--live", "--state", str(tmp_path), "--runtime", "/bin/true"])
     with (
+        patch.object(run, "client_identity", return_value={"available": True}),
         patch.object(run, "preflight", return_value={"status": "failed"}),
         patch.object(run, "freeze_advice") as advice,
     ):
@@ -222,6 +223,22 @@ def test_failed_real_capability_preflight_starts_no_pair(tmp_path):
     assert result["status"] == "preflight_failed"
     assert result["pairs"] == []
     advice.assert_not_called()
+
+
+def test_missing_codex_is_a_recorded_preflight_failure_without_model_calls(tmp_path, monkeypatch):
+    binaries = tmp_path / "empty-path"
+    binaries.mkdir()
+    monkeypatch.setenv("PATH", str(binaries))
+    config = run.parser().parse_args(
+        ["--live", "--state", str(tmp_path / "state"), "--runtime", "/bin/true"]
+    )
+    with patch.object(
+        run, "agent_call", side_effect=AssertionError("missing client must not launch")
+    ):
+        result = run.run_trial(config)
+    assert result["status"] == "preflight_failed"
+    assert not result["client_identity"]["available"]
+    assert result["pairs"] == []
 
 
 def test_preflight_requires_real_success_specific_tools_and_server_effects(tmp_path):
