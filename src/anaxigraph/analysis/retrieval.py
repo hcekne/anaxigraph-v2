@@ -46,17 +46,14 @@ def _match(module, symbols, source_terms, task, weights) -> dict[str, Any]:
         "source": (words & source_terms, 1),
         "current_annotation": (words & _terms(_semantic(module)), 1),
     }
-    scores = {
-        name: round(sum(weights[word] for word in terms) * weight, 3)
-        for name, (terms, weight) in fields.items()
-        if terms
-    }
-    reasons = [
-        f"{name}: {', '.join(sorted(terms)[:4])}" for name, (terms, _) in fields.items() if terms
-    ]
+    scores, reasons = {}, []
+    for name, (terms, weight) in fields.items():
+        if terms:
+            scores[name] = round(sum(weights[word] for word in terms) * weight, 3)
+            reasons.append(f"{name}: {', '.join(sorted(terms)[:4])}")
     if path_match or exact is not module:
         kind = "exact_path" if path_match else "exact_symbol"
-        scores[kind] = 20.0
+        scores[kind] = 20.0 if path_match or "_" in exact.name else 2.0
         reasons.insert(0, f"{kind}: {module.path if path_match else exact.name}")
     return {
         "id": module.id,
@@ -104,7 +101,6 @@ def rank_owners(
         key=lambda row: (
             bool(modules[row["path"]].data.get("is_test")),
             -int("exact_path" in row["match_scores"]),
-            -int("exact_symbol" in row["match_scores"]),
             -row["score"],
             row["path"],
         ),

@@ -138,7 +138,11 @@ def summarize(rows: list[dict]) -> dict:
     """Aggregate per-commit rows; None metrics are excluded from their denominators."""
 
     def hits(key: str, k: int) -> list[int]:
-        return [int(r[key] is not None and r[key] <= k) for r in rows if key in r]
+        return [
+            int(r[key] is not None and r[key] <= k)
+            for r in rows
+            if key in r and r.get("owner_evaluable", True)
+        ]
 
     def mean(key: str) -> dict | None:
         values = [r[key] for r in rows if r.get(key) is not None]
@@ -180,6 +184,7 @@ def summarize(rows: list[dict]) -> dict:
                 }
     return {
         "commits": len(rows),
+        "owner_evaluable_commits": sum(r.get("owner_evaluable", True) for r in rows),
         "owners": owners,
         "metrics": metrics,
         "eligible_list_sizes": eligible_sizes,

@@ -57,9 +57,11 @@ def test_summary_excludes_unknown_metrics_from_denominators():
         {"grep_owner_rank": 1, "oracle_test_recall_grep": 1.0},
         {"grep_owner_rank": None, "oracle_test_recall_grep": None},
         {"grep_owner_rank": 3},
+        {"grep_owner_rank": None, "owner_evaluable": False},
     ]
     summary = scoring.summarize(rows)
     assert summary["owners"]["grep"] == {"hit@1": "1/3", "hit@3": "2/3"}
+    assert summary["owner_evaluable_commits"] == 3
     assert summary["metrics"]["oracle_test_recall_grep"] == {"mean": 1.0, "n": 1}
 
 

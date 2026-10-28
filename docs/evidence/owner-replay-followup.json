@@ -173,5 +173,70 @@
     "maximum": 3
   },
   "delivered_owner_lists_equal_uncapped": true,
-  "interpretation": "Answer packing is repaired. Free source/symbol retrieval reaches10/20top3; independentgrep11/20; fusion11/20. No owner-finding superiority demonstrated. History remains useful conditional investigation evidence; reference+history fusion is not better than history here. Semantic-mapping marginal value was not rerun. Cross-repo extension is deferred until a stronger retrieval advantage exists."
+  "interpretation": "Initial answer-packing fix preserved3owners and free retrieval reached10/20top3 vs grep11/20. One systematic English-identifier policy then reached14/20 on development cases, with no top3 advantage on a separate13-eligible-case holdout. History remains separate investigation evidence. Semantic mapping was not rerun; architectural usefulness uses the separate discovery/later-change experiment.",
+  "english_identifier_policy": {
+    "policy": "Preserve explicit path priority; code-shaped underscore symbol bonus20, ordinary-word symbol bonus2; remove hard symbol category priority. Filter once when assembling scores and reasons.",
+    "development": {
+      "source_case_category": "development Python repository",
+      "n": 20,
+      "cases_with_existing_production_python": 20,
+      "metrics": {
+        "current": {
+          "hit@1": 3,
+          "hit@3": 10
+        },
+        "policy": {
+          "hit@1": 7,
+          "hit@3": 14
+        },
+        "grep": {
+          "hit@1": 7,
+          "hit@3": 11
+        }
+      },
+      "paired": {
+        "1": {
+          "gains": 4,
+          "losses": 0
+        },
+        "3": {
+          "gains": 5,
+          "losses": 1
+        }
+      },
+      "interpretation": "Development results informed this one systematic policy change. Held-out scores are reported separately; no per-case tuning."
+    },
+    "held_out": {
+      "selected_commits": 20,
+      "owner_evaluable_commits": 13,
+      "new_file_only_commits": 7,
+      "metrics": {
+        "current": {
+          "hit@1": 4,
+          "hit@3": 9
+        },
+        "policy": {
+          "hit@1": 4,
+          "hit@3": 9
+        },
+        "grep": {
+          "hit@1": 7,
+          "hit@3": 9
+        }
+      },
+      "paired": {
+        "1": {
+          "gains": 0,
+          "losses": 0
+        },
+        "3": {
+          "gains": 0,
+          "losses": 0
+        }
+      },
+      "policy_frozen_before_scoring": true,
+      "model_calls": 0,
+      "interpretation": "Existing-owner accuracy denominator is13; top1 current4/13,new4/13,grep7/13; top3 all9/13. No held-out improvement at either cutoff, no subsequent tuning. This is the Python slice of an independent mixed-content repository, not JS/TS support or architectural outcome evidence."
+    }
+  }
 }

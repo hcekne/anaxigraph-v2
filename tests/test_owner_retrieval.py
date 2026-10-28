@@ -67,6 +67,24 @@ def test_exact_symbol_and_path_outweigh_lexical_noise_and_include_witness():
     assert brief["implementation_advice"]["steps"][0]["evidence"][0]["line"] == 9
 
 
+def test_ordinary_english_verb_does_not_override_relevant_source_and_symbols():
+    sources = {
+        "audit.py": "def record(value):\n    pass\n",
+        "invoices.py": "def export_csv(invoice, payments):\n    return invoice, payments\n",
+    }
+    graph = fixture_graph(sources)
+    symbols = (
+        Node("function:audit.py:record", "function", "record", "audit.py"),
+        Node("function:invoices.py:export_csv", "function", "export_csv", "invoices.py"),
+    )
+    graph = replace(graph, nodes=(*graph.nodes, *symbols))
+    rows = rank_owners(graph, sources, "Record invoice payments with CSV export")
+    assert rows[0]["path"] == "invoices.py"
+    assert (
+        next(row for row in rows if row["path"] == "audit.py")["match_scores"]["exact_symbol"] == 2
+    )
+
+
 def test_nested_path_basename_is_an_exact_match_without_matching_partial_names():
     sources = {"package/opaque.py": "pass", "other.py": "invoice export tenant"}
     graph = fixture_graph(sources)

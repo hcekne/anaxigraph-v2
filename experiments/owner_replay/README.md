@@ -57,6 +57,8 @@ commit-message proxies. Reserve unseen commits/repositories before tuning on the
 
 Recall counts only files that existed in the parent. Sizes matter: flagging every module would
 reach perfect recall and be useless.
+Commits creating only new production files have no existing-file owner label; they remain in
+the replay but are explicitly excluded from owner accuracy denominators.
 
 ## Original result — 28 October 2026 (harness version 1)
 
@@ -114,3 +116,12 @@ At a common maximum of six suggestions, history reaches **61.5%** conditional pr
 versus **13.5%** for graph/grep and **43.5%** for fusion. Eligible average sizes are 4.8, 3.8,
 3.8 and 4.8 respectively; precision is reported alongside recall. Fusion should not replace the
 separate history signal on these results. No held-out or cross-repository advantage is claimed.
+
+A subsequent single scoring correction removes hard priority for ordinary English words that
+also happen to be function names, while retaining explicit path and underscore-identifier
+bonuses. On the development cases it reaches **7/20** first owners and **14/20** top-three
+owners, versus grep's 7/20 and 11/20; paired top-three gains/losses are 5/1. The policy was then
+frozen before testing an independent repository's Python slice. Thirteen of its twenty commits
+have existing-file owner labels: old/new/grep top-three scores are all **9/13**; first-owner
+scores are 4/13, 4/13 and 7/13. No held-out improvement or architecture benefit is established,
+and there was no further policy tuning. Raw private cases stay outside this public repository.

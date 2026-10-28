@@ -91,9 +91,10 @@ def evaluate(app, graph, commit: dict, files: dict[str, str], label: str) -> dic
     modules = {n.path for n in graph.nodes if n.kind == "module"}
     production = {p for p in modules if not scoring.is_test(p)}
     row = {
+        "owner_evaluable": bool(expected),
         f"{label}_annotated_modules": sum(
             1 for n in graph.nodes if n.kind == "module" and n.data.get("annotation")
-        )
+        ),
     }
     bare = replace(
         graph,
@@ -115,6 +116,10 @@ def evaluate(app, graph, commit: dict, files: dict[str, str], label: str) -> dic
         brief = _brief(app, commit["message"], capped=capped)
         owners = [o["path"] for o in brief["likely_owners"]]
         affected = affected_paths(graph, set(owners)) & modules
+        delivered = set(brief["affected_paths"]) | set(owners)
+        delivered_tests = set(brief["tests"])
+        associations = {item["path"] for item in brief["historical_associations"]["suggestions"]}
+        expanded = delivered | associations
         row |= {
             f"{variant}_owners": owners,
             f"{variant}_owner_rank": scoring.rank_of_first_hit(owners, expected),
@@ -123,6 +128,20 @@ def evaluate(app, graph, commit: dict, files: dict[str, str], label: str) -> dic
             f"task_{variant}_test_recall": scoring.recall(affected, set(facts["changed_tests"])),
             f"task_{variant}_test_size": len(affected - production),
             f"{variant}_brief_bytes": len(json.dumps(brief, ensure_ascii=False, indent=2)),
+            f"task_{variant}_delivered_affected_recall": scoring.recall(delivered, expected),
+            f"task_{variant}_delivered_prod_size": len(delivered & production),
+            f"task_{variant}_delivered_test_recall": scoring.recall(
+                delivered_tests, set(facts["changed_tests"])
+            ),
+            f"task_{variant}_delivered_test_size": len(delivered_tests),
+            f"task_{variant}_with_delivered_history_recall": scoring.recall(expanded, expected),
+            f"task_{variant}_with_delivered_history_prod_size": len(expanded & production),
+            f"task_{variant}_with_delivered_history_test_recall": scoring.recall(
+                delivered_tests | associations, set(facts["changed_tests"])
+            ),
+            f"task_{variant}_with_delivered_history_test_size": len(
+                {p for p in delivered_tests | associations if scoring.is_test(p)}
+            ),
         }
     return row
 
