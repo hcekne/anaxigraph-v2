@@ -7,11 +7,14 @@ preflight nor a model turn's completion establishes application correctness.
 from __future__ import annotations
 
 import argparse
+import ast
 import concurrent.futures
 import hashlib
 import json
 import os
 import random
+import re
+import shlex
 import shutil
 import signal
 import sqlite3
@@ -41,6 +44,42 @@ STAGES = (
     "fresh-eyes",
 )
 DISABLED = ("memories", "apps", "plugins", "hooks", "multi_agent", "daemon_auto_start")
+USEFUL_REVIEWS = {"patterns", "architecture", "delivery", "fresh-eyes"}
+QUALITY_GOAL = (
+    "Keep responsibilities understandable, behavioral contracts clear, effects and state ownership "
+    "explicit, and verification trustworthy. Choose the simplest useful design; extraction needs "
+    "a demonstrated benefit."
+)
+CONTROL_RULE = (
+    "Control isolation: do not use AnaxiGraph through CLI commands, Python packages, MCP, HTTP, "
+    "saved analyses or records (including anaxigraph/record.json and .anaxigraph-v2). "
+    "Use ordinary source inspection, grep and local checks."
+)
+
+
+def discovery_adapter(name):
+    if name != "workshop":
+        return None
+    if __package__:
+        from . import discovery
+    else:
+        import discovery
+    return discovery
+
+
+def scenario_brief(name):
+    adapter = discovery_adapter(name)
+    return adapter.brief(name) if adapter else brief(name)
+
+
+def scenario_task(name, stage):
+    adapter = discovery_adapter(name)
+    return adapter.task(name, stage) if adapter else task(name, stage)
+
+
+def scenario_seed(root, name):
+    adapter = discovery_adapter(name)
+    return adapter.seed(root, name) if adapter else seed(root, name)
 
 
 def now():
@@ -87,6 +126,33 @@ def delta(before, after):
         if line.startswith(("+ ", "- "))
     )
     return {"changed_paths": changed, "changed_lines_descriptive_only": changed_lines}
+
+
+def export_blind_diffs(root: Path, arm: str, destination: Path, stages: int):
+    import difflib
+
+    for stage in range(stages):
+        evidence = root.parent / f"{arm}-evidence"
+        before = json.loads((evidence / f"task-{stage}/baseline.private.json").read_text())["files"]
+        next_baseline = evidence / f"task-{stage + 1}/baseline.private.json"
+        after = (
+            json.loads(next_baseline.read_text())["files"]
+            if next_baseline.is_file()
+            else snapshot(root)
+        )
+        lines = []
+        for path in sorted(before.keys() | after.keys()):
+            lines.extend(
+                difflib.unified_diff(
+                    before.get(path, "").splitlines(keepends=True),
+                    after.get(path, "").splitlines(keepends=True),
+                    fromfile="before/" + path,
+                    tofile="after/" + path,
+                )
+            )
+        directory = destination / "diffs"
+        directory.mkdir(exist_ok=True)
+        (directory / f"task-{stage}.patch").write_text("".join(lines))
 
 
 def ledger(root: Path) -> list[dict]:
@@ -202,6 +268,107 @@ def tool_calls(events: list[dict]) -> list[dict]:
     return result
 
 
+def anaxigraph_imports(source):
+    try:
+        nodes = ast.walk(ast.parse(source))
+    except SyntaxError:
+        return False
+    for node in nodes:
+        names = (
+            [alias.name for alias in node.names]
+            if isinstance(node, ast.Import)
+            else [node.module or ""]
+            if isinstance(node, ast.ImportFrom)
+            else []
+        )
+        if isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant):
+            function = (
+                node.func.id
+                if isinstance(node.func, ast.Name)
+                else node.func.attr
+                if isinstance(node.func, ast.Attribute)
+                else ""
+            )
+            if function in {"__import__", "import_module"} and isinstance(node.args[0].value, str):
+                names.append(node.args[0].value)
+        if any(name == "anaxigraph" or name.startswith("anaxigraph.") for name in names):
+            return True
+    return False
+
+
+def control_violations(root, events):
+    """Observable contamination only; this is not an adversarial sandbox proof."""
+    found = []
+    for index, event in enumerate(events):
+        item = event.get("item", {})
+        if (
+            item.get("type") == "mcp_tool_call"
+            and "anaxigraph" in (str(item.get("server", "")) + str(item.get("tool", ""))).lower()
+        ):
+            found.append({"kind": "anaxigraph_mcp", "event": index})
+        command = item.get("command", "") if item.get("type") == "command_execution" else ""
+        if not isinstance(command, str):
+            continue
+        for segment in [command, *re.split(r"&&|\|\||[;\n]", command)]:
+            try:
+                tokens = shlex.split(segment)
+            except ValueError:
+                continue
+            if not tokens:
+                continue
+            executable = Path(tokens[0]).name
+            if executable == "anaxigraph" or (
+                executable in {"uv", "uvx"} and "anaxigraph" in tokens[1:]
+            ):
+                found.append({"kind": "anaxigraph_cli", "event": index})
+            if executable == "uv" and tokens[1:2] == ["run"]:
+                tokens = tokens[2:]
+                executable = Path(tokens[0]).name if tokens else ""
+            if re.fullmatch(r"python(?:\d+(?:\.\d+)?)?", executable):
+                module = (
+                    tokens[tokens.index("-m") + 1]
+                    if "-m" in tokens and tokens.index("-m") + 1 < len(tokens)
+                    else ""
+                )
+                code = (
+                    tokens[tokens.index("-c") + 1]
+                    if "-c" in tokens and tokens.index("-c") + 1 < len(tokens)
+                    else ""
+                )
+                if (
+                    module == "anaxigraph"
+                    or module.startswith("anaxigraph.")
+                    or anaxigraph_imports(code)
+                ):
+                    found.append({"kind": "anaxigraph_python", "event": index})
+            if executable in {"cat", "head", "tail", "jq", "sqlite3", "cp"} and any(
+                "anaxigraph/record.json" in token or ".anaxigraph-v2" in token
+                for token in tokens[1:]
+            ):
+                found.append({"kind": "anaxigraph_saved_record", "event": index})
+            if executable in {"curl", "wget"} and any(
+                "http" in token and ("anaxigraph" in token or "/mcp" in token)
+                for token in tokens[1:]
+            ):
+                found.append({"kind": "anaxigraph_http", "event": index})
+        if re.search(r"(?:^|[;&|])\s*(?:\S*/)?python[\d.]*\s.*<<", command):
+            if anaxigraph_imports("\n".join(command.splitlines()[1:-1])):
+                found.append({"kind": "anaxigraph_python", "event": index})
+    for path in root.rglob("*.py"):
+        if not any(
+            part.startswith(".") or part == "__pycache__" for part in path.relative_to(root).parts
+        ) and anaxigraph_imports(path.read_text()):
+            found.append(
+                {"kind": "anaxigraph_candidate_import", "path": str(path.relative_to(root))}
+            )
+    found = list({(row["kind"], row.get("event"), row.get("path")): row for row in found}.values())
+    return {
+        "passed": not found,
+        "violations": found,
+        "basis": "observable MCP, recognized commands and candidate imports; not an adversarial sandbox guarantee",
+    }
+
+
 def agent_call(root: Path, directory: Path, runtime: Path | None, prompt: str, config) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ)
@@ -260,6 +427,7 @@ def agent_call(root: Path, directory: Path, runtime: Path | None, prompt: str, c
         "cost_usd": None,
         "cost_basis": "unknown; no billing receipt supplied",
         "model": MODEL,
+        "control_isolation": control_violations(root, events) if runtime is None else None,
         "reasoning_effort": EFFORT,
         "call_timeout": config.call_timeout,
         "final_message": "\n".join(
@@ -466,7 +634,11 @@ def dispositions(root: Path, advice: dict, patch: dict, calls: list[dict]) -> li
                 "changed_source_evidence_verified": False,
             }
         ]
-    frozen_ids = {review["id"]: review.get("source_digest") for review in advice["reviews"]}
+    frozen_ids = {
+        review["id"]: review.get("source_digest")
+        for review in advice["reviews"]
+        if review["kind"] in USEFUL_REVIEWS
+    }
     consulted = {
         row["arguments"].get("entity_id", "").removeprefix("review:")
         for row in calls
@@ -498,38 +670,65 @@ def dispositions(root: Path, advice: dict, patch: dict, calls: list[dict]) -> li
     return result
 
 
-def prompt_for(name, stage, advice):
+def prompt_for(name, stage, advice, *, charter=None):
+    if charter is None:
+        from anaxigraph.analysis.charter import CHARTER
+
+        charter = CHARTER
     context = "No architectural review is supplied. Use your own judgment."
     if advice and advice.get("control_review"):
         context = (
-            "Frozen independent generic architecture reviews are below. Consider their evidence "
+            "Frozen independent generic architecture reviews are available in the supplied files. Read relevant notes as needed. Consider their evidence "
             "and costs using your own judgment. These are ordinary source reviews without "
-            "AnaxiGraph. Review records:\n" + json.dumps(advice["reviews"])
+            "AnaxiGraph. Provided review metadata:\n"
+            + json.dumps(
+                [
+                    {
+                        "id": review["id"],
+                        "kind": review["kind"],
+                        "path": ".experiment-reviews/" + review["id"] + ".json",
+                    }
+                    for review in advice["reviews"]
+                ]
+            )
         )
     elif advice:
         context = (
-            "Frozen pre-implementation advice is below. Inspect the cited saved reviews using "
-            "AnaxiGraph MCP before deciding. Do not start new model workflows. Record material "
+            "Frozen pre-implementation reviews are available through AnaxiGraph MCP. Call scan and "
+            "prepare_change for the current task; use bounded review listings and inspect relevant "
+            "saved reviews as needed. You need not inspect every review. Do not start new model "
+            "workflows. Record material "
             "adopt/defer/reject dispositions in decisions.json as a list of {advice_id,disposition,"
-            "reason,files}. A reasoned rejection is valid; adoption is not a goal. Frozen advice:\n"
-            + json.dumps(advice["reviews"])
+            "reason,files}. A reasoned rejection is valid; adoption is not a goal. Frozen review metadata:\n"
+            + json.dumps(
+                [
+                    {
+                        "id": review["id"],
+                        "kind": review["kind"],
+                        "reviewref": "review:" + review["id"],
+                    }
+                    for review in advice["reviews"]
+                    if review["kind"] in USEFUL_REVIEWS
+                ]
+            )
         )
+    if advice is None or advice.get("control_review"):
+        context = CONTROL_RULE + "\n" + context
     return (
         "You are a fresh implementation agent for one task. Do not commit, push, contact external "
         "services, read coordinator state outside this repository, or inspect hidden evaluations. "
         "Use stdlib only. Both arms use gpt-6.1-sol/xhigh, a fresh context and the same configured "
         "per-call timeout; there is no overall deadline or extra repair budget. Preserve earlier "
         "task behavior. Run your checks and report actual results and limitations.\n\n"
-        + brief(name)
-        + (
-            "\nSource-independent quality charter:\n" + json.dumps(advice["quality_charter"])
-            if advice and advice.get("quality_charter")
-            else ""
-        )
+        + QUALITY_GOAL
+        + "\n"
+        + scenario_brief(name)
+        + "\nSource-independent quality charter:\n"
+        + json.dumps(charter)
         + "\nEARLIER TASK REQUIREMENTS (preserve these):\n"
-        + "\n".join(task(name, earlier) for earlier in range(stage))
+        + "\n".join(scenario_task(name, earlier) for earlier in range(stage))
         + "\nCURRENT TASK:\n"
-        + task(name, stage)
+        + scenario_task(name, stage)
         + "\n\n"
         + context
     )
@@ -552,15 +751,21 @@ def freeze_control_review(
             "costs, independent behavioral checks and reasons to retain a simple design. Focus on "
             + lenses[index % len(lenses)]
             + ". You are a fresh reviewer. Future tasks are withheld.\n"
-            + brief(name)
+            + QUALITY_GOAL
+            + "\n"
+            + CONTROL_RULE
+            + "\n"
+            + scenario_brief(name)
             + "\nSource-independent quality charter:\n"
             + json.dumps(charter)
             + "\nMilestone:\n"
-            + task(name, 0)
+            + scenario_task(name, 0)
         )
         receipt = agent_call(root, destination / f"control-review-{index}", None, prompt, config)
         if receipt["status"] != "completed" or snapshot(root) != before:
             raise RuntimeError("Read-only active control review failed or changed source")
+        if not receipt["control_isolation"]["passed"]:
+            raise RuntimeError("Active control review used forbidden AnaxiGraph access")
         reviews.append(
             {"id": f"generic-{index}", "kind": "generic-review", "result": receipt["final_message"]}
         )
@@ -576,6 +781,8 @@ def freeze_control_review(
     }
     result["frozen_digest"] = digest(result)
     write(destination / "control-advice.private.json", result)
+    for review in reviews:
+        write(root / ".experiment-reviews" / (review["id"] + ".json"), review)
     return result
 
 
@@ -617,8 +824,14 @@ def synthetic_step(root: Path, name: str, stage: int, treatment: bool):
         write(root / "schema.json", {"version": 2, "multiplier_semantics": "all_values"})
 
 
-def run_arm(config, root, name, advice, arm, random_seed):
+def run_arm(config, root, name, advice, arm, random_seed, charter=None):
     rows = []
+    adapter = discovery_adapter(name)
+    previous_state = (
+        adapter.capture_state(root) if adapter and hasattr(adapter, "capture_state") else None
+    )
+    if previous_state is not None:
+        write(root.parent / f"{arm}-evidence/seed-state.private.json", previous_state)
     for stage in range(config.stages):
         directory = root.parent / f"{arm}-evidence" / f"task-{stage}"
         before = snapshot(root)
@@ -628,11 +841,13 @@ def run_arm(config, root, name, advice, arm, random_seed):
                 root,
                 directory,
                 config.runtime if arm == "treatment" else None,
-                prompt_for(name, stage, advice),
+                prompt_for(name, stage, advice, charter=charter),
                 config,
             )
         else:
-            synthetic_step(root, name, stage, arm == "treatment")
+            (adapter.synthetic_step if adapter else synthetic_step)(
+                root, name, stage, arm == "treatment"
+            )
             call = {
                 "status": "completed",
                 "evidence_kind": "synthetic",
@@ -640,18 +855,30 @@ def run_arm(config, root, name, advice, arm, random_seed):
                 "elapsed_seconds": None,
                 "tokens": None,
                 "cost_usd": None,
+                "control_isolation": control_violations(root, []) if arm == "control" else None,
             }
         patch = delta(before, snapshot(root))
-        outcome = evaluate(
-            root, name, stage, random_seed=random_seed + stage, changed_paths=patch["changed_paths"]
+        outcome = (adapter.evaluate if adapter else evaluate)(
+            root,
+            name,
+            stage,
+            random_seed=random_seed + stage,
+            changed_paths=patch["changed_paths"],
+            **({"previous_state": previous_state} if adapter else {}),
         )
+        if adapter:
+            previous_state = outcome.get("hidden", {}).get("compatibility_fixture")
         notes = (
             dispositions(root, advice, patch, call["tools"])
             if advice and arm == "treatment"
             else []
         )
         frozen = (
-            {review["id"]: review.get("source_digest") for review in advice["reviews"]}
+            {
+                review["id"]: review.get("source_digest")
+                for review in advice["reviews"]
+                if review["kind"] in USEFUL_REVIEWS
+            }
             if advice
             else {}
         )
@@ -667,7 +894,7 @@ def run_arm(config, root, name, advice, arm, random_seed):
         )
         row = {
             "stage": stage,
-            "task": task(name, stage),
+            "task": scenario_task(name, stage),
             "baseline_digest": digest(before),
             "coding": call,
             "patch": patch,
@@ -708,7 +935,12 @@ def comparison(manifest):
                         "behavior_passed": row["outcome"].get("behavior_passed", False),
                         "qualified": row["outcome"]["qualified"],
                         "ci_safe": row["outcome"].get("ci_safe", False),
-                        "independent_components": row["outcome"].get("independent_components", 0),
+                        "control_isolation": row["coding"].get("control_isolation"),
+                        "independent_components": row["outcome"].get("independent_components"),
+                        "architecture_observations": row["outcome"].get(
+                            "architecture_observations",
+                            row["outcome"].get("observational_evidence"),
+                        ),
                         "actual_evaluator_seconds": row["outcome"].get("actual_evaluator_seconds"),
                         "actual_candidate_check_seconds": row["outcome"].get(
                             "actual_candidate_check_seconds"
@@ -753,10 +985,16 @@ def comparison(manifest):
                 if arm == "treatment" and manifest["evidence_kind"] == "live"
                 else None
             )
+            arms[arm]["control_isolation_complete"] = (
+                all(call.get("control_isolation", {}).get("passed") is True for call in coding)
+                if arm == "control"
+                else None
+            )
         pairs.append({"scenario": pair["scenario"], "replicate": pair["replicate"], "arms": arms})
     return {
         "evidence_kind": manifest["evidence_kind"],
         "control_mode": manifest["control_mode"],
+        "track": manifest.get("track", "guided"),
         "status": manifest["status"],
         "pairs": pairs,
         "preparation_recoveries": manifest.get("preparation_recoveries", []),
@@ -779,6 +1017,7 @@ def invocation(config):
         key: str(getattr(config, key)) if key == "runtime" else getattr(config, key)
         for key in (
             "runtime",
+            "track",
             "agent",
             "scenarios",
             "replicates",
@@ -855,7 +1094,7 @@ def resume_preparation(config, previous):
             pair_root = config.state / f"{name}-{replicate}"
             with tempfile.TemporaryDirectory() as temporary:
                 expected = Path(temporary)
-                seed(expected, name)
+                scenario_seed(expected, name)
                 for arm in ("control", "treatment"):
                     candidate = pair_root / arm
                     if candidate.exists() and snapshot(candidate) != snapshot(expected):
@@ -893,6 +1132,10 @@ def resume_preparation(config, previous):
 
 def run_trial(config):
     config.state = config.state.resolve()
+    expected_scenarios = ["workshop"] if config.track == "discovery" else list(SCENARIOS)
+    config.scenarios = config.scenarios or expected_scenarios
+    if not set(config.scenarios) <= set(expected_scenarios):
+        raise ValueError("Choose scenarios from the selected guided or discovery track")
     if config.runtime:
         config.runtime = config.runtime.resolve()
     # Custom clients are useful for transport qualification, but must never be
@@ -923,6 +1166,12 @@ def run_trial(config):
         "scenarios": config.scenarios,
         "replicates": config.replicates,
         "control_mode": config.control_mode,
+        "track": config.track,
+        "architecture_assessment": "blinded human review and later source patches"
+        if config.track == "discovery"
+        else "guided interface/isolation qualification; not architectural discovery",
+        "advice_delivery": "metadata-only; scan/prepare and selected successful review inspections",
+        "quality_charter_balance": "same source-independent charter and quality goal for both arms",
         "client_identity": client_identity(config),
         "benchmark_source_sha256": digest(source_hashes(Path(__file__).parent)),
         "budget_basis": "equal coding opportunities; analysis costs reported separately; no equal-total-token claim",
@@ -973,7 +1222,7 @@ def run_trial(config):
             roots = {arm: pair_root / arm for arm in ("control", "treatment")}
             for root in roots.values():
                 if not root.exists():
-                    seed(root, name)
+                    scenario_seed(root, name)
             baseline = digest(snapshot(roots["control"]))
             assert baseline == digest(snapshot(roots["treatment"]))
             advice = (
@@ -1013,6 +1262,7 @@ def run_trial(config):
                         advice if arm == "treatment" else control_advice,
                         arm,
                         sample_seed,
+                        advice.get("quality_charter"),
                     )
                     for arm in order
                 }
@@ -1053,6 +1303,7 @@ def run_trial(config):
                         for row in arms[arm]
                     ],
                 )
+                export_blind_diffs(roots[arm], arm, destination, config.stages)
             write(config.state / "run.private.json", manifest)
     manifest.update(status="completed", finished_at=now())
     manifest["inference"] = (
@@ -1072,7 +1323,13 @@ def parser():
     result.add_argument("--state", type=Path, required=True)
     result.add_argument("--runtime", type=Path)
     result.add_argument("--agent", default="codex")
-    result.add_argument("--scenarios", nargs="+", choices=SCENARIOS, default=list(SCENARIOS))
+    result.add_argument(
+        "--track",
+        choices=("guided", "discovery"),
+        default="guided",
+        help="Guided oracle qualification, or unprescribed architectural discovery",
+    )
+    result.add_argument("--scenarios", nargs="+", choices=(*SCENARIOS, "workshop"))
     result.add_argument("--replicates", type=int, default=1)
     result.add_argument("--stages", type=int, choices=range(1, 5), default=4)
     result.add_argument(

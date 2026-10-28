@@ -127,7 +127,7 @@ def evaluate(app, graph, commit: dict, files: dict[str, str], label: str) -> dic
             f"task_{variant}_affected_prod_size": len(affected & production),
             f"task_{variant}_test_recall": scoring.recall(affected, set(facts["changed_tests"])),
             f"task_{variant}_test_size": len(affected - production),
-            f"{variant}_brief_bytes": len(json.dumps(brief, ensure_ascii=False, indent=2)),
+            f"{variant}_brief_bytes": len(json.dumps(brief, ensure_ascii=False, indent=2).encode()),
             f"task_{variant}_delivered_affected_recall": scoring.recall(delivered, expected),
             f"task_{variant}_delivered_prod_size": len(delivered & production),
             f"task_{variant}_delivered_test_recall": scoring.recall(

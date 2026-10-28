@@ -269,14 +269,16 @@ def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
 def _candidates(modules: dict[str, Node], matches: list[dict[str, Any]]) -> list[Node]:
     by_path = {node.path: node for node in modules.values()}
     paths = dict.fromkeys(match.get("path") for match in matches)
+    explicit = {m["path"] for m in matches if "exact_path" in m.get("match_scores", {})}
     candidates = [
         by_path[path]
         for path in paths
         if path in by_path
         and by_path[path].data.get("parse_status", "parsed") == "parsed"
         and path.endswith((".py", ".pyi"))
-        and not by_path[path].data.get("is_test")
+        and (not by_path[path].data.get("is_test") or path in explicit)
     ]
+    candidates.sort(key=lambda n: bool(n.data.get("is_test")) and n.path not in explicit)
     return candidates[:3]
 
 
@@ -317,8 +319,10 @@ def prepare(
     tests = [
         node.path
         for node in modules.values()
-        if node.path in impacted and (node.data.get("is_test") or node.path.startswith("tests/"))
+        if node.path in impacted and node.data.get("is_test", node.path.startswith("tests/"))
     ]
+    stems = {node.name.rsplit(".", 1)[-1] for node in candidates}
+    tests.sort(key=lambda path: -sum(stem in path for stem in stems))
     saved_reviews = reviews or []
     proposals = _review_proposals(graph, saved_reviews, owner_ids, task)
     by_path = {match["path"]: match for match in reversed(matches)}
@@ -344,7 +348,7 @@ def prepare(
         "contract_overflow": max(0, len(contracts) - 3),
         "affected_paths": sorted(impacted)[:8],
         "affected_total": len(impacted),
-        "tests": sorted(set(tests))[:6],
+        "tests": tests[:6],
         "tests_total": len(set(tests)),
         "implementation_advice": {
             "principles_ref": "charter",

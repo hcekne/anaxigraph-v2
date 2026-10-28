@@ -142,3 +142,21 @@ def test_synthetic_preflight_cannot_be_reused_to_qualify_a_live_run(tmp_path, mo
         run, "preflight", lambda config: {"status": "passed", "evidence_kind": "synthetic"}
     )
     assert run.run_trial(config)["status"] == "preflight_failed"
+
+
+def test_fake_control_client_command_events_cannot_pass_as_isolated(tmp_path):
+    client = tmp_path / "fake-control"
+    client.write_text(
+        f"#!{sys.executable}\n"
+        + "import json,sys\nsys.stdin.read()\nprint(json.dumps({'type':'item.completed','item':{'type':'command_execution','command':'anaxigraph scan','status':'completed'}}))\nprint(json.dumps({'type':'turn.completed','usage':{}}))\n"
+    )
+    client.chmod(0o755)
+    root = tmp_path / "candidate"
+    root.mkdir()
+    config = run.parser().parse_args(
+        ["--synthetic", "--state", str(tmp_path / "state"), "--agent", str(client)]
+    )
+    result = run.agent_call(root, tmp_path / "events", None, "ordinary source only", config)
+    assert result["status"] == "completed"
+    assert not result["control_isolation"]["passed"]
+    assert result["control_isolation"]["violations"][0]["kind"] == "anaxigraph_cli"

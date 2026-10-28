@@ -208,8 +208,33 @@ def test_full_three_scenario_four_task_automation_is_explicitly_synthetic(tmp_pa
     for label in labels:
         bundle = tmp_path / "blind-review" / label
         assert (bundle / "tasks.json").is_file()
+        assert len(list((bundle / "diffs").glob("task-*.patch"))) == 4
+        diff = (bundle / "diffs/task-1.patch").read_text()
+        assert "--- before/compute.py" in diff and "+++ after/compute.py" in diff
+        assert "treatment-evidence" not in diff and "control-evidence" not in diff
         assert not (bundle / "decisions.json").exists()
         assert not (bundle / "advice.private.json").exists()
+
+
+def test_discovery_chain_uses_public_behavior_and_preserves_candidate_state(tmp_path):
+    config = run.parser().parse_args(
+        ["--synthetic", "--track", "discovery", "--state", str(tmp_path)]
+    )
+    with patch.object(run, "agent_call", side_effect=AssertionError("No live client in fixture")):
+        result = run.run_trial(config)
+    assert result["evidence_kind"] == "synthetic" and result["track"] == "discovery"
+    assert [pair["scenario"] for pair in result["pairs"]] == ["workshop"]
+    for arm, rows in result["pairs"][0]["arms"].items():
+        assert len(rows) == 4
+        assert all(row["outcome"]["behavior_passed"] and row["outcome"]["ci_safe"] for row in rows)
+        assert all(row["outcome"]["qualified"] for row in rows)
+        assert all(row["outcome"]["hidden"].get("compatibility_fixture") for row in rows)
+        assert (tmp_path / f"workshop-0/{arm}-evidence/seed-state.private.json").is_file()
+        assert all(row["outcome"].get("independent_components") is None for row in rows)
+    prompt = run.prompt_for("workshop", 0, None)
+    assert "compute(request" not in prompt and "components.json" not in prompt
+    assert "Provider update:" not in prompt and "refund_pending" not in prompt
+    assert "blinded human" in result["architecture_assessment"]
 
 
 def test_failed_real_capability_preflight_starts_no_pair(tmp_path):
@@ -261,7 +286,7 @@ def test_preflight_requires_real_success_specific_tools_and_server_effects(tmp_p
 
 
 def test_context_and_adoption_need_exact_frozen_source_and_actual_patch(tmp_path):
-    advice = {"reviews": [{"id": "saved", "source_digest": "correct"}]}
+    advice = {"reviews": [{"id": "saved", "kind": "patterns", "source_digest": "correct"}]}
     notes = [
         {
             "advice_id": "saved",
@@ -303,6 +328,93 @@ def test_commands_pin_same_resource_settings_and_new_contexts():
         )
     config = run.parser().parse_args(["--synthetic", "--state", "/tmp/fixture"])
     assert config.call_timeout is None
+
+
+def test_prompts_deliver_review_metadata_once_and_match_charter_for_both_arms():
+    charter = [{"principle": "shared quality preference sentinel"}]
+    advice = {
+        "reviews": [
+            {
+                "id": "frozen-review",
+                "kind": "architecture",
+                "source_digest": "exact",
+                "result": {"private": "FULL_REVIEW_CONTENT_MUST_NOT_BE_INLINED"},
+            }
+        ]
+    }
+    control = run.prompt_for("workshop", 0, None, charter=charter)
+    treatment = run.prompt_for("workshop", 0, advice, charter=charter)
+    assert json.dumps(charter) in control and json.dumps(charter) in treatment
+    assert run.QUALITY_GOAL in control and run.QUALITY_GOAL in treatment
+    assert "FULL_REVIEW_CONTENT_MUST_NOT_BE_INLINED" not in treatment
+    assert '"reviewref": "review:frozen-review"' in treatment
+    assert "prepare_change" in treatment and "need not inspect every review" in treatment
+    assert run.CONTROL_RULE in control and run.CONTROL_RULE not in treatment
+
+
+def test_pattern_screen_alone_is_not_material_advice_consultation(tmp_path):
+    advice = {
+        "reviews": [{"id": "screen", "kind": "pattern-screen", "source_digest": "screen-data"}]
+    }
+    run.write(
+        tmp_path / "decisions.json",
+        [
+            {
+                "advice_id": "screen",
+                "disposition": "adopt",
+                "reason": "shortlist",
+                "files": ["solution.py"],
+            }
+        ],
+    )
+    calls = [
+        {
+            "server": "anaxigraph",
+            "tool": "inspect",
+            "succeeded": True,
+            "arguments": {"entity_id": "review:screen"},
+            "source_digest": "screen-data",
+        }
+    ]
+    result = run.dispositions(tmp_path, advice, {"changed_paths": ["solution.py"]}, calls)
+    assert not result[0]["source_reference_verified"]
+
+
+def test_control_audit_flags_observable_cli_mcp_package_and_record_access(tmp_path):
+    commands = [
+        "anaxigraph scan",
+        "uv run anaxigraph inspect charter",
+        'python -c "import sys; from anaxigraph.application import Application"',
+        "cat anaxigraph/record.json",
+        "curl http://localhost/anaxigraph/mcp",
+    ]
+    events = [
+        {"type": "item.completed", "item": {"type": "command_execution", "command": command}}
+        for command in commands
+    ]
+    events.append(
+        {
+            "type": "item.completed",
+            "item": {"type": "mcp_tool_call", "server": "anaxigraph", "tool": "inspect"},
+        }
+    )
+    (tmp_path / "helper.py").write_text("from anaxigraph import Application\n")
+    result = run.control_violations(tmp_path, events)
+    assert not result["passed"]
+    assert {row["kind"] for row in result["violations"]} >= {
+        "anaxigraph_cli",
+        "anaxigraph_python",
+        "anaxigraph_mcp",
+        "anaxigraph_saved_record",
+        "anaxigraph_http",
+        "anaxigraph_candidate_import",
+    }
+
+
+def test_control_source_search_or_printed_mentions_are_ordinary_tools(tmp_path):
+    commands = ["rg anaxigraph README.md", "python -c \"print('import anaxigraph')\""]
+    events = [{"item": {"type": "command_execution", "command": command}} for command in commands]
+    assert run.control_violations(tmp_path, events)["passed"]
 
 
 def test_existing_frozen_trial_is_refused_without_mutating_its_record(tmp_path, monkeypatch):

@@ -85,6 +85,22 @@ def test_ordinary_english_verb_does_not_override_relevant_source_and_symbols():
     )
 
 
+def test_explicit_test_file_can_own_a_test_change_without_test_helpers_leading_feature_work(
+    tmp_path,
+):
+    (tmp_path / "billing.py").write_text("def invoice():\n    return 'quasar invoice'\n")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_billing.py").write_text("def test_invoice():\n    assert 'quasar invoice'\n")
+    app = Application(tmp_path)
+    app.scan()
+    assert (
+        app.prepare_change("Fix tests/test_billing.py")["likely_owners"][0]["path"]
+        == "tests/test_billing.py"
+    )
+    assert app.prepare_change("Improve quasar invoice")["likely_owners"][0]["path"] == "billing.py"
+
+
 def test_nested_path_basename_is_an_exact_match_without_matching_partial_names():
     sources = {"package/opaque.py": "pass", "other.py": "invoice export tenant"}
     graph = fixture_graph(sources)
@@ -161,3 +177,19 @@ def test_rich_annotations_preserve_three_owners_and_their_essential_contracts():
     )
     assert brief["contract_overflow"] == 87
     assert brief["context_truncated"] and brief["task_truncated"]
+
+
+def test_concise_test_list_prioritizes_owner_specific_tests_over_alphabetical_smoke_tests(tmp_path):
+    (tmp_path / "billing.py").write_text("def invoice():\n    return 'quasar invoice'\n")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    for name in ("a_smoke", "b_smoke", "c_smoke", "test_billing"):
+        (tests / f"{name}.py").write_text(
+            "from billing import invoice\ndef test_invoice():\n    assert invoice()\n"
+        )
+    app = Application(tmp_path)
+    app.scan()
+    brief = app.prepare_change("Improve quasar invoice")
+    assert brief["tests_total"] == 4
+    assert brief["tests"][0] == "tests/test_billing.py"
+    assert [owner["path"] for owner in brief["likely_owners"]] == ["billing.py"]

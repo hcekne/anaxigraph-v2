@@ -5,6 +5,10 @@ Review candidates in randomized order. Record a suspected arm reveal and its sou
 Score each dimension 0–3 with a concrete source/test example; retain separate scores.
 Do not infer a preferred architecture from file names or reward more modules, interfaces,
 patterns, services, packages, tests or fewer lines. Functions and a modular monolith qualify.
+For the discovery track, judge the opportunities the agent found without being told what
+to extract. Keeping a small coherent design is valid when separation adds little value.
+Use the exported per-task source diffs to examine how later provider, state and shared-input
+changes actually crossed responsibilities; do not infer difficulty from changed-line counts.
 
 | Dimension | 0 | 1 | 2 | 3 |
 | --- | --- | --- | --- | --- |

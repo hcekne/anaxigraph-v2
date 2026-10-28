@@ -238,5 +238,39 @@
       "model_calls": 0,
       "interpretation": "Existing-owner accuracy denominator is13; top1 current4/13,new4/13,grep7/13; top3 all9/13. No held-out improvement at either cutoff, no subsequent tuning. This is the Python slice of an independent mixed-content repository, not JS/TS support or architectural outcome evidence."
     }
+  },
+  "final_implementation_confirmation": {
+    "source_case_category": "held-out Python repository",
+    "n": 13,
+    "original_selected_commits": 20,
+    "no_existing_owner_cases_excluded": 7,
+    "latest_retrieval_sha256": "aff73e7eeb9e081c66afcbb36a4584b81df71e439734cf641625c9100fa4da90",
+    "latest_guidance_sha256": "71457750a72007072ab35c645f4be23e027343d705f9b94f01758d758bf05eab",
+    "metrics": {
+      "before": {
+        "hit@1": 4,
+        "hit@3": 9
+      },
+      "final": {
+        "hit@1": 4,
+        "hit@3": 9
+      },
+      "grep": {
+        "hit@1": 7,
+        "hit@3": 9
+      }
+    },
+    "paired": {
+      "1": {
+        "gains": 0,
+        "losses": 0
+      },
+      "3": {
+        "gains": 0,
+        "losses": 0
+      }
+    },
+    "all_old_ranks_reproduced": true,
+    "model_calls": 0
   }
 }

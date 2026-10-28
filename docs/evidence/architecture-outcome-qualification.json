@@ -1,0 +1,279 @@
+{
+  "date": "2026-10-28",
+  "evidence_kind": "live-orchestration-qualification",
+  "track": "guided",
+  "scenario": "checkout",
+  "pairs": 1,
+  "tasks_per_arm": 4,
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "xhigh",
+  "runtime_source_sha256": "e4b8c241bb8ac8939e9a4c9096db8fc8a5284ab181292536cf7a9182459fbf78",
+  "coding_repairs": 0,
+  "protocol": {
+    "full_frozen_advice_inlined": true,
+    "same_charter_both_arms": false,
+    "ordinary_compact_use_effectiveness_trial": false
+  },
+  "arms": {
+    "treatment": {
+      "tasks": [
+        {
+          "stage": 0,
+          "behavior_passed": true,
+          "qualified": true,
+          "ci_safe": true,
+          "independent_components": 2,
+          "advice_consulted_source_verified": true,
+          "actual_evaluator_seconds": 0.964339,
+          "actual_local_check_seconds": 0.49024199999999996
+        },
+        {
+          "stage": 1,
+          "behavior_passed": true,
+          "qualified": true,
+          "ci_safe": true,
+          "independent_components": 2,
+          "advice_consulted_source_verified": true,
+          "actual_evaluator_seconds": 1.024136,
+          "actual_local_check_seconds": 0.511085
+        },
+        {
+          "stage": 2,
+          "behavior_passed": true,
+          "qualified": true,
+          "ci_safe": true,
+          "independent_components": 2,
+          "advice_consulted_source_verified": true,
+          "actual_evaluator_seconds": 0.990076,
+          "actual_local_check_seconds": 0.5106350000000001
+        },
+        {
+          "stage": 3,
+          "behavior_passed": true,
+          "qualified": true,
+          "ci_safe": true,
+          "independent_components": 2,
+          "advice_consulted_source_verified": true,
+          "actual_evaluator_seconds": 1.153008,
+          "actual_local_check_seconds": 0.577779
+        }
+      ],
+      "coding": {
+        "calls": 4,
+        "elapsed_seconds": {
+          "reported_sum": 1049.892726,
+          "known": 4,
+          "unknown": 0,
+          "complete": true
+        },
+        "cost_usd": {
+          "reported_sum": null,
+          "known": 0,
+          "unknown": 4,
+          "complete": false
+        },
+        "tokens": {
+          "input_tokens": {
+            "reported_sum": 2820306,
+            "known": 4,
+            "unknown": 0,
+            "complete": true
+          },
+          "output_tokens": {
+            "reported_sum": 51161,
+            "known": 4,
+            "unknown": 0,
+            "complete": true
+          },
+          "cached_input_tokens": {
+            "reported_sum": 2553088,
+            "known": 4,
+            "unknown": 0,
+            "complete": true
+          }
+        }
+      },
+      "analysis": {
+        "actual_calls": 23,
+        "usage": {
+          "input_tokens": {
+            "reported_sum": 336632,
+            "known": 23,
+            "unknown": 0,
+            "complete": true
+          },
+          "output_tokens": {
+            "reported_sum": 89519,
+            "known": 23,
+            "unknown": 0,
+            "complete": true
+          },
+          "cached_input_tokens": {
+            "reported_sum": 141440,
+            "known": 23,
+            "unknown": 0,
+            "complete": true
+          },
+          "elapsed_seconds": {
+            "reported_sum": 2341.6832723356783,
+            "known": 23,
+            "unknown": 0,
+            "complete": true
+          },
+          "cost_usd": {
+            "reported_sum": null,
+            "known": 0,
+            "unknown": 23,
+            "complete": false
+          }
+        }
+      }
+    },
+    "control": {
+      "tasks": [
+        {
+          "stage": 0,
+          "behavior_passed": true,
+          "qualified": true,
+          "ci_safe": true,
+          "independent_components": 2,
+          "advice_consulted_source_verified": false,
+          "actual_evaluator_seconds": 1.360873,
+          "actual_local_check_seconds": 0.997698
+        },
+        {
+          "stage": 1,
+          "behavior_passed": true,
+          "qualified": true,
+          "ci_safe": true,
+          "independent_components": 2,
+          "advice_consulted_source_verified": false,
+          "actual_evaluator_seconds": 1.515894,
+          "actual_local_check_seconds": 1.078565
+        },
+        {
+          "stage": 2,
+          "behavior_passed": true,
+          "qualified": true,
+          "ci_safe": true,
+          "independent_components": 2,
+          "advice_consulted_source_verified": false,
+          "actual_evaluator_seconds": 1.326891,
+          "actual_local_check_seconds": 0.923639
+        },
+        {
+          "stage": 3,
+          "behavior_passed": true,
+          "qualified": true,
+          "ci_safe": true,
+          "independent_components": 2,
+          "advice_consulted_source_verified": false,
+          "actual_evaluator_seconds": 1.377452,
+          "actual_local_check_seconds": 0.9557869999999999
+        }
+      ],
+      "coding": {
+        "calls": 4,
+        "elapsed_seconds": {
+          "reported_sum": 588.2624020000001,
+          "known": 4,
+          "unknown": 0,
+          "complete": true
+        },
+        "cost_usd": {
+          "reported_sum": null,
+          "known": 0,
+          "unknown": 4,
+          "complete": false
+        },
+        "tokens": {
+          "input_tokens": {
+            "reported_sum": 765861,
+            "known": 4,
+            "unknown": 0,
+            "complete": true
+          },
+          "output_tokens": {
+            "reported_sum": 31298,
+            "known": 4,
+            "unknown": 0,
+            "complete": true
+          },
+          "cached_input_tokens": {
+            "reported_sum": 677248,
+            "known": 4,
+            "unknown": 0,
+            "complete": true
+          }
+        }
+      },
+      "analysis": {
+        "actual_calls": 0,
+        "usage": {
+          "input_tokens": {
+            "reported_sum": null,
+            "known": 0,
+            "unknown": 0,
+            "complete": false
+          },
+          "output_tokens": {
+            "reported_sum": null,
+            "known": 0,
+            "unknown": 0,
+            "complete": false
+          },
+          "cached_input_tokens": {
+            "reported_sum": null,
+            "known": 0,
+            "unknown": 0,
+            "complete": false
+          },
+          "elapsed_seconds": {
+            "reported_sum": null,
+            "known": 0,
+            "unknown": 0,
+            "complete": false
+          },
+          "cost_usd": {
+            "reported_sum": null,
+            "known": 0,
+            "unknown": 0,
+            "complete": false
+          }
+        }
+      }
+    }
+  },
+  "treatment_useful_advice_consulted_every_task": true,
+  "observed_control_isolation_audit_passed": true,
+  "dollar_costs": "unknown; no billing receipts",
+  "timing_basis": "Summed provider/coding call latency; not production CI savings or a single concurrent wall-clock duration. Cached input tokens are a subset of input tokens.",
+  "prior_failed_preparation": {
+    "coding_tasks_started": 0,
+    "actual_analysis_calls": 20,
+    "input_tokens": 314757,
+    "output_tokens": 79058,
+    "cached_input_tokens": 112256,
+    "summed_provider_seconds": 2099.44,
+    "error": "An architecture finding omitted required placement comparisons; accepted batches were retained.",
+    "cost_usd": null
+  },
+  "implemented_followup_protocol": {
+    "tracks": [
+      "discovery",
+      "guided"
+    ],
+    "discovery": "Natural workshop feature briefs; no prescribed components or layout; unannounced provider/state/shared-config changes; old opaque state carried across versions.",
+    "context": "Treatment receives compact review references and inspects relevant advice; both arms receive the same charter/quality goal.",
+    "controls": [
+      "ordinary source tools",
+      "additional generic architecture review"
+    ],
+    "validation": "Independent behavior, atomicity/idempotency, persisted-state compatibility and CI safety; blind patch review judges architectural choices.",
+    "discovery_effectiveness": "not measured live",
+    "human_blind_review": "not performed",
+    "offline_architecture_tests": 46
+  },
+  "architecture_advantage_claim": null,
+  "ci_speedup_claim": null
+}

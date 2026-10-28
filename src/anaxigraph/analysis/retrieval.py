@@ -99,8 +99,8 @@ def rank_owners(
     return sorted(
         ranked,
         key=lambda row: (
-            bool(modules[row["path"]].data.get("is_test")),
             -int("exact_path" in row["match_scores"]),
+            bool(modules[row["path"]].data.get("is_test")),
             -row["score"],
             row["path"],
         ),

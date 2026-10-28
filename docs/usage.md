@@ -100,10 +100,12 @@ Use this alongside agent interviews and project outcomes; inspection alone does 
 agent acted on advice.
 
 For a controlled comparison, use the [architectural outcome experiment](../experiments/architecture_quality/README.md).
-It starts both agents from identical coupled code, freezes Patterns/Fresh Eyes advice, then gives
-fresh agents later changes. Independent behavior, component isolation, contracts and safe CI
-scope are checked outside the candidate checkout. Ordinary coding and a generic architecture-review
-control are supported. Tokens, latency and additional analysis work remain separate from quality.
+Its discovery track starts from identical coupled code and natural feature requests, freezes
+Patterns/Fresh Eyes advice, then gives fresh agents unannounced later changes. Independent checks
+verify behavior, persisted-state compatibility and safe CI scope; blind patch review judges the
+chosen boundaries and contracts. A separate guided track checks prescribed component isolation.
+Ordinary coding and a generic architecture-review control are supported. Tokens, latency and
+additional analysis work remain separate from quality.
 
 `prepare_change` needs a structural scan, not a full model mapping. Its three owner candidates
 combine source text, paths/symbols and current saved understanding, with matching evidence.
