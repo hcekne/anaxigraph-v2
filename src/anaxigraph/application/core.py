@@ -13,10 +13,12 @@ from typing import Any
 
 from anaxigraph import __version__
 from anaxigraph.analysis.behavior import annotation_behavior_problems
-from anaxigraph.analysis.changes import change_review
+from anaxigraph.analysis.changes import change_review, changed_paths
 from anaxigraph.analysis.charter import CHARTER, module_facts
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
+from anaxigraph.analysis.history import cochange_advice
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
+from anaxigraph.analysis.retrieval import rank_owners
 from anaxigraph.application import architecture as component_architecture
 from anaxigraph.application import delivery, records
 from anaxigraph.application import reviews as review_operations
@@ -28,6 +30,7 @@ from anaxigraph.application.context import (
 from anaxigraph.contracts import Graph, Node
 from anaxigraph.evidence import Evidence
 from anaxigraph.indexing import IndexSession
+from anaxigraph.indexing.history import capture_history
 from anaxigraph.storage import Store
 from anaxigraph.workflows.engine import WorkflowRunner
 
@@ -104,6 +107,14 @@ class Application:
                 "Checkout changed after mapping; scan again before saving or validating"
             )
 
+    def _history_advice(self, graph: Graph, paths: set[str], revision: str | None) -> dict:
+        key = (revision, tuple(sorted(graph.snapshot.files)))
+        cached = getattr(self, "_history_cache", None)
+        if cached is None or cached[0] != key:
+            cached = (key, capture_history(self.root, revision, set(graph.snapshot.files)))
+            self._history_cache = cached
+        return cochange_advice(cached[1], paths)
+
     def scan(self, publish: bool = False) -> dict[str, Any]:
         if type(publish) is not bool:
             raise ValueError("publish must be a boolean")
@@ -143,36 +154,27 @@ class Application:
 
     def status(self) -> dict[str, Any]:
         stats = self.store.stats(str(self.root))
-        storage = {key: stats[key] for key in ("bytes", "max_bytes", "snapshots", "reviews")}
-        if stats["snapshot_id"] is None:
-            return {
-                "version": __version__,
-                "root": str(self.root),
-                "snapshot": None,
-                "modules": 0,
-                "symbols": 0,
-                "relationships": 0,
-                "annotations": {"current": 0, "stale": 0, "missing": 0},
-                "storage": storage,
-                "portable": self.portable_status(),
-            }
-        graph = self._current()
-        modules = [n for n in graph.nodes if n.kind == "module"]
-        coverage = Counter(n.data.get("annotation_status", "missing") for n in modules)
+        graph = self._current() if stats["snapshot_id"] is not None else None
+        nodes = graph.nodes if graph else ()
+        edges = graph.edges if graph else ()
+        modules = [node for node in nodes if node.kind == "module"]
+        coverage = Counter(node.data.get("annotation_status", "missing") for node in modules)
         return {
             "version": __version__,
             "root": str(self.root),
-            "snapshot": {
-                key: value for key, value in asdict(graph.snapshot).items() if key != "files"
-            }
-            | {"file_count": len(graph.snapshot.files)},
+            "snapshot": (
+                {key: value for key, value in asdict(graph.snapshot).items() if key != "files"}
+                | {"file_count": len(graph.snapshot.files)}
+            )
+            if graph
+            else None,
             "modules": len(modules),
-            "symbols": sum(n.kind in {"function", "class", "interface"} for n in graph.nodes),
-            "relationships": len(graph.edges),
-            "unresolved_relationships": sum(e.resolution != "resolved" for e in graph.edges),
+            "symbols": sum(node.kind in {"function", "class", "interface"} for node in nodes),
+            "relationships": len(edges),
+            "unresolved_relationships": sum(edge.resolution != "resolved" for edge in edges),
             "annotations": {key: coverage[key] for key in ("current", "stale", "missing")},
-            "diagnostics": list(graph.diagnostics)[:30],
-            "storage": storage,
+            "diagnostics": list(graph.diagnostics)[:30] if graph else [],
+            "storage": {key: stats[key] for key in ("bytes", "max_bytes", "snapshots", "reviews")},
             "baseline_id": stats.get("pinned_snapshot_id"),
             "portable": self.portable_status(),
             "coverage": "Python/PYI syntax and scoped references; dynamic targets may be unresolved",
@@ -283,17 +285,8 @@ class Application:
         if not isinstance(task, str) or not task.strip() or len(task) > 4000:
             raise ValueError("task must be nonempty text of at most 4,000 characters")
         graph = self._current()
-        self._require_live(graph)
         limit = _bounds(limit, 30)
-        matches = self.store.search(str(self.root), task, limit * 3)
-        statuses = {n.path: n.data for n in graph.nodes if n.kind == "module"}
-        matches = sorted(matches, key=lambda m: bool(statuses.get(m["path"], {}).get("is_test")))[
-            :limit
-        ]
-        for match in matches:
-            match["annotation_status"] = statuses.get(match["path"], {}).get(
-                "annotation_status", "missing"
-            )
+        matches = rank_owners(graph, self.indexer.captured_sources(graph.snapshot), task, limit)
         task_key = hashlib.sha256(" ".join(task.casefold().split()).encode()).hexdigest()
         pinned = self.store.pin_baseline(
             str(self.root),
@@ -324,6 +317,14 @@ class Application:
         ) | {
             "baseline_id": pinned,
         }
+        baseline = (
+            graph if pinned == graph.snapshot.id else self.store.load_graph(str(self.root), pinned)
+        )
+        result["historical_associations"] = self._history_advice(
+            graph,
+            {owner["path"] for owner in result["likely_owners"]},
+            baseline.snapshot.revision if baseline else None,
+        )
         result["task_id"] = self.evidence.start_task(
             task, graph.snapshot.revision, graph.snapshot.id, pinned, continue_task=continue_task
         )
@@ -387,21 +388,27 @@ class Application:
         previous = self.store.load_graph(str(self.root), selected) if selected else None
         if selected and previous is None:
             raise ValueError("Baseline must identify a retained snapshot of this checkout")
+        basis = (
+            "explicit"
+            if baseline_id
+            else ("pinned-change-baseline" if stats.get("pinned_snapshot_id") else "previous-scan")
+        )
         result = change_review(graph, previous, receipts) | {
             "baseline_id": selected,
-            "baseline_basis": "explicit"
-            if baseline_id
-            else ("pinned-change-baseline" if stats.get("pinned_snapshot_id") else "previous-scan"),
-            "comparison": "explicit baseline"
-            if baseline_id
-            else (
-                "pinned change baseline"
-                if stats.get("pinned_snapshot_id")
-                else ("previous scan" if selected else "no saved baseline")
-            ),
+            "baseline_basis": basis,
+            "comparison": {
+                "explicit": "explicit baseline",
+                "pinned-change-baseline": "pinned change baseline",
+                "previous-scan": "previous scan" if selected else "no saved baseline",
+            }[basis],
         }
 
         result["architecture"] = component_architecture.followthrough(self, selected)
+        result["historical_associations"] = self._history_advice(
+            graph,
+            set(changed_paths(graph, previous)),
+            previous.snapshot.revision if previous else None,
+        )
         result["ci_plan"] = delivery.advisory(
             self, base_snapshot_id=baseline_id or stats.get("pinned_snapshot_id")
         )

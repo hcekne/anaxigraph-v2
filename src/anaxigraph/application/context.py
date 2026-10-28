@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from functools import partial
 
 from anaxigraph.contracts import Graph
+
+
+def _digest(value: dict) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
 def _dependencies(graph: Graph) -> dict[str, set[str]]:
@@ -22,43 +27,28 @@ def _dependencies(graph: Graph) -> dict[str, set[str]]:
     return dependencies
 
 
-def context_fingerprints(graph: Graph) -> dict[str, str]:
-    interfaces = {
-        node.path: node.data.get("interface_fingerprint", graph.snapshot.files.get(node.path))
+def _fingerprints(graph: Graph, field: str, include_own: bool) -> dict[str, str]:
+    values = {
+        node.path: node.data.get(field, graph.snapshot.files.get(node.path))
         for node in graph.nodes
         if node.kind == "module"
     }
     return {
-        path: hashlib.sha256(
-            json.dumps(
-                {
-                    p: graph.snapshot.files[p]
-                    if p == path
-                    else interfaces.get(p, graph.snapshot.files[p])
-                    for p in paths
-                },
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()
+        path: _digest(
+            {
+                p: graph.snapshot.files[p] if p == path else values.get(p, graph.snapshot.files[p])
+                for p in paths
+                if include_own or p != path
+            }
+        )
         for path, paths in _dependencies(graph).items()
     }
 
 
-def dependency_implementation_fingerprints(graph: Graph) -> dict[str, str]:
-    semantics = {
-        node.path: node.data.get("semantic_fingerprint", graph.snapshot.files.get(node.path))
-        for node in graph.nodes
-        if node.kind == "module"
-    }
-    return {
-        path: hashlib.sha256(
-            json.dumps(
-                {p: semantics.get(p, graph.snapshot.files[p]) for p in paths if p != path},
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()
-        for path, paths in _dependencies(graph).items()
-    }
+context_fingerprints = partial(_fingerprints, field="interface_fingerprint", include_own=True)
+dependency_implementation_fingerprints = partial(
+    _fingerprints, field="semantic_fingerprint", include_own=False
+)
 
 
 def _bounds(limit: int, maximum: int = 100) -> int:

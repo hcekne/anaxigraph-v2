@@ -11,6 +11,7 @@ from random import Random
 
 import pytest
 
+from anaxigraph.analysis.retrieval import rank_owners
 from anaxigraph.contracts import Edge, Graph, Node, Snapshot
 from anaxigraph.storage import Store
 
@@ -149,7 +150,7 @@ def test_only_current_and_previous_snapshots_survive(tmp_path: Path) -> None:
     assert store.stats(str(tmp_path))["previous_snapshot_id"] == "8"
 
 
-def test_checkout_isolation_and_bounded_semantic_search(tmp_path: Path) -> None:
+def test_checkout_isolation_preserves_distinct_searchable_annotations(tmp_path: Path) -> None:
     store = Store(tmp_path / "knowledge.sqlite")
     for name in ("left", "right"):
         current = graph(tmp_path / name)
@@ -157,17 +158,15 @@ def test_checkout_isolation_and_bounded_semantic_search(tmp_path: Path) -> None:
         store.annotate(
             current.snapshot.root, "one", "module:a.py", {"overview": f"{name} invoices"}
         )
-    assert len(store.search(str(tmp_path / "left"), "invoices", 1)) == 1
-    assert store.search(str(tmp_path / "left"), "right") == []
-    assert store.search(str(tmp_path / "left"), '" OR *') == []
-    assert store.search(str(tmp_path / "left"), "") == []
-    with pytest.raises(ValueError, match="limit"):
-        store.search(str(tmp_path), "anything", 101)
     left = store.load_graph(str(tmp_path / "left"))
     right = store.load_graph(str(tmp_path / "right"))
     assert left is not None and right is not None
     assert annotated(left).data["annotation"]["overview"] == "left invoices"
     assert annotated(right).data["annotation"]["overview"] == "right invoices"
+    assert len(rank_owners(left, {}, "invoices", 1)) == 1
+    assert rank_owners(left, {}, "right") == []
+    assert rank_owners(left, {}, '" OR *') == []
+    assert rank_owners(left, {}, "") == []
 
 
 def test_requests_survive_completed_review_retention(tmp_path: Path) -> None:
@@ -216,7 +215,7 @@ def test_sqlite_capacity_failure_rolls_back_map_and_cleans_journal(tmp_path: Pat
                 f"{number}.py",
                 data={"note": b64encode(Random(number).randbytes(4500)).decode()},
             )
-            for number in range(10)
+            for number in range(30)
         ),
     )
     with pytest.raises(ValueError, match="budget"):
@@ -239,9 +238,7 @@ def test_annotations_are_canonical_not_copied_into_node_rows(tmp_path: Path) -> 
             "Unique narrative" not in zlib.decompress(row[0]).decode()
             for row in db.execute("SELECT data FROM node_sets")
         )
-        assert all(
-            "Unique narrative" not in row[0] for row in db.execute("SELECT overview FROM search")
-        )
+        assert not db.execute("SELECT 1 FROM sqlite_master WHERE name='search'").fetchone()
 
 
 def test_changed_large_map_keeps_two_complete_snapshots_compact(tmp_path: Path) -> None:
@@ -299,18 +296,18 @@ def test_changed_large_map_keeps_two_complete_snapshots_compact(tmp_path: Path) 
     assert store.path.read_bytes() == before
 
 
-def test_cache_token_is_read_stable_and_changes_for_other_store_writes(tmp_path: Path) -> None:
+def test_knowledge_token_is_read_stable_and_changes_for_other_store_writes(tmp_path: Path) -> None:
     store = Store(tmp_path / "knowledge.sqlite")
     store.save_graph(graph(tmp_path))
-    before = store.cache_token()
+    before = store.knowledge_token(str(tmp_path))
     other = Store(store.path)
-    assert other.cache_token() == before
+    assert other.knowledge_token(str(tmp_path)) == before
     store.load_graph(str(tmp_path))
     store.stats(str(tmp_path))
     store.reviews(str(tmp_path))
-    assert store.cache_token() == before
+    assert store.knowledge_token(str(tmp_path)) == before
     other.annotate(str(tmp_path), "one", "module:a.py", {"overview": "Updated elsewhere."})
-    assert store.cache_token() != before
+    assert store.knowledge_token(str(tmp_path)) != before
     loaded = store.load_graph(str(tmp_path))
     assert loaded is not None
     assert annotated(loaded).data["annotation"]["overview"] == "Updated elsewhere."
@@ -348,18 +345,18 @@ def test_graph_materialization_holds_one_consistent_read_transaction(
     assert blocked == [True]
 
 
-def test_annotation_updates_only_its_search_document(tmp_path, monkeypatch):
+def test_annotation_updates_only_its_canonical_document(tmp_path, monkeypatch):
     store = Store(tmp_path / "knowledge.sqlite")
     store.save_graph(graph(tmp_path))
 
     def forbidden(*args):
-        pytest.fail("An annotation write must not rebuild the entire search index")
+        pytest.fail("An annotation write must not materialize the entire graph")
 
-    monkeypatch.setattr(store, "_refresh_search", forbidden)
     monkeypatch.setattr(store, "_node_rows", forbidden)
     store.annotate(str(tmp_path), "one", "module:a.py", {"overview": "Invoice export."})
-    assert [row["id"] for row in store.search(str(tmp_path), "Invoice")] == ["module:a.py"]
-    assert len(store.search(str(tmp_path), "storage")) == 1
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("SELECT count(*) FROM annotations").fetchone()[0] == 1
+        assert "Invoice export." in db.execute("SELECT body FROM annotations").fetchone()[0]
 
 
 def test_all_current_batch_reviews_survive_and_only_matching_scope_is_replaced(tmp_path):
@@ -388,6 +385,35 @@ def test_all_current_batch_reviews_survive_and_only_matching_scope_is_replaced(t
         store.save_graph(graph(tmp_path, f"later-{number}", f"changed-{number}"))
     saved = store.get_review(str(tmp_path), "replacement", "patterns")
     assert saved is not None and saved["status"] == "stale"
+
+
+def test_v6_migration_removes_derived_index_and_preserves_canonical_knowledge(tmp_path):
+    store = Store(tmp_path / "knowledge.sqlite")
+    original = graph(tmp_path)
+    store.save_graph(original)
+    store.pin_baseline(str(tmp_path))
+    store.annotate(str(tmp_path), "one", "module:a.py", {"overview": "Invoice export."})
+    store.save_review(str(tmp_path), "one", "saved", "patterns", {"findings": []})
+    with sqlite3.connect(store.path) as db:
+        db.executescript(
+            "CREATE VIRTUAL TABLE search USING fts5("
+            "name,path,overview,root UNINDEXED,node_id UNINDEXED,status UNINDEXED);"
+            "INSERT INTO search VALUES ('accounting','a.py','Invoice export.','root','module:a.py','current');"
+            "PRAGMA user_version=6;"
+        )
+    migrated = Store(store.path)
+    current = migrated.load_graph(str(tmp_path))
+    assert current is not None and current.snapshot == original.snapshot
+    assert annotated(current).data["annotation"]["overview"] == "Invoice export."
+    assert migrated.stats(str(tmp_path))["pinned_snapshot_id"] == "one"
+    assert migrated.get_review(str(tmp_path), "saved", "patterns")["result"] == {"findings": []}
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert not db.execute("SELECT 1 FROM sqlite_master WHERE name LIKE 'search%'").fetchone()
+        assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    with sqlite3.connect(store.path.with_name("knowledge.sqlite.pre-v7.sqlite")) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert db.execute("SELECT overview FROM search").fetchone()[0] == "Invoice export."
 
 
 def test_v3_migration_preserves_saved_analyses_and_removes_snapshot_cascade(tmp_path):

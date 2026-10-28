@@ -1,0 +1,177 @@
+{
+  "date": "2026-10-28",
+  "evidence_kind": "historical-replay-no-models",
+  "cases": 20,
+  "unique_cases": 20,
+  "same_cases_as_original": true,
+  "task_basis": "historical commit messages; development cases, not held-out tasks",
+  "runtime_digest": "e6eeeca3fdcfc5cabea2444d78bb867d9169677b9bc757d6e66c063250dd1908",
+  "harness_digest": "03120c83fec43cc5f905ee96c034e05117f9a7abad98dad1b4d2935e6179f69a",
+  "model_calls": 0,
+  "model_mapping_performed": false,
+  "owner_results": {
+    "structural": {
+      "hit@1": "3/20",
+      "hit@3": "10/20"
+    },
+    "structural_uncapped": {
+      "hit@1": "3/20",
+      "hit@3": "10/20"
+    },
+    "grep": {
+      "hit@1": "7/20",
+      "hit@3": "11/20"
+    },
+    "symbols": {
+      "hit@1": "1/20",
+      "hit@3": "6/20"
+    },
+    "fused": {
+      "hit@1": "7/20",
+      "hit@3": "11/20"
+    }
+  },
+  "candidate_budget": 6,
+  "conditional_impact_results": {
+    "oracle_candidate_budget": {
+      "mean": 6.0,
+      "n": 20
+    },
+    "oracle_consumer_precision_anaxigraph": {
+      "mean": 0.1,
+      "n": 10
+    },
+    "oracle_consumer_precision_combined": {
+      "mean": 0.25,
+      "n": 10
+    },
+    "oracle_consumer_precision_grep": {
+      "mean": 0.1,
+      "n": 10
+    },
+    "oracle_consumer_precision_history": {
+      "mean": 0.283,
+      "n": 10
+    },
+    "oracle_consumer_recall_anaxigraph": {
+      "mean": 0.135,
+      "n": 10
+    },
+    "oracle_consumer_recall_combined": {
+      "mean": 0.435,
+      "n": 10
+    },
+    "oracle_consumer_recall_grep": {
+      "mean": 0.135,
+      "n": 10
+    },
+    "oracle_consumer_recall_history": {
+      "mean": 0.615,
+      "n": 10
+    },
+    "oracle_consumer_size_anaxigraph": {
+      "mean": 3.15,
+      "n": 20
+    },
+    "oracle_consumer_size_combined": {
+      "mean": 5.0,
+      "n": 20
+    },
+    "oracle_consumer_size_grep": {
+      "mean": 3.15,
+      "n": 20
+    },
+    "oracle_consumer_size_history": {
+      "mean": 4.95,
+      "n": 20
+    },
+    "oracle_test_precision_anaxigraph": {
+      "mean": 0.23,
+      "n": 11
+    },
+    "oracle_test_precision_combined": {
+      "mean": 0.205,
+      "n": 11
+    },
+    "oracle_test_precision_grep": {
+      "mean": 0.348,
+      "n": 11
+    },
+    "oracle_test_precision_history": {
+      "mean": 0.276,
+      "n": 11
+    },
+    "oracle_test_recall_anaxigraph": {
+      "mean": 0.727,
+      "n": 11
+    },
+    "oracle_test_recall_combined": {
+      "mean": 0.727,
+      "n": 11
+    },
+    "oracle_test_recall_grep": {
+      "mean": 0.591,
+      "n": 11
+    },
+    "oracle_test_recall_history": {
+      "mean": 0.712,
+      "n": 11
+    },
+    "oracle_test_size_anaxigraph": {
+      "mean": 3.4,
+      "n": 20
+    },
+    "oracle_test_size_combined": {
+      "mean": 4.15,
+      "n": 20
+    },
+    "oracle_test_size_grep": {
+      "mean": 2.3,
+      "n": 20
+    },
+    "oracle_test_size_history": {
+      "mean": 3.55,
+      "n": 20
+    }
+  },
+  "eligible_list_sizes": {
+    "consumer_anaxigraph": {
+      "mean": 3.8,
+      "n": 10
+    },
+    "consumer_grep": {
+      "mean": 3.8,
+      "n": 10
+    },
+    "consumer_history": {
+      "mean": 4.8,
+      "n": 10
+    },
+    "consumer_combined": {
+      "mean": 4.8,
+      "n": 10
+    },
+    "test_anaxigraph": {
+      "mean": 5.0,
+      "n": 11
+    },
+    "test_grep": {
+      "mean": 3.364,
+      "n": 11
+    },
+    "test_history": {
+      "mean": 4.364,
+      "n": 11
+    },
+    "test_combined": {
+      "mean": 5.273,
+      "n": 11
+    }
+  },
+  "delivered_owner_counts": {
+    "minimum": 3,
+    "maximum": 3
+  },
+  "delivered_owner_lists_equal_uncapped": true,
+  "interpretation": "Answer packing is repaired. Free source/symbol retrieval reaches10/20top3; independentgrep11/20; fusion11/20. No owner-finding superiority demonstrated. History remains useful conditional investigation evidence; reference+history fusion is not better than history here. Semantic-mapping marginal value was not rerun. Cross-repo extension is deferred until a stronger retrieval advantage exists."
+}

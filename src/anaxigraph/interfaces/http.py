@@ -157,6 +157,28 @@ class ConfigurationInput(Input):
     config: dict[str, Any]
 
 
+def _body_routes(server, operations):
+    def body_route(path, model, name, operation):
+        def action(body) -> dict:
+            return operations[operation](**body.model_dump())
+
+        action.__name__ = name
+        action.__annotations__["body"] = model
+        server.post("/api/" + path)(action)
+
+    for path, model, name, operation in (
+        ("prepare", TaskInput, "prepare", "prepare_change"),
+        ("assess", PlanInput, "assess", "assess_plan"),
+        ("validate", ValidationInput, "validate", "validate_change"),
+        ("ci/plan", CIPlanInput, "ci_plan", "ci_plan"),
+        ("analysis/request", AnalysisInput, "analysis_request", "analysis_request"),
+        ("analysis/submit", SubmissionInput, "submit", "submit_analysis"),
+        ("workflows/config", ConfigurationInput, "save_workflow_config", "workflow_configure"),
+        ("workflows/start", WorkflowInput, "workflow_start", "workflow_start"),
+    ):
+        body_route(path, model, name, operation)
+
+
 def create_app(
     application: Any, *, allowed_origins: list[str] | None = None, auth_token: str | None = None
 ) -> FastAPI:
@@ -165,7 +187,8 @@ def create_app(
         raise ValueError("HTTP auth token must contain at least 32 characters")
     if any(urlsplit(value).hostname not in _LOOPBACK for value in origins) and auth_token is None:
         raise ValueError("Non-loopback HTTP origins require an auth token")
-    mcp = create_mcp(application)
+    operations: dict[str, Any] = {}
+    mcp = create_mcp(application, operations=operations)
     local_hosts = [
         value for host in ("127.0.0.1", "localhost", "[::1]") for value in (host, host + ":*")
     ]
@@ -209,10 +232,6 @@ def create_app(
     def dashboard() -> FileResponse:
         return FileResponse(assets / "index.html")
 
-    @server.get("/api/status")
-    def status() -> dict:
-        return application.status()
-
     @server.get("/api/modules")
     def modules(
         sort: str = "path",
@@ -236,47 +255,6 @@ def create_app(
             return application.reviews(kind, limit, offset)
         return application.reviews(kind)
 
-    @server.post("/api/scan")
-    def scan() -> dict:
-        return application.scan()
-
-    @server.post("/api/prepare")
-    def prepare(body: TaskInput) -> dict:
-        if body.continue_task:
-            return application.prepare_change(body.task, body.limit, body.baseline_id, True)
-        if body.baseline_id:
-            return application.prepare_change(body.task, body.limit, body.baseline_id)
-        return application.prepare_change(body.task, body.limit)
-
-    @server.post("/api/assess")
-    def assess(body: PlanInput) -> dict:
-        if body.decisions is not None:
-            return application.assess_plan(body.task, body.files, body.decisions)
-        return application.assess_plan(body.task, body.files)
-
-    @server.post("/api/validate")
-    def validate(body: ValidationInput) -> dict:
-        if body.baseline_id:
-            return application.validate_change(body.receipts, body.baseline_id)
-        return application.validate_change(body.receipts)
-
-    @server.post("/api/ci/plan")
-    def ci_plan(body: CIPlanInput) -> dict:
-        return application.ci_plan(**body.model_dump())
-
-    @server.post("/api/analysis/request")
-    def analysis_request(body: AnalysisInput) -> dict:
-        options: dict[str, Any] = {}
-        if body.pattern_ids is not None:
-            options["pattern_ids"] = body.pattern_ids
-        if body.lens is not None:
-            options["lens"] = body.lens
-        return application.analysis_request(body.kind, body.scope, **options)
-
-    @server.post("/api/analysis/submit")
-    def submit(body: SubmissionInput) -> dict:
-        return application.submit_analysis(body.request_id, body.result)
-
     @server.get("/api/workflows")
     def workflows(
         run_id: str | None = None,
@@ -289,29 +267,9 @@ def create_app(
     def workflow_config() -> dict:
         return application.workflow_configure()
 
-    @server.post("/api/workflows/config")
-    def save_workflow_config(body: ConfigurationInput) -> dict:
-        return application.workflow_configure(body.config)
-
-    @server.post("/api/workflows/start")
-    def workflow_start(body: WorkflowInput) -> dict:
-        return application.workflow_start(body.kind, body.config, body.scope)
-
     @server.post("/api/workflows/{run_id}/resume")
     def workflow_resume(run_id: str) -> dict:
         return application.workflow_resume(run_id)
-
-    @server.get("/api/record")
-    def record_status() -> dict:
-        return application.portable_status()
-
-    @server.post("/api/record/export")
-    def export_record() -> dict:
-        return application.export_record()
-
-    @server.post("/api/record/import")
-    def import_record() -> dict:
-        return application.import_record()
 
     @server.get("/api/evidence")
     def trial_evidence(
@@ -319,9 +277,14 @@ def create_app(
     ) -> dict:
         return application.trial_evidence(limit, offset)
 
-    @server.post("/api/evidence/export")
-    def export_evidence() -> dict:
-        return application.export_evidence()
+    server.get("/api/status")(operations["status"])
+    server.post("/api/scan")(operations["scan"])
+    server.get("/api/record", name="record_status")(operations["portable_status"])
+    server.post("/api/record/export")(operations["export_record"])
+    server.post("/api/record/import")(operations["import_record"])
+    server.post("/api/evidence/export")(operations["export_evidence"])
+
+    _body_routes(server, operations)
 
     # Existing REST/assets routes win; the transport handles /mcp unchanged.
     server.mount("/", transport)

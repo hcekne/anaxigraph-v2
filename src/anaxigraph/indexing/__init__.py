@@ -33,6 +33,13 @@ class IndexSession:
     def snapshot(self) -> Snapshot:
         return discover(self.root, self.excluded, self.sources)[0]
 
+    def captured_sources(self, snapshot: Snapshot) -> dict[str, str]:
+        """Reuse verified captures, including inputs too large for the bounded cache."""
+        current, sources, _ = discover(self.root, self.excluded, self.sources)
+        if current.id != snapshot.id:
+            raise ValueError("Checkout changed after mapping; scan again before preparing")
+        return sources
+
 
 def index(
     root: Path, *, excluded: tuple[str, ...] = (), session: IndexSession | None = None
@@ -130,9 +137,4 @@ def index(
     return graph
 
 
-def capture_snapshot(root: Path) -> Snapshot:
-    """Recheck source bytes and identity without rebuilding the syntax graph."""
-    return discover(root, ())[0]
-
-
-__all__ = ["index", "capture_snapshot", "capture_sources", "IndexSession"]
+__all__ = ["index", "capture_sources", "IndexSession"]

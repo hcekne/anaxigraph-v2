@@ -56,8 +56,7 @@ def _scope(graph: Graph, requested: list[str] | None, kind: str) -> list[Node]:
     if not requested:
         requested = _default_scope(graph, kind)
     chosen = [node for node in modules if node.id in requested or node.path in requested]
-    matched = {value for value in requested if any(value in (n.id, n.path) for n in chosen)}
-    if len(matched) != len(set(requested)):
+    if set(requested) - {value for node in chosen for value in (node.id, node.path)}:
         raise ValueError("Scope must name mapped module IDs or repository-relative source paths")
     return chosen
 
@@ -135,21 +134,17 @@ def _annotation_packet(
     inert = all(node.data.get("inert_module") is True for node in chosen)
     packet: dict[str, Any] = {
         "instruction": (
-            "Explain behavior concisely: an overview of about 20 words, a short paragraph of "
-            "about 60–90 words, and about 15 words for EVERY supplied function. Give 3–6 key "
-            "capabilities and only the few essential behavioral contracts; avoid repeating "
-            "every helper as another capability or obligation. "
-            "When an earlier annotation is supplied, retain capability and contract wording "
-            "where behavior and obligations are unchanged; revise claims only when warranted. "
-            "Use source evidence for claims; distinguish declared from inferred obligations. "
-            "Capabilities AND contract statements must describe observable behavior without "
-            "implementation names, internal classes/methods, source paths or current module "
-            "boundaries, for later blind design. Keep source references only in the separate "
-            "evidence field, never the contract statement. Do not duplicate "
-            "signatures or invent guarantees. List uncertainty. Modules observed as inert_module "
-            "contain only documentation, comments or pass statements: describe their marker role "
-            "honestly and return capabilities: [], functions: [] and contracts: [], never null "
-            "or invented application behavior. Other modules require observable capabilities."
+            "Return EVERY module ID and EVERY supplied function ID exactly once. Explain behavior "
+            "in a ~20-word overview, 60–90-word paragraph and ~15-word function overviews. Give "
+            "3–6 key capabilities and few essential behavioral contracts, not repeated helper lists. "
+            "Preserve earlier capability/contract wording when behavior is unchanged. Ground claims "
+            "in source; distinguish declared from inferred obligations and list uncertainty. "
+            "For later blind design, capabilities AND contract statements describe observable "
+            "behavior without implementation names, source paths or current boundaries. Put source "
+            "references ONLY in the separate evidence field. Never repeat signatures or invent guarantees. "
+            "An inert_module contains only documentation/comments/pass: describe its marker role "
+            "and return capabilities: [], functions: [], contracts: [], never null or invented "
+            "behavior. Other modules require observable capabilities."
         ),
         "modules": [asdict(node) for node in chosen],
         "functions": [asdict(node) for node in symbols],
@@ -210,16 +205,13 @@ def _pattern_packet(
     cards = _pattern_cards(pattern_ids)
     packet: dict[str, Any] = {
         "instruction": (
-            "Independently advocate for EACH catalogue pattern against EACH supplied module. "
-            "Look for useful alternate responsibility, state, interface and control-flow designs, "
-            "not just existing defects. Give opportunity 0–3 (0=no useful benefit, 3=strong), "
-            "or null when evidence is insufficient. Explain concrete pros AND costs for every "
-            "pair, including rejections. Compare a simple local alternative. Do not manufacture "
-            "a problem to justify a pattern. Separate current_fit (present/partial/absent/unknown) "
-            "from incremental opportunity. A pattern already implemented well earns no change "
-            "opportunity merely because it is a good fit. Positive scores require a specific "
-            "proposed_change and evidence for its benefit beyond current behavior. Check existing "
-            "language/framework guarantees before proposing equivalent behavior. No card or module may be skipped."
+            "Consider EVERY catalogue pattern × module pair, including useful alternatives without "
+            "existing bugs: responsibilities, state, interfaces and control flow. Rate opportunity "
+            "0–3 (0=no benefit, 3=strong), or null for insufficient evidence. Give concrete pros, "
+            "costs and a simpler local alternative, including rejections. Distinguish current_fit "
+            "(present/partial/absent/unknown) from incremental benefit. Existing good fit earns no "
+            "change opportunity. Positive scores require a specific proposed_change and evidence "
+            "beyond existing language/framework guarantees. No card or module may be skipped."
         ),
         "catalogue": cards,
         "modules": [asdict(node) for node in chosen]
@@ -264,12 +256,9 @@ def _pattern_packet(
 
         packet["charter"] = CHARTER
         packet["instruction"] += (
-            " Judge thoroughly, report briefly: aim for at most 80 words of explanatory text "
-            "per evaluation, with one concrete change, one short pro, one short con, the "
-            "simplest alternative, and one or two precise evidence references when available. For zero or "
-            "unknown opportunity, give a brief reason without repeated rejection essays. "
-            "Keep every selected pair, the full response fields, honest ratings and evidence; "
-            "concise output must not force a positive recommendation."
+            " Judge thoroughly, report briefly (~80 words/pair): one change, one short pro, one short con, "
+            "and a simpler alternative with 1–2 evidence references. Keep every selected pair and field. "
+            "Zero/unknown needs a short reason; brevity must not force a positive recommendation."
         )
     schema = {
         "evaluations": [
@@ -334,17 +323,13 @@ def _screen_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], di
         )
     return {
         "instruction": (
-            "Consider EVERY compact catalogue card for EACH module against the architecture "
-            "charter, observed facts and current brief. Select only IDs worth a stronger detailed "
-            "review, normally 3–10 when justified, at most 10 and zero when no useful opportunity "
-            "merits review. Include plausible but uncertain candidates for stronger judgment; "
-            "an already proven problem is not required. Never force a minimum or manufacture "
-            "findings. An existing good fit "
-            "is not itself an improvement. Include opportunities for simpler local code and "
-            "clearer responsibilities/interfaces. Python functions and modules can implement "
-            "patterns without classes. No pattern is mechanically excluded here. Return IDs "
-            "only, with no ratings, prose or explanations; use pattern_ids: [] when none are "
-            "selected. Unselected is not proven irrelevant."
+            "Consider EVERY card × module against the charter, facts and current brief. Return "
+            "ONLY plausible IDs for stronger review: normally 3–10 when justified, maximum 10, "
+            "or pattern_ids: [] when none merit review. Include uncertain opportunities without "
+            "requiring proven bugs. Seek simpler code and clearer responsibilities/interfaces; "
+            "functions/modules can implement patterns without classes. Existing good fit is not "
+            "an improvement. No mechanical exclusions, forced minimum, ratings or prose. "
+            "Unselected is not proven irrelevant."
         ),
         "catalogue": [
             {key: card[key] for key in ("id", "name", "intent", "questions")}
@@ -387,21 +372,16 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
     _check_behaviors(graph, [requirement["behavior"] for requirement in requirements])
     packet = {
         "instruction": (
-            "You are an independent product designer. You receive BEHAVIOR ONLY. Do not inspect "
-            "source, repository files or existing architecture. Propose THREE materially different "
-            "ways to deliver ALL requirements. Compare responsibility, state and failure ownership; "
-            "justify added complexity and explain a minimal option. Preserve the original behavior. "
-            "Use the source-independent charter as design preferences, not evidence of how "
-            "the current system is built. "
-            "Each design must list every requirement ID and supply its own high-level Mermaid diagram. "
-            "Do not collapse the alternatives into a winner or claim tested implementation. "
-            "Also return functional_summary (one sentence) and functional_requirements "
-            "(at most eight behavior-only sentences). These must describe the purpose and "
-            "observable guarantees, not any proposed design or implementation. They form "
-            "the behavior brief for an independent product-level design, never a summary "
-            "of the current code structure. Return functional_coverage as an aligned list "
-            "of requirement-ID lists: each functional brief sentence names the requirements "
-            "it preserves, and their union must cover EVERY supplied requirement."
+            "Independent product designer: receive BEHAVIOR ONLY; inspect no source, files or "
+            "existing architecture. Propose THREE materially different complete designs preserving "
+            "ALL behavior. Compare responsibility/state/failure ownership, justify complexity and "
+            "include a minimal option. The charter gives preferences, not current-design evidence. "
+            "Each alternative lists every requirement ID, pros/cons and its own Mermaid diagram; "
+            "never collapse to a winner or claim tested implementation. Also return functional_summary "
+            "(one purpose sentence), functional_requirements (at most eight behavior-only sentences) "
+            "and aligned functional_coverage requirement-ID lists whose union covers EVERY input. "
+            "These functional briefs preserve purpose/observable guarantees for an independent "
+            "product design; they describe neither existing structure nor proposed implementations."
         ),
         "requirements": requirements,
         "charter": CHARTER,

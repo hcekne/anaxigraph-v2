@@ -99,6 +99,18 @@ Retention is bounded and reports dropped history. Missing provider prices stay u
 Use this alongside agent interviews and project outcomes; inspection alone does not show that an
 agent acted on advice.
 
+For a controlled comparison, use the [architectural outcome experiment](../experiments/architecture_quality/README.md).
+It starts both agents from identical coupled code, freezes Patterns/Fresh Eyes advice, then gives
+fresh agents later changes. Independent behavior, component isolation, contracts and safe CI
+scope are checked outside the candidate checkout. Ordinary coding and a generic architecture-review
+control are supported. Tokens, latency and additional analysis work remain separate from quality.
+
+`prepare_change` needs a structural scan, not a full model mapping. Its three owner candidates
+combine source text, paths/symbols and current saved understanding, with matching evidence.
+Historical associations show files that changed together before the task baseline; inspect them
+for shared obligations or weak boundaries without assuming they must change or widen CI.
+Workflow status retains compact failure diagnostics after older progress files rotate away.
+
 ## Connections
 
 Use explicit repository paths for stdio MCP. A dashboard service also exposes HTTP MCP at `/mcp`.

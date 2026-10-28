@@ -10,6 +10,7 @@ from test_workflows import answer
 
 from anaxigraph.analysis.architecture_guidance import decide
 from anaxigraph.analysis.guidance import prepare
+from anaxigraph.analysis.retrieval import rank_owners
 from anaxigraph.application import Application
 from anaxigraph.workflows.engine import WorkflowRunner
 
@@ -66,7 +67,7 @@ def test_large_context_keeps_a_scout_action_in_the_default_brief(application):
     rows = application.store.reviews(str(application.root), "architecture")
     brief = prepare(
         graph,
-        application.store.search(str(application.root), "produce", 3),
+        rank_owners(graph, application.indexer.captured_sources(graph.snapshot), "produce", 3),
         "change produce " * 200,
         rows,
     )

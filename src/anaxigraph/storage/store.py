@@ -2,18 +2,18 @@
 
 Only the store writes SQL. Repeated scans replace observations atomically; they
 do not append a historical cache. Annotation text is stored once per source
-fingerprint, with compact name/overview search documents rebuilt for the current
-snapshot. Source code is never executed here.
+fingerprint, without a second mutable search index. Source code is never executed here.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import sqlite3
 import time
 import zlib
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -67,8 +67,7 @@ def _preserve_selected_intent(result: dict[str, Any], previous: str | None) -> d
 class Store:
     """A thread-safe connection-per-operation SQLite repository.
 
-    The SQLite page limit bounds this complete database, including search and
-    free pages. A write that would exceed it rolls back without replacing the
+    The SQLite page limit bounds this complete database, including free pages. A write that would exceed it rolls back without replacing the
     last valid map. DELETE journaling avoids persistent WAL growth.
     """
 
@@ -89,11 +88,12 @@ class Store:
             raise ValueError("Request retention must be a positive integer")
         self.request_limit = request_limit
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connection() as db:
+        with self._connection(write=True) as db:
+            db.execute("PRAGMA journal_mode=DELETE")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 3, 4, 5, SCHEMA_VERSION):
+            if version not in (0, 3, 4, 5, 6, SCHEMA_VERSION):
                 raise ValueError(f"Unsupported knowledge-store schema: {version}")
-            if version in (0, 3, 4, 5):
+            if version != SCHEMA_VERSION:
                 if version:
                     self._backup_before_migration(db)
                 before = (
@@ -160,16 +160,6 @@ class Store:
             (root,),
         )
 
-    def cache_token(self) -> tuple[int, ...]:
-        """Invalidate an application's one-graph cache after any process writes.
-
-        Call before and after reading; cache only if both tokens agree. No extra
-        connection or second cache is needed, and atomic file replacement also
-        invalidates the token through its inode.
-        """
-        state = self.path.stat()
-        return (state.st_dev, state.st_ino, state.st_size, state.st_mtime_ns, state.st_ctime_ns)
-
     def pin_baseline(
         self,
         root: str,
@@ -189,7 +179,7 @@ class Store:
             raise ValueError("Baseline ID must be a nonempty snapshot identity")
         if type(continue_task) is not bool:
             raise ValueError("continue_task must be a boolean")
-        with self._connection() as db:
+        with self._connection(write=True) as db:
             db.execute("BEGIN IMMEDIATE")
             old = db.execute("SELECT * FROM baselines WHERE root=?", (root,)).fetchone()
             current = self._current(db, root)
@@ -235,31 +225,36 @@ class Store:
             return selected
 
     @contextmanager
-    def _connection(self) -> Iterator[sqlite3.Connection]:
-        db = sqlite3.connect(self.path, timeout=5)
-        db.row_factory = sqlite3.Row
-        try:
-            db.execute("PRAGMA foreign_keys=ON")
-            db.execute("PRAGMA journal_mode=DELETE")
-            page_size = db.execute("PRAGMA page_size").fetchone()[0]
-            allowed = self.max_bytes // page_size
-            actual = db.execute(f"PRAGMA max_page_count={allowed}").fetchone()[0]
-            if actual > allowed:
-                raise ValueError("Existing database exceeds the configured storage budget")
-            yield db
-            db.commit()
-        except sqlite3.Error as error:
-            db.rollback()
-            if getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL:
-                raise ValueError(
-                    "Storage budget exceeded; the last valid record was preserved"
-                ) from error
-            raise
-        except BaseException:
-            db.rollback()
-            raise
-        finally:
-            db.close()
+    def _connection(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
+        # One writer across Store instances and processes; readers keep SQLite snapshots.
+        gate = self.path.with_name(self.path.name + ".writer.lock")
+        with gate.open("a") if write else nullcontext() as lock:
+            if lock is not None:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+            db = sqlite3.connect(self.path, timeout=5)
+            db.row_factory = sqlite3.Row
+            try:
+                db.execute("PRAGMA foreign_keys=ON")
+                if write:
+                    page_size = db.execute("PRAGMA page_size").fetchone()[0]
+                    allowed = self.max_bytes // page_size
+                    actual = db.execute(f"PRAGMA max_page_count={allowed}").fetchone()[0]
+                    if actual > allowed:
+                        raise ValueError("Existing database exceeds the configured storage budget")
+                yield db
+                db.commit()
+            except sqlite3.Error as error:
+                db.rollback()
+                if getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL:
+                    raise ValueError(
+                        "Storage budget exceeded; the last valid record was preserved"
+                    ) from error
+                raise
+            except BaseException:
+                db.rollback()
+                raise
+            finally:
+                db.close()
 
     @staticmethod
     def _current(db: sqlite3.Connection, root: str) -> sqlite3.Row | None:
@@ -306,46 +301,17 @@ class Store:
         db: sqlite3.Connection,
         root: str,
         snapshot_id: str,
-        fingerprints: dict[str, str] | None = None,
+        fingerprints: dict[str, str],
     ) -> list[dict[str, Any]]:
         row = db.execute(
             "SELECT data FROM node_sets WHERE root=? AND snapshot_id=?", (root, snapshot_id)
         ).fetchone()
         if row is None:
             raise ValueError("Saved graph is incomplete: its node set is missing")
-        if fingerprints is None:
-            metadata = db.execute(
-                "SELECT metadata FROM snapshots WHERE root=? AND id=?", (root, snapshot_id)
-            ).fetchone()
-            fingerprints = json.loads(metadata["metadata"])["files"]
         return [
             node | {"fingerprint": fingerprints.get(node["path"], "")}
             for node in decode_nodes(row["data"], maximum=self.max_bytes)
         ]
-
-    def _refresh_search(self, db: sqlite3.Connection, root: str) -> None:
-        db.execute("DELETE FROM search WHERE root=?", (root,))
-        current = self._current(db, root)
-        if current is None:
-            return
-        candidates = self._annotation_rows(db, root)
-        documents = []
-        for row in self._node_rows(db, root, current["current_id"]):
-            if row["kind"] == "external":
-                continue
-            data = self._annotation(row, candidates)
-            overview = str(data.get("annotation", {}).get("overview", ""))
-            documents.append(
-                (
-                    row["name"],
-                    row["path"],
-                    overview,
-                    root,
-                    row["id"],
-                    data.get("annotation_status", "missing"),
-                )
-            )
-        db.executemany("INSERT INTO search VALUES (?,?,?,?,?,?)", documents)
 
     @staticmethod
     def _prune(db: sqlite3.Connection, root: str, keep: tuple[str, ...]) -> None:
@@ -394,7 +360,7 @@ class Store:
             node_blob + edge_blob + _encode(graph.diagnostics).encode()
         ).hexdigest()
         metadata["_node_counts"] = dict(Counter(node.kind for node in graph.nodes))
-        with self._connection() as db:
+        with self._connection(write=True) as db:
             db.execute("BEGIN IMMEDIATE")
             old = self._current(db, root)
             existing = db.execute(
@@ -460,7 +426,6 @@ class Store:
                 )
             )
             self._prune(db, root, keep)
-            self._refresh_search(db, root)
             self._changed(db, root)
 
     def load_graph(self, root: str, snapshot_id: str | None = None) -> Graph | None:
@@ -512,7 +477,7 @@ class Store:
     ) -> bool:
         root = _root(root)
         body = _encode(annotation, limit=65_536)
-        with self._connection() as db:
+        with self._connection(write=True) as db:
             db.execute("BEGIN IMMEDIATE")
             self._require_current(db, root, snapshot_id)
             node = db.execute(
@@ -542,29 +507,8 @@ class Store:
                 "INSERT INTO annotations VALUES (?,?,?,?,?) ON CONFLICT(root,node_id,fingerprint) DO UPDATE SET body=excluded.body,updated_at=excluded.updated_at",
                 (root, node_id, node["fingerprint"], body, time.time_ns()),
             )
-            # Annotation changes one canonical document; rebuilding every source/symbol
-            # document here made full mapping quadratic in repository size.
-            db.execute(
-                "UPDATE search SET overview=?,status='current' WHERE root=? AND node_id=?",
-                (str(annotation.get("overview", "")), root, node_id),
-            )
             self._changed(db, root)
         return True
-
-    def search(self, root: str, query: str, limit: int = 20) -> list[dict[str, Any]]:
-        if not 1 <= limit <= 100:
-            raise ValueError("Search limit must be between 1 and 100")
-        # Quote terms rather than expose FTS query syntax as a second API.
-        terms = [part for part in query.split() if part][:20]
-        if not terms:
-            return []
-        expression = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms)
-        with self._connection() as db:
-            rows = db.execute(
-                "SELECT node_id AS id,name,path,overview,status FROM search WHERE search MATCH ? AND root=? ORDER BY rank LIMIT ?",
-                (expression, _root(root), limit),
-            )
-            return [dict(row) for row in rows]
 
     def save_review(
         self, root: str, snapshot_id: str, review_id: str, kind: str, result: dict[str, Any]
@@ -573,7 +517,7 @@ class Store:
         if not review_id or not kind:
             raise ValueError("Review identity and kind are required")
         now = datetime.now(timezone.utc).isoformat()
-        with self._connection() as db:
+        with self._connection(write=True) as db:
             db.execute("BEGIN IMMEDIATE")
             self._require_current(db, root, snapshot_id)
             old = db.execute(

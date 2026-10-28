@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from functools import wraps
+from functools import partial, wraps
 from typing import Any, Callable, TypeVar, cast
 
 from anaxigraph.contracts import Graph
@@ -11,6 +11,7 @@ from anaxigraph.contracts import Graph
 from .architecture import FINDING_FIELDS, validate_architecture
 from .behavior import check_annotation_behaviors
 from .delivery import canonical_delivery, validate_delivery
+from .fields import text, texts
 from .packets import DEFAULT_RESULT_BYTES, _check_behavior
 
 _Validator = TypeVar("_Validator", bound=Callable[..., Any])
@@ -202,16 +203,8 @@ def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[st
     return canonical
 
 
-def _text(value: Any, field: str, limit: int = 1000) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise ValueError(f"{field} must be nonempty text of at most {limit} characters")
-    return value.strip()
-
-
-def _texts(value: Any, field: str, *, required: bool = False) -> list[str]:
-    if not isinstance(value, list) or len(value) > 30 or (required and not value):
-        raise ValueError(f"{field} must be a bounded list of text")
-    return [_text(item, field, 500) for item in value]
+_text = text
+_texts = partial(texts, count=30, limit=500)
 
 
 def _evidence(value: Any, graph: Graph, *, required: bool = False) -> None:
@@ -264,10 +257,17 @@ def _annotations(request: dict[str, Any], result: dict[str, Any], graph: Graph) 
         _texts(annotation.get("uncertainty"), "uncertainty")
         functions = annotation.get("functions")
         expected = set(request["function_ids"][annotation["node_id"]])
-        if not isinstance(functions, list) or len(functions) != len(expected):
-            raise ValueError("Every supplied function needs exactly one overview sentence")
-        if set(_identities(functions, "node_id")) != expected:
-            raise ValueError("Function coverage contains missing or unexpected IDs")
+        identities = _identities(functions, "node_id")
+        supplied = set(identities)
+        missing, unexpected = expected - supplied, supplied - expected
+        duplicates = len(identities) - len(supplied)
+        if missing or unexpected or duplicates:
+            raise ValueError(
+                f"Function coverage IDs: expected={len(expected)} received={len(identities)} "
+                f"missing={len(missing)} duplicate={duplicates} unexpected={len(unexpected)}; "
+                f"module={annotation['node_id']}; "
+                f"missing_ids={sorted(missing)[:3]}; unexpected_ids={sorted(unexpected)[:3]}"
+            )
         for function in functions:
             _text(function.get("overview"), "function overview", 320)
         contracts = annotation.get("contracts")

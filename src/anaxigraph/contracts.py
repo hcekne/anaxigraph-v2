@@ -6,8 +6,8 @@ evidence and source identity; they never silently become source facts.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import Any, Protocol
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -46,63 +46,3 @@ class Graph:
     nodes: tuple[Node, ...]
     edges: tuple[Edge, ...]
     diagnostics: tuple[str, ...] = ()
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-class KnowledgeStore(Protocol):
-    """The application owns workflow; the store owns atomic persistence."""
-
-    def save_graph(self, graph: Graph) -> None: ...
-
-    def load_graph(self, root: str, snapshot_id: str | None = None) -> Graph | None: ...
-
-    def pin_baseline(
-        self,
-        root: str,
-        snapshot_id: str | None = None,
-        *,
-        task_key: str | None = None,
-        revision: str | None = None,
-        continue_task: bool = False,
-    ) -> str: ...
-
-    def annotate(
-        self,
-        root: str,
-        snapshot_id: str,
-        node_id: str,
-        annotation: dict[str, Any],
-        *,
-        expected_digest: str | None = None,
-    ) -> bool: ...
-
-    def search(self, root: str, query: str, limit: int = 20) -> list[dict[str, Any]]: ...
-
-    def save_review(
-        self, root: str, snapshot_id: str, review_id: str, kind: str, result: dict[str, Any]
-    ) -> None: ...
-
-    def reviews(
-        self,
-        root: str,
-        kind: str | None = None,
-        *,
-        review_id: str | None = None,
-        include_requests: bool = True,
-        module_ids: tuple[str, ...] | None = None,
-        limit: int | None = None,
-    ) -> list[dict[str, Any]]: ...
-
-    def get_review(
-        self, root: str, review_id: str, kind: str | None = None
-    ) -> dict[str, Any] | None: ...
-
-    def stats(self, root: str) -> dict[str, Any]: ...
-
-    def cache_token(self) -> tuple[int, ...]: ...
-
-    def knowledge_token(self, root: str) -> tuple[int, ...]: ...
-
-    def review_token(self, root: str) -> tuple[int, ...]: ...

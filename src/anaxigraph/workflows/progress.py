@@ -55,20 +55,19 @@ def finish_batch(batch: dict[str, Any], started: float, calls_before: int) -> No
     elapsed = round(time.monotonic() - started, 4)
     batch["finished_at"] = time.time()
     batch["elapsed_seconds"] = round(batch.get("elapsed_seconds", 0) + elapsed, 4)
-    batch["attempt_history"] = (
-        batch.get("attempt_history", [])
-        + [
-            {
-                "attempt": batch["attempts"],
-                "started_at": batch["started_at"],
-                "finished_at": batch["finished_at"],
-                "elapsed_seconds": elapsed,
-                "status": batch["status"],
-                "reused": bool(batch.get("reused")),
-                "model_calls": batch.get("model_calls", 0) - calls_before,
-            }
-        ]
-    )[-3:]
+    history = batch.setdefault("attempt_history", [])
+    history.append(
+        {
+            "attempt": batch["attempts"],
+            "started_at": batch["started_at"],
+            "finished_at": batch["finished_at"],
+            "elapsed_seconds": elapsed,
+            "status": batch["status"],
+            "reused": bool(batch.get("reused")),
+            "model_calls": batch.get("model_calls", 0) - calls_before,
+        }
+    )
+    del history[:-3]
 
 
 def record_model(run, batch, request, worker, elapsed, usage, *, reused=False, review=False):
@@ -104,16 +103,16 @@ def _stage_timings(batches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     stages = []
     for kind in dict.fromkeys(batch["kind"] for batch in batches):
         selected = [batch for batch in batches if batch["kind"] == kind]
+        totals = {
+            field: round(sum(batch.get(field, 0) for batch in selected), 4)
+            for field in ("elapsed_seconds", "model_calls", "model_seconds")
+        }
         stages.append(
             {
                 "stage": kind,
                 "total_batches": len(selected),
                 "completed_batches": sum(batch["status"] == "completed" for batch in selected),
-                "elapsed_seconds": round(
-                    sum(batch.get("elapsed_seconds", 0) for batch in selected), 4
-                ),
-                "model_calls": sum(batch.get("model_calls", 0) for batch in selected),
-                "model_seconds": round(sum(batch.get("model_seconds", 0) for batch in selected), 4),
+                **totals,
                 "reused_batches": sum(bool(batch.get("reused")) for batch in selected),
             }
         )

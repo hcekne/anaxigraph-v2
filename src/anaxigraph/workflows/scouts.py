@@ -83,24 +83,17 @@ def plan_scouts(runner, run):
 
 def _stages(run):
     kind = run["kind"]
-    if kind == "delivery":
-        return ["delivery"]
+    if kind in {"annotate", "delivery"}:
+        return [kind]
+    if kind != "patterns":
+        return ["annotate", kind]
+    discovery = _component_stages(run)
+    if run["config"].get("pattern_mode") == "screened":
+        discovery.append("pattern-screen")
     stages: list[str | tuple[str, ...]] = ["annotate"]
-    if kind == "patterns":
-        screened = run["config"].get("pattern_mode") == "screened"
-        discovery = []
-        if run.get("architecture_scouts_version") == 1:
-            discovery.append("architecture")
-        if run.get("delivery_review_version") == 1:
-            discovery.append("delivery")
-        if screened:
-            discovery.append("pattern-screen")
-        if discovery:
-            stages.append(tuple(discovery))
-        stages.append("patterns")
-    elif kind != "annotate":
-        stages.append(kind)
-    return stages
+    if discovery:
+        stages.append(tuple(discovery))
+    return stages + ["patterns"]
 
 
 def review_workflow(runner, run):
@@ -117,11 +110,13 @@ def review_workflow(runner, run):
     _reconcile(runner, run)
 
 
-def _review_ids(run, excluded=("annotate",)):
+def _review_ids(run, kinds=None):
     return [
         batch["request_id"]
         for batch in run["batches"]
-        if batch.get("request_id") and batch["kind"] not in excluded
+        if batch.get("request_id")
+        and batch["kind"] != "annotate"
+        and (kinds is None or batch["kind"] in kinds)
     ]
 
 
@@ -131,38 +126,27 @@ def _reconcile(runner, run):
     runner._save(run)
     if kind == "fresh-eyes":
         runner._product(run)
-    review_ids = _review_ids(run)
-    reports = _component_reports(runner, run)
-    reconciliation = (
-        reports[kind]
-        if kind in reports
-        else runner.application.analysis_reconcile(
-            kind,
-            _review_ids(run, ("annotate", "architecture", "delivery")),
-            run["scope"],
+    reports = {}
+    for stage in dict.fromkeys(_component_stages(run) + [kind]):
+        reports[stage] = runner.application.analysis_reconcile(
+            stage,
+            _review_ids(run, {stage, "pattern-screen"} if stage == "patterns" else {stage}),
+            [] if stage == "delivery" else run["scope"],
         )
-    )
-    assert reconciliation is not None
-    run["reconciliation"] = reconciliation | {
-        "status": "completed",
-        "phase": "Final reconciliation",
-        "review_ids": review_ids,
+    run["reconciliation"] = reports.pop(kind) | {
+        "review_ids": _review_ids(run),
         "message": "Validated batches account for the declared analysis scope; this does not report executed project checks.",
     }
     if kind == "patterns":
         run["reconciliation"].update(reports)
 
 
-def _component_reports(runner, run):
-    reports = {}
-    for kind, marker in (
-        ("architecture", "architecture_scouts_version"),
-        ("delivery", "delivery_review_version"),
-    ):
-        if run["kind"] == kind or (run["kind"] == "patterns" and run.get(marker) == 1):
-            reports[kind] = runner.application.analysis_reconcile(
-                kind,
-                [batch["request_id"] for batch in run["batches"] if batch["kind"] == kind],
-                [] if kind == "delivery" else run["scope"],
-            )
-    return reports
+def _component_stages(run):
+    return [
+        kind
+        for kind, marker in (
+            ("architecture", "architecture_scouts_version"),
+            ("delivery", "delivery_review_version"),
+        )
+        if run["kind"] == kind or (run["kind"] == "patterns" and run.get(marker) == 1)
+    ]

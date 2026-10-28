@@ -7,7 +7,7 @@ from typing import Any, Literal
 from mcp.server.fastmcp import FastMCP
 
 
-def create_mcp(application: Any) -> FastMCP:
+def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
     server = FastMCP(
         "AnaxiGraph V2",
         stateless_http=True,
@@ -26,29 +26,34 @@ def create_mcp(application: Any) -> FastMCP:
         ),
     )
 
-    @server.tool()
+    def tool(function):
+        if operations is not None:
+            operations[function.__name__] = function
+        return server.tool()(function)
+
+    @tool
     def status() -> dict:
         """Show the exact checkout and independent map/annotation readiness."""
         return application.status()
 
-    @server.tool()
+    @tool
     def scan() -> dict:
         """Refresh source facts without executing the analyzed code."""
         return application.scan()
 
-    @server.tool()
+    @tool
     def modules(
         sort: str = "path", descending: bool = False, limit: int = 50, offset: int = 0
     ) -> dict:
         """Discover modules in bounded pages, sortable by path, lines or function count."""
         return application.modules(sort, descending, limit, offset)
 
-    @server.tool()
+    @tool
     def inspect(entity_id: str, limit: int = 30) -> dict:
         """Expand a bounded entity neighborhood with evidence and resolution status."""
         return application.inspect(entity_id, limit)
 
-    @server.tool()
+    @tool
     def prepare_change(
         task: str, limit: int = 12, baseline_id: str | None = None, continue_task: bool = False
     ) -> dict:
@@ -59,7 +64,7 @@ def create_mcp(application: Any) -> FastMCP:
             return application.prepare_change(task, limit, baseline_id)
         return application.prepare_change(task, limit)
 
-    @server.tool()
+    @tool
     def assess_plan(
         task: str, files: list[str], decisions: list[dict[str, Any]] | None = None
     ) -> dict:
@@ -68,7 +73,7 @@ def create_mcp(application: Any) -> FastMCP:
             return application.assess_plan(task, files, decisions)
         return application.assess_plan(task, files)
 
-    @server.tool()
+    @tool
     def validate_change(
         receipts: list[dict[str, Any]] | None = None, baseline_id: str | None = None
     ) -> dict:
@@ -77,7 +82,7 @@ def create_mcp(application: Any) -> FastMCP:
             return application.validate_change(receipts, baseline_id)
         return application.validate_change(receipts)
 
-    @server.tool()
+    @tool
     def ci_plan(
         base_ref: str | None = None,
         base_snapshot_id: str | None = None,
@@ -94,7 +99,7 @@ def create_mcp(application: Any) -> FastMCP:
             runtime_context=runtime_context,
         )
 
-    @server.tool()
+    @tool
     def analysis_request(
         kind: Literal[
             "annotate", "pattern-screen", "patterns", "architecture", "delivery", "fresh-eyes"
@@ -111,19 +116,19 @@ def create_mcp(application: Any) -> FastMCP:
             options["lens"] = lens
         return application.analysis_request(kind, scope, **options)
 
-    @server.tool()
+    @tool
     def submit_analysis(request_id: str, result: dict[str, Any]) -> dict:
         """Validate and save a result for the exact requested state and analysis contract."""
         return application.submit_analysis(request_id, result)
 
-    @server.tool()
+    @tool
     def reviews(kind: str | None = None, limit: int = 12, offset: int = 0) -> dict:
         """Discover saved review metadata; use inspect('review:<id>') for the full result."""
         if limit != 12 or offset:
             return application.reviews(kind, limit, offset)
         return application.reviews(kind)
 
-    @server.tool()
+    @tool
     def workflow_start(
         kind: Literal[
             "mapping", "annotate", "patterns", "architecture", "ci", "delivery", "fresh-eyes"
@@ -134,44 +139,44 @@ def create_mcp(application: Any) -> FastMCP:
         """Run resumable mapping, Patterns, component architecture, CI/CD, or blind Fresh Eyes."""
         return application.workflow_start(kind, config, scope)
 
-    @server.tool()
+    @tool
     def workflow_status(
         run_id: str | None = None, batch_offset: int = 0, batch_limit: int = 10
     ) -> dict:
         """Show progress; select a run and page its measured batch timings with batch_offset."""
         return application.workflow_status(run_id, batch_offset, batch_limit)
 
-    @server.tool()
+    @tool
     def workflow_resume(run_id: str) -> dict:
         """Retry failed or interrupted batches while retaining every completed batch."""
         return application.workflow_resume(run_id)
 
-    @server.tool()
+    @tool
     def workflow_configure(config: dict[str, Any] | None = None) -> dict:
         """Read or save model choices by stage, stronger fallbacks and ordered review passes."""
         return application.workflow_configure(config)
 
-    @server.tool()
+    @tool
     def export_record() -> dict:
         """Save current portable analyses in anaxigraph/; committing and pushing is separate."""
         return application.export_record()
 
-    @server.tool()
+    @tool
     def import_record() -> dict:
         """Reuse Git-carried analyses whose content and context match this checkout."""
         return application.import_record()
 
-    @server.tool()
+    @tool
     def portable_status() -> dict:
         """Distinguish local map, exported portable record and commit/push state."""
         return application.portable_status()
 
-    @server.tool()
+    @tool
     def trial_evidence(limit: int = 50, offset: int = 0) -> dict:
         """Read local task/context/usage evidence; unknown costs remain unknown."""
         return application.trial_evidence(limit, offset)
 
-    @server.tool()
+    @tool
     def export_evidence() -> dict:
         """Export bounded local trial evidence without source or model transcripts."""
         return application.export_evidence()

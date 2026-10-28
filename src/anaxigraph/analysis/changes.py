@@ -9,6 +9,12 @@ from anaxigraph.contracts import Graph
 from .guidance import structural_findings
 
 
+def changed_paths(graph: Graph, previous: Graph | None) -> list[str]:
+    before = previous.snapshot.files if previous else {}
+    after = graph.snapshot.files
+    return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+
+
 def attribute_checks(
     receipts: list[dict[str, Any]] | None, snapshot_id: str
 ) -> list[dict[str, Any]]:
@@ -64,9 +70,7 @@ def findings_delta(graph: Graph, previous: Graph | None) -> list[dict[str, Any]]
 def change_review(
     graph: Graph, previous: Graph | None, receipts: list[dict[str, Any]] | None
 ) -> dict[str, Any]:
-    before = previous.snapshot.files if previous else {}
-    after = graph.snapshot.files
-    changed = sorted(p for p in set(before) | set(after) if before.get(p) != after.get(p))
+    changed = changed_paths(graph, previous)
     checks = attribute_checks(receipts, graph.snapshot.id)
     findings = findings_delta(graph, previous)
     return {

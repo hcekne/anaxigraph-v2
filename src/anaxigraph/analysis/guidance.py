@@ -118,11 +118,6 @@ def _short(value: Any, maximum: int = 240) -> str:
     return text if len(raw) <= maximum else raw[: maximum - 3].decode("utf-8", "ignore") + "..."
 
 
-def _implementation_owner(node: Node) -> bool:
-    status = node.data.get("parse_status", "parsed")
-    return status == "parsed" and node.path.endswith((".py", ".pyi"))
-
-
 def _references(value: Any, graph: Graph) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
@@ -231,25 +226,15 @@ def _coding_steps(
         ]
     owner = candidates[0]
     facts = module_facts(graph, owner)
-    by_id = {node.id: node for node in graph.nodes}
-    reusable = next(
-        (
-            by_id[m["id"]]
-            for m in matches
-            if m.get("id") in by_id
-            and by_id[m["id"]].path == owner.path
-            and by_id[m["id"]].kind in {"function", "class", "interface"}
-            and not by_id[m["id"]].name.startswith("_")
-        ),
-        owner,
-    )
+    match = next((item for item in matches if item.get("path") == owner.path), {})
+    reusable = next((node for node in graph.nodes if node.id == match.get("id")), owner)
     return [
         {
             "kind": "placement-and-reuse",
             "basis": "candidate-owner-and-source-observations",
             "owner": owner.id,
-            "suggestion": f"Inspect {owner.path} and {reusable.name} for reuse. Preserve the listed contracts; verify stale obligations. Keep implementation behind the public interface.",
-            "evidence": [{"path": owner.path, "line": reusable.line}],
+            "suggestion": f"Inspect {owner.path} and {match.get('matched_symbol', reusable.name)} for reuse. Preserve contracts; verify stale obligations. Keep implementation behind the public interface.",
+            "evidence": match.get("evidence", [{"path": owner.path, "line": reusable.line}])[:1],
         },
         {
             "kind": "compatibility-and-tests",
@@ -265,26 +250,19 @@ def _coding_steps(
 
 
 def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
-    """Keep the default expansion small; original source/reviews remain inspectable."""
-    owners = brief["likely_owners"]
-    collections = [
-        brief["affected_paths"],
-        brief["tests"],
-        owners,
-        brief["implementation_advice"]["steps"],
-        brief["contracts"],
-        brief["implementation_advice"]["review_proposals"],
-    ]
-    while len(json.dumps(brief, ensure_ascii=False, indent=2).encode()) > 3400:
-        collection = next(
-            (items for items in collections if len(items) > int(items is owners)), None
-        )
-        if collection is None:
-            break
-        if collection is brief["contracts"]:
-            brief["contract_overflow"] += 1
-        collection.pop()
-        brief["context_truncated"] = True
+    """Treat size as a prose budget, retaining ranked owners and contract evidence."""
+    if len(json.dumps(brief, ensure_ascii=False, indent=2).encode()) <= 3400:
+        return brief
+    brief["context_truncated"] = True
+    for owner in brief["likely_owners"]:
+        owner["overview"] = _short(owner["overview"], 80)
+    for contract in brief["contracts"]:
+        contract["statement"] = _short(contract["statement"], 180)
+        contract["statement_truncated"] |= contract["statement"].endswith("...")
+    for step in brief["implementation_advice"]["steps"]:
+        step["suggestion"] = _short(step["suggestion"], 180)
+    brief["affected_paths"] = brief["affected_paths"][:3]
+    brief["tests"] = brief["tests"][:3]
     return brief
 
 
@@ -292,13 +270,18 @@ def _candidates(modules: dict[str, Node], matches: list[dict[str, Any]]) -> list
     by_path = {node.path: node for node in modules.values()}
     paths = dict.fromkeys(match.get("path") for match in matches)
     candidates = [
-        by_path[path] for path in paths if path in by_path and _implementation_owner(by_path[path])
+        by_path[path]
+        for path in paths
+        if path in by_path
+        and by_path[path].data.get("parse_status", "parsed") == "parsed"
+        and path.endswith((".py", ".pyi"))
+        and not by_path[path].data.get("is_test")
     ]
-    return sorted(candidates, key=lambda n: bool(n.data.get("is_test")))[:3]
+    return candidates[:3]
 
 
-def _contracts(graph: Graph, impacted: set[str]) -> list[dict[str, Any]]:
-    return [
+def _contracts(graph: Graph, impacted: set[str], owners: set[str]) -> list[dict[str, Any]]:
+    contracts = [
         {
             "owner": node.id,
             "annotation_status": node.data.get("annotation_status", "missing"),
@@ -306,11 +289,16 @@ def _contracts(graph: Graph, impacted: set[str]) -> list[dict[str, Any]]:
             "statement": (statement := _short(contract.get("statement"), 360)),
             "statement_truncated": contract.get("statement") != statement,
             "evidence": _references(contract.get("evidence"), graph),
+            "index": index,
         }
         for node in graph.nodes
         if node.kind == "module" and node.path in impacted
-        for contract in node.data.get("annotation", {}).get("contracts", [])
+        for index, contract in enumerate(node.data.get("annotation", {}).get("contracts", []))
     ]
+    contracts.sort(key=lambda item: (item["index"] > 0, item["owner"] not in owners, item["index"]))
+    for contract in contracts:
+        del contract["index"]
+    return contracts
 
 
 def prepare(
@@ -324,15 +312,16 @@ def prepare(
     candidates = _candidates(modules, matches)
     paths = {node.path for node in candidates}
     impacted = affected_paths(graph, paths)
-    contracts = _contracts(graph, impacted)
+    owner_ids = {node.id for node in candidates}
+    contracts = _contracts(graph, impacted, owner_ids)
     tests = [
         node.path
         for node in modules.values()
         if node.path in impacted and (node.data.get("is_test") or node.path.startswith("tests/"))
     ]
-    owner_ids = {node.id for node in candidates}
     saved_reviews = reviews or []
     proposals = _review_proposals(graph, saved_reviews, owner_ids, task)
+    by_path = {match["path"]: match for match in reversed(matches)}
     brief: dict[str, Any] = {
         "task": _short(task, 320),
         "snapshot_id": graph.snapshot.id,
@@ -343,6 +332,11 @@ def prepare(
                 "path": n.path,
                 "overview": _short(n.data.get("annotation", {}).get("overview"), 180),
                 "annotation_status": n.data.get("annotation_status", "missing"),
+                **{
+                    key: value
+                    for key, value in by_path[n.path].items()
+                    if key in {"score", "match_reasons", "evidence"}
+                },
             }
             for n in candidates[:3]
         ],
@@ -382,26 +376,29 @@ def structural_findings(graph: Graph) -> list[dict[str, Any]]:
     )
     findings = []
     for node in modules:
-        if node.data.get("loc", 0) > 500:
-            findings.append(
-                {
-                    "kind": "large-module",
-                    "entity": node.id,
-                    "measured": node.data["loc"],
-                    "threshold": 500,
-                    "status": "concern",
-                    "message": "Inspect responsibility boundaries; size alone is not a defect.",
-                }
-            )
-        if incoming[node.id] > 15:
-            findings.append(
-                {
-                    "kind": "high-fan-in",
-                    "entity": node.id,
-                    "measured": incoming[node.id],
-                    "threshold": 15,
-                    "status": "concern",
-                    "message": "Check public contract stability before changing this shared dependency.",
-                }
-            )
+        for kind, measured, threshold, message in (
+            (
+                "large-module",
+                node.data.get("loc", 0),
+                500,
+                "Inspect responsibility boundaries; size alone is not a defect.",
+            ),
+            (
+                "high-fan-in",
+                incoming[node.id],
+                15,
+                "Check public contract stability before changing this shared dependency.",
+            ),
+        ):
+            if measured > threshold:
+                findings.append(
+                    {
+                        "kind": kind,
+                        "entity": node.id,
+                        "measured": measured,
+                        "threshold": threshold,
+                        "status": "concern",
+                        "message": message,
+                    }
+                )
     return findings + boundary_findings(graph)

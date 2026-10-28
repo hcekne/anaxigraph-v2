@@ -272,7 +272,7 @@ def test_annotation_coverage_is_complete_before_any_module_is_saved(app: Applica
     request = app.analysis_request("annotate", ["service.py", "persistence.py"])
     result = annotation_result(request)
     result["annotations"][-1]["functions"] = []
-    with pytest.raises(ValueError, match="Every supplied function"):
+    with pytest.raises(ValueError, match="Function coverage IDs"):
         app.submit_analysis(request["request_id"], result)
     assert app.status()["annotations"]["current"] == 0
     app.submit_analysis(request["request_id"], annotation_result(request))

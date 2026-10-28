@@ -64,6 +64,8 @@ See [connection and remote-access instructions](docs/usage.md#connections).
 These are starting habits, not a requirement to run every model workflow after every edit.
 Mapping refreshes changed understanding; repeated unchanged workflows reuse compatible results.
 Pattern runs include focused architecture scouts and one CI/CD review. Fresh Eyes is separate.
+Change preparation works after a structural scan, combining source, symbols and current summaries.
+It preserves three owner candidates and labels historical co-change suggestions separately.
 
 [The usage guide](docs/usage.md) includes an instruction block for your project's `AGENTS.md`,
 reviewing recommendations, choosing a sensible cadence, and collecting feedback from agents.
@@ -87,6 +89,8 @@ whether the resulting implementation works.
 - [CI policy format and examples](docs/change-request-ci-delivery.md#declare-accepted-tasks)
 - [Architecture and component contracts](docs/architecture.md)
 - [Measured results and known limits](docs/evidence/ci-delivery-qualification.json)
+- [Architectural advice and later-change experiment](experiments/architecture_quality/README.md)
+- [Owner-finding replay and inexpensive baselines](experiments/owner_replay/README.md)
 
 For development: `uv sync --locked --extra dev`, then `uv run pytest`, `uv run ruff check src tests`,
 `uv run mypy` and `uv run python scripts/quality.py`. Slow checks stay in CI rather than pre-push hooks.

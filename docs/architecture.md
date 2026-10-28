@@ -36,9 +36,9 @@ flowchart TB
 
 | Component | Provides | Must not own |
 | --- | --- | --- |
-| `contracts.py` | Immutable snapshot, node, edge and graph records; storage protocol | SQL, frameworks, source parsing or workflows |
-| `indexing/` | `index(root) -> Graph`, `capture_snapshot` and `capture_sources`: exact identity, bounded verified source, Python syntax and scoped references | Executing analyzed code, generating semantic prose or saving results |
-| `storage/` | Atomic graph publication, canonical annotations, compact FTS and bounded reviews | Architectural judgment, source parsing or provider execution |
+| `contracts.py` | Immutable snapshot, node, edge and graph records | SQL, frameworks, source parsing or workflows |
+| `indexing/` | `index(root) -> Graph`, incremental snapshot/source capture and bounded local Git history | Executing analyzed code, generating semantic prose or saving results |
+| `storage/` | Atomic graph publication, canonical annotations, source indexes and bounded reviews | Architectural judgment, source parsing or provider execution |
 | `analysis/` | Source/behavior evidence packets, complete-result validation and bounded guidance | SQL, UI, model-provider state or reading project files |
 | `application/` | Shared facade, review operations and portable exchange; guard source/context identity and publish validated results | A separate store, parser, provider engine or transport-specific reasoning |
 | `workflows/` | Durable batch scheduling, bounded provider execution, ordered review passes and retries | Source indexing, SQL, architectural reasoning outside the analysis contract |
@@ -134,7 +134,9 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 - Current graph, one previous graph and one pinned change baseline; repeated unchanged scans do not
   append history. A new task or Git HEAD repins by default; explicit continuation preserves the pin.
 - One canonical module annotation contains its sentence, paragraph, function sentences and contracts.
-  Search indexes compact names/overviews; it does not copy full essays or source bodies.
+  Owner retrieval combines verified source, paths/symbols and current annotations at module level.
+  The superseded FTS prose index is removed through a backed-up schema upgrade; source and
+  annotation text is not copied into a second persistent search representation.
 - Canonical node and interned-edge sets are compressed inside SQLite. Small source indexes support
   annotations/search. The application keeps at most one materialized current graph in memory;
   knowledge mutations from any process invalidate it. Request bookkeeping does not force a graph
@@ -144,6 +146,8 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 - Compressed requests and current per-scope reviews live within the database budget. Current workflow
   batches are never discarded by a twenty-review cap; obsolete requests have bounded retention.
   Completed analyses survive graph-checkpoint pruning and disclose stale inputs.
+  Writers coordinate across processes; readers remain concurrent. Compact failure diagnostics
+  survive progress rotation in a bounded ledger exposed by workflow status.
 - One `anaxigraph/record.json` carries canonical annotations, analyses and provenance through Git,
   without source, SQLite or deterministic graphs. Clone imports compare source, dependency and
   analysis input identities; product child identities are reconstructed in dependency order.
@@ -153,6 +157,9 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
   Schema upgrades preserve one pre-migration backup. Failed writes preserve the last valid record.
 - Ordinary lists are compact and paged. Source packets and explicit review/entity expansion are
   separate from list views; task/result size ceilings remain enforced.
+  Task briefs preserve three owner candidates and essential contracts; their prose budget is
+  soft. Historical co-change is separately attributed advice from the task baseline's Git history,
+  never a dependency edge, a requirement to edit associated files, or authority to skip CI.
 
 ## Deliberate limits and next choices
 

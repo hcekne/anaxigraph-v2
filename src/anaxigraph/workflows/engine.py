@@ -154,7 +154,8 @@ def _config(value: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _failure_message(error: Exception, phase: str) -> str:
-    message = f"{phase} failed ({type(error).__name__})"
+    name = getattr(error, "sqlite_errorname", type(error).__name__)
+    message = f"{phase} failed ({name})"
     if phase in {"validation", "local"} and isinstance(error, ValueError):
         message = (str(error)[:2000].splitlines() or [message])[0]
     return re.sub(
@@ -222,6 +223,28 @@ class WorkflowRunner:
             raise ValueError("Workflow run not found")
         return json.loads(path.read_text())
 
+    def _paths(self) -> list[Path]:
+        return sorted(
+            self.directory.glob("[0-9a-f]" * 32 + ".json"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+
+    def _failure_history(self, offset=0, limit=10) -> dict[str, Any]:
+        path = self.directory / "failures.json"
+        history: dict[str, Any] = (
+            json.loads(path.read_text()) if path.exists() else {"total": 0, "items": []}
+        )
+        items = list(reversed(history["items"]))
+        return {
+            "items": items[offset : offset + limit],
+            "total": history["total"],
+            "retained": len(items),
+            "retention_limit": 256,
+            "scope": "checkout",
+            "next_offset": offset + limit if offset + limit < len(items) else None,
+        }
+
     def _save(self, run: dict[str, Any]) -> None:
         run["updated_at"] = time.time()
         self._write(self._path(run["id"]), run)
@@ -275,6 +298,7 @@ class WorkflowRunner:
             "reconciliation": run.get("reconciliation"),
             "export_error": run.get("export_error"),
             "evidence_error": run.get("evidence_error"),
+            "failure_history_error": run.get("failure_history_error"),
             "record_exported": run.get("record_exported", False),
             "committed": publication.get("committed"),
             "pushed": publication.get("pushed"),
@@ -311,15 +335,13 @@ class WorkflowRunner:
             if run_id:
                 return self._summary(
                     self._load(run_id), batch_offset=batch_offset, batch_limit=batch_limit
-                )
-            paths = sorted(
-                self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
-            )
-            runs = [json.loads(p.read_text()) for p in paths if p.name != "settings.json"]
+                ) | {"failure_history": self._failure_history(batch_offset, batch_limit)}
+            runs = [json.loads(path.read_text()) for path in self._paths()]
             publication = self._publication()
             return {
                 "items": [self._summary(run, publication, include_details=False) for run in runs],
                 "total": len(runs),
+                "failure_history": self._failure_history(batch_offset, batch_limit),
             }
 
     def start(
@@ -338,12 +360,7 @@ class WorkflowRunner:
             active = [x for x in self.status()["items"] if x["status"] in {"running", "queued"}]
             if active:
                 raise ValueError(f"Workflow {active[0]['run_id']} is already running")
-            paths = sorted(
-                (p for p in self.directory.glob("*.json") if p.name != "settings.json"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-            for old in paths[11:]:
+            for old in self._paths()[11:]:
                 old.unlink()
             run: dict[str, Any] = {
                 "id": uuid.uuid4().hex,
@@ -589,7 +606,7 @@ class WorkflowRunner:
                     if getattr(error, "model_request_id", None) != request["request_id"]:
                         phase = "local"
                     recorded = True
-                    self._record_failure(run, batch, error, phase)
+                    self._record_failure(run, batch, error, phase, candidate)
                     if phase == "validation":
                         self._record_result(run, batch, request, candidate, "rejected", error)
                     last_error = error
@@ -612,20 +629,40 @@ class WorkflowRunner:
                 finish_batch(batch, started, calls_before)
                 self._save(run)
 
-    def _record_failure(self, run, batch, error, phase):
+    def _record_failure(self, run, batch, error, phase, worker=None):
         with _MUTEX:
+            failure = {
+                "attempt": batch["attempts"],
+                "phase": phase,
+                "error": _failure_message(error, phase),
+                "error_kind": type(error).__name__,
+                "at": time.time(),
+            }
+            cause = error.__cause__ if isinstance(error.__cause__, sqlite3.Error) else error
+            for key in ("sqlite_errorcode", "sqlite_errorname"):
+                if hasattr(cause, key):
+                    failure[key] = getattr(cause, key)
             batch["failure_count"] = batch.get("failure_count", 0) + 1
-            batch["attempt_failures"] = (
-                batch.get("attempt_failures", [])
-                + [
+            batch["attempt_failures"] = (batch.get("attempt_failures", []) + [failure])[-3:]
+            try:
+                path = self.directory / "failures.json"
+                history = self._failure_history(0, 256)
+                event = failure | {
+                    "run_id": run["id"],
+                    "batch_id": batch["id"],
+                    "stage": batch["kind"],
+                    "request_id": batch.get("request_id"),
+                    "worker": worker,
+                }
+                self._write(
+                    path,
                     {
-                        "attempt": batch["attempts"],
-                        "phase": phase,
-                        "error": _failure_message(error, phase),
-                        "at": time.time(),
-                    }
-                ]
-            )[-3:]
+                        "total": history["total"] + 1,
+                        "items": (list(reversed(history["items"])) + [event])[-256:],
+                    },
+                )
+            except (ValueError, OSError) as failure_error:
+                run["failure_history_error"] = _failure_message(failure_error, "local")
             self._save(run)
 
     def _record_result(self, run, batch, request, worker, status, error=None):

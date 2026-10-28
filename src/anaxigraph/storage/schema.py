@@ -1,6 +1,6 @@
 """The unpublished V2 schema: canonical sets plus small mutable indexes."""
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -47,7 +47,5 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 CREATE INDEX IF NOT EXISTS review_kind ON reviews(root, kind, updated_at);
 CREATE INDEX IF NOT EXISTS review_scope ON reviews(root,kind,scope_key);
-CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(
-    name, path, overview, root UNINDEXED, node_id UNINDEXED, status UNINDEXED
-);
+DROP TABLE IF EXISTS search;
 """

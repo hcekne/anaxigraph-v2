@@ -37,6 +37,18 @@ def recall(found: set[str], expected: set[str]) -> float | None:
     return None if not expected else len(found & expected) / len(expected)
 
 
+def precision(found: set[str], expected: set[str]) -> float | None:
+    return None if not expected else len(found & expected) / len(found) if found else 0.0
+
+
+def reciprocal_fusion(rankings: list[list[str]], limit: int) -> list[str]:
+    scores: dict[str, float] = {}
+    for ranking in rankings:
+        for rank, path in enumerate(dict.fromkeys(ranking), start=1):
+            scores[path] = scores.get(path, 0) + 1 / (60 + rank)
+    return sorted(scores, key=lambda path: (-scores[path], path))[:limit]
+
+
 def grep_owners(files: dict[str, str], message: str, limit: int) -> list[str]:
     """Rank production files by distinct task words in their text and path."""
     words = task_words(message)
@@ -99,7 +111,7 @@ def grep_tests(files: dict[str, str], targets: set[str]) -> set[str]:
     }
 
 
-def cochanged(history: list[set[str]], target: str, limit: int) -> set[str]:
+def ranked_cochanged(history: list[set[str]], target: str, limit: int) -> list[str]:
     """Files most often changed in the same earlier commits as target (logical coupling)."""
     counts: dict[str, int] = {}
     for changed in history:
@@ -107,7 +119,11 @@ def cochanged(history: list[set[str]], target: str, limit: int) -> set[str]:
             for path in changed - {target}:
                 counts[path] = counts.get(path, 0) + 1
     ranked = sorted(counts, key=lambda path: (-counts[path], path))
-    return set(ranked[:limit])
+    return ranked[:limit]
+
+
+def cochanged(history: list[set[str]], target: str, limit: int) -> set[str]:
+    return set(ranked_cochanged(history, target, limit))
 
 
 def read_python(root: Path) -> dict[str, str]:
@@ -131,7 +147,15 @@ def summarize(rows: list[dict]) -> dict:
         )
 
     owners = {}
-    for method in ("mapped", "mapped_uncapped", "structural", "structural_uncapped", "grep"):
+    for method in (
+        "mapped",
+        "mapped_uncapped",
+        "structural",
+        "structural_uncapped",
+        "grep",
+        "symbols",
+        "fused",
+    ):
         key = f"{method}_owner_rank"
         if any(key in r for r in rows):
             owners[method] = {
@@ -140,4 +164,23 @@ def summarize(rows: list[dict]) -> dict:
     metrics = {}
     for key in sorted({k for r in rows for k in r if k.startswith(("oracle_", "task_"))}):
         metrics[key] = mean(key)
-    return {"commits": len(rows), "owners": owners, "metrics": metrics}
+    eligible_sizes = {}
+    for group in ("consumer", "test"):
+        eligible = [r for r in rows if r.get(f"oracle_{group}_recall_anaxigraph") is not None]
+        for method in ("anaxigraph", "grep", "history", "combined"):
+            values = [
+                r[f"oracle_{group}_size_{method}"]
+                for r in eligible
+                if f"oracle_{group}_size_{method}" in r
+            ]
+            if values:
+                eligible_sizes[f"{group}_{method}"] = {
+                    "mean": round(sum(values) / len(values), 3),
+                    "n": len(values),
+                }
+    return {
+        "commits": len(rows),
+        "owners": owners,
+        "metrics": metrics,
+        "eligible_list_sizes": eligible_sizes,
+    }

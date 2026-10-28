@@ -4,40 +4,36 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import asdict
+from functools import partial
 from pathlib import PurePosixPath
 from typing import Any, Callable
 
 from anaxigraph.contracts import Graph, Node
 
+from . import fields as field_checks
 from .charter import CHARTER, module_facts
 from .patterns import production_modules
 
 LENSES = {
     "boundaries": (
-        "Find responsibilities that could change independently behind smaller public contracts. "
-        "Look across the supplied files for useful component seams, private-data access, mixed "
-        "ownership and accidental coupling. Name what stays private and what consumers need. "
-        "Check existing public exports and facades before proposing another boundary: an unresolved "
-        "reference or re-export is not evidence of illegal private access."
+        "Find independently changing responsibilities, mixed ownership, private-data access and "
+        "accidental coupling across files. Propose smaller public contracts; name private internals "
+        "and consumer needs. Check exports/facades first: unresolved references and re-exports "
+        "do not establish illegal private access."
     ),
     "packages": (
         "Find cohesive capabilities worth developing as standalone importable tools. Compare "
-        "keeping them in place, a local package, a separately versioned distribution in this "
-        "workspace and a package maintained in a separate repository. Consider reusable behavior, "
-        "independent agent context, release ownership and domain/data ties. Separation need not "
-        "introduce a service or network call. First establish which members already form a package "
-        "and what package_context actually declares. An already isolated, versioned library may "
-        "need no extraction; propose only an additional concrete benefit. A root project version "
-        "does not prove every internal component has its own distribution or release lifecycle. "
-        "Reject extraction when its costs outweigh benefits."
+        "in-place, local package, workspace distribution and separate repository using reuse, "
+        "isolated agent context, releases and domain/data ties. Establish existing package_context "
+        "first; a root project version is not an independently released internal component. "
+        "An already isolated library may need no extraction. Require incremental benefits above "
+        "costs; separation need not introduce services/network calls."
     ),
     "verification": (
-        "Find obstacles to independent component development and verification: neighbor-dependent "
-        "fixtures, shared mutable resources, missing public-contract checks or overly broad test "
-        "setup. Propose a concrete local verification seam and the consumer/shared checks still "
-        "needed. Empty observed test links do not mean tests are absent. Without supplied evidence "
-        "of an actual verification obstacle, report unknown rather than assert missing tests, "
-        "missing isolation or a need to add an already available check."
+        "Find evidenced obstacles to independent development/testing: neighbor-dependent fixtures, "
+        "shared mutable resources, missing contract checks or broad setup. Specify a local test "
+        "seam and retained consumer/shared checks. Empty test links do not establish absent tests. "
+        "Without an evidenced obstacle, report unknown; do not invent missing isolation/checks."
     ),
 }
 PLACEMENTS = (
@@ -166,36 +162,27 @@ def architecture_packet(
         "lens": lens,
         "assignment": LENSES[lens],
         "finding_review_policy": (
-            "When reviewing a supplied draft, independently challenge its findings. Require a "
-            "concrete incremental benefit and source evidence. Remove recommendations that "
-            "repeat existing boundaries or rely only on missing test edges. Correct assessments "
-            "to keep or unknown as appropriate, and return the complete same response contract."
+            "Challenge drafts against source evidence and incremental benefits. Remove repeated "
+            "existing boundaries and missing-edge assumptions. Update assessments to keep/unknown "
+            "where appropriate and return the complete same response contract."
         ),
         "instruction": (
-            "Perform ONLY the assigned architectural search. These source neighborhoods are "
-            "provisional groups, not boundaries to preserve. Consider every supplied module and "
-            "return one assessment each: finding, keep or unknown. Return zero to three useful "
-            "findings, without no-change essays or a quota for extractions. Establish the current "
-            "boundary and declared packaging before judging change. Findings must name "
-            "member modules, a published behavioral contract, private implementation, dependencies, "
-            "costs, evidence and a checkable next step. The next_step must state a concrete "
-            "incremental change beyond what already exists, not simply describe a good pattern "
-            "the code already implements. Proactive opportunities are welcome; existing behavior, "
-            "contracts or packaging must not be presented as new improvements. If the alleged "
-            "gap itself is unestablished, assess unknown and record the missing evidence instead "
-            "of assigning a speculative material rewrite. A supplied draft is a hypothesis: reject "
-            "or downgrade findings that repeat existing design or infer absence from missing "
-            "references. Compare in-place with the proposed option. "
-            "For the packages lens compare ALL of in-place, local-package, workspace-distribution "
-            "and separate-repository, even when recommending another option. Follow output_limits. "
-            "Priority 1 is optional, 2 is material, and 3 is highly important; use keep when no "
-            "useful change is justified. Keep output concise. "
-            "Prefer small isolated agent contexts and independent verification; do not manufacture "
-            "abstractions or network services. Shared data, configuration and resource obligations "
-            "can cross clean import boundaries. No raw test/CI source or external package source "
-            "has been inspected here: verification targets are proposals, commands and package "
-            "versions remain unknown unless supplied evidence establishes them. External references "
-            "may also be unresolved local targets. Never report proposed checks as executed/passed."
+            "Perform ONLY the assigned search; source neighborhoods are provisional, not accepted "
+            "boundaries. Assess EVERY supplied module: finding, keep or unknown. Return at most "
+            "three concise, evidence-backed improvements; no extraction quota or no-change essays. "
+            "Establish existing exports and packaging first. Each finding names member modules, "
+            "a public behavioral contract, hidden implementation, dependencies, costs, evidence "
+            "and an incremental next_step beyond existing design. Proactive opportunities need "
+            "no bug, but an unestablished gap requires unknown, not a speculative material rewrite. "
+            "Challenge drafts and missing-reference claims; retain keep where no benefit is justified. "
+            "Return at least TWO placement options: in-place and the proposal; packages also compare local-package, "
+            "workspace-distribution and separate-repository. Follow output_limits. Priority: "
+            "1 optional, 2 material, 3 highly important. Prefer independently developable/testable "
+            "components and small agent contexts; justify abstractions or network services. "
+            "Account for shared state, schemas, configuration and resources across import boundaries. "
+            "No raw test/CI source or external package source was inspected: missing checks, commands, "
+            "versions and external-target resolution remain unknown without supplied evidence. "
+            "Verification targets are proposals, never executed/passed results."
         ),
         "charter": CHARTER,
         "output_limits": {
@@ -208,6 +195,7 @@ def architecture_packet(
             "text_list_item_characters": 300,
             "option_benefit_or_cost_characters": 300,
             "placement_options": 6,
+            "minimum_placement_options": 2,
             "evidence_references": 30,
         },
         "modules": [module_view(graph, node) for node in chosen],
@@ -246,46 +234,10 @@ def architecture_packet(
     return packet, schema
 
 
-def _text(value: Any, field: str, maximum: int) -> None:
-    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
-        raise ValueError(
-            f"Architecture {field} must be nonempty text of at most {maximum} characters"
-        )
-
-
-def _strings(value: Any, field: str, *, required: bool = False) -> None:
-    if not isinstance(value, list) or len(value) > 12 or (required and not value):
-        raise ValueError(f"Architecture {field} must be a bounded list")
-    for item in value:
-        _text(item, field, 300)
-
-
-def _assessments(value: Any, scope: set[str]) -> dict[str, str]:
-    if not isinstance(value, list) or len(value) != len(scope):
-        raise ValueError("Architecture assessments must cover every scoped module exactly once")
-    outcomes = {}
-    for assessment in value:
-        if not isinstance(assessment, dict):
-            raise ValueError("Architecture assessment must be an object")
-        identity, outcome = assessment.get("module_id"), assessment.get("outcome")
-        if not isinstance(identity, str) or identity not in scope or identity in outcomes:
-            raise ValueError("Architecture assessments contain duplicate or unexpected modules")
-        if outcome not in ("finding", "keep", "unknown"):
-            raise ValueError("Architecture outcome must be finding, keep or unknown")
-        outcomes[identity] = outcome
-    return outcomes
-
-
-def _members(value: Any, scope: set[str]) -> set[str]:
-    if (
-        not isinstance(value, list)
-        or not value
-        or any(not isinstance(item, str) for item in value)
-        or len(set(value)) != len(value)
-        or not set(value) <= scope
-    ):
-        raise ValueError("Architecture finding members must be distinct scoped module IDs")
-    return set(value)
+_text = field_checks.text
+_strings = field_checks.texts
+_assessments = partial(field_checks.assessments, key="module_id")
+_members = field_checks.members
 
 
 def _options(value: Any, lens: str, placement: str) -> None:

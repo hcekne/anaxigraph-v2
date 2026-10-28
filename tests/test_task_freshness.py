@@ -12,6 +12,7 @@ from anaxigraph.application import Application
 from anaxigraph.indexing import index
 from anaxigraph.indexing.python import parse_module
 from anaxigraph.storage import Store
+from anaxigraph.storage.schema import SCHEMA_VERSION
 
 
 def application(tmp_path):
@@ -153,7 +154,7 @@ def test_version_five_baseline_is_preserved_in_backed_up_migration(tmp_path):
         """)
     upgraded = Store(app.store.path)
     assert upgraded.pin_baseline(str(app.root), continue_task=True) == before
-    backup = app.store.path.with_name(app.store.path.name + ".pre-v6.sqlite")
+    backup = app.store.path.with_name(app.store.path.name + f".pre-v{SCHEMA_VERSION}.sqlite")
     with sqlite3.connect(backup) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == 5
         assert db.execute("SELECT snapshot_id FROM baselines").fetchone()[0] == before
