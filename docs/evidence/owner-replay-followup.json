@@ -272,5 +272,31 @@
     },
     "all_old_ranks_reproduced": true,
     "model_calls": 0
+  },
+  "final_default_test_delivery": {
+    "source_case_category": "development Python repository",
+    "commits": 20,
+    "test_evaluable_cases": 11,
+    "old_actualApplication_mean_test_recall": 0.10606060606060605,
+    "final_direct_mean_test_recall": 0.46969696969696967,
+    "paired_test_recall_cases": {
+      "gains": 4,
+      "losses": 0,
+      "unchanged": 7
+    },
+    "old_actualApplication_mean_test_list_size": 2.55,
+    "final_direct_mean_test_list_size": 2.55,
+    "old_order_reconstruction_matches_actual_recalls": 20,
+    "old_order_reconstruction_matches_actual_list_sizes": 20,
+    "final_owner_lists_match_old_actual": 20,
+    "elapsed_seconds": 58.5,
+    "frozen_sha256": {
+      "retrieval": "aff73e7eeb9e081c66afcbb36a4584b81df71e439734cf641625c9100fa4da90",
+      "guidance": "71457750a72007072ab35c645f4be23e027343d705f9b94f01758d758bf05eab",
+      "old_test_order_guidance": "066445f40bf97f3e64c3081f8147fb82061ec5ad0c4c3d1a7c08c05e261d29da"
+    },
+    "limitation": "Direct core composition, not a fresh Application/transport execution. No-review delivery shape matches structural mode. Original actualApplication measurements are retained for comparison.",
+    "model_calls": 0,
+    "interpretation": "Development-case delivery improvement only. The bounded list still misses relevant tests and never authorizes skipping required checks; this is not architectural-effectiveness evidence."
   }
 }

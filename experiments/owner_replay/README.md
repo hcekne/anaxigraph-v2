@@ -125,3 +125,10 @@ frozen before testing an independent repository's Python slice. Thirteen of its 
 have existing-file owner labels: old/new/grep top-three scores are all **9/13**; first-owner
 scores are 4/13, 4/13 and 7/13. No held-out improvement or architecture benefit is established,
 and there was no further policy tuning. Raw private cases stay outside this public repository.
+
+Default brief delivery is measured separately from oracle graph recall. Prioritizing tests named
+for the selected owners raises mean delivered test recall from **10.6% to 47.0%** on eleven
+eligible development cases (four gains, no losses), with the same 2.55 average list size across
+twenty cases. This final measurement uses direct core composition; reconstruction with the old
+ordering matches all twenty prior Application results. Relevant tests still fall outside the
+bounded list: it never authorizes skipping required project checks.
