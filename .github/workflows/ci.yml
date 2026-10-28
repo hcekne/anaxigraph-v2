@@ -32,8 +32,9 @@ jobs:
         run: |
           uv run pytest
           uv run pytest experiments/snow_rankings
-          uv run ruff check src tests scripts experiments/snow_rankings
-          uv run ruff format --check src tests scripts experiments/snow_rankings
+          uv run pytest experiments/owner_replay
+          uv run ruff check src tests scripts experiments/snow_rankings experiments/owner_replay
+          uv run ruff format --check src tests scripts experiments/snow_rankings experiments/owner_replay
           uv run mypy
           uv run python scripts/quality.py
           node --check src/anaxigraph/interfaces/assets/app.js
