@@ -90,6 +90,7 @@ whether the resulting implementation works.
 - [Architecture and component contracts](docs/architecture.md)
 - [Measured results and known limits](docs/evidence/ci-delivery-qualification.json)
 - [Architectural advice and later-change experiment](experiments/architecture_quality/README.md)
+- [V2-first usefulness experiments and subagent protocol](experiments/architecture_quality/campaign.md)
 - [Owner-finding replay and inexpensive baselines](experiments/owner_replay/README.md)
 
 For development: `uv sync --locked --extra dev`, then `uv run pytest`, `uv run ruff check src tests`,

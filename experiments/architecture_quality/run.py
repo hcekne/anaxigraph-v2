@@ -45,6 +45,7 @@ STAGES = (
 )
 DISABLED = ("memories", "apps", "plugins", "hooks", "multi_agent", "daemon_auto_start")
 USEFUL_REVIEWS = {"patterns", "architecture", "delivery", "fresh-eyes"}
+DISCOVERY_SCENARIOS = ("workshop", "workshop-coupled")
 QUALITY_GOAL = (
     "Keep responsibilities understandable, behavioral contracts clear, effects and state ownership "
     "explicit, and verification trustworthy. Choose the simplest useful design; extraction needs "
@@ -58,13 +59,14 @@ CONTROL_RULE = (
 
 
 def discovery_adapter(name):
-    if name != "workshop":
+    if name not in DISCOVERY_SCENARIOS:
         return None
     if __package__:
-        from . import discovery
+        from . import coupled, discovery
     else:
+        import coupled
         import discovery
-    return discovery
+    return coupled if name == "workshop-coupled" else discovery
 
 
 def scenario_brief(name):
@@ -128,14 +130,25 @@ def delta(before, after):
     return {"changed_paths": changed, "changed_lines_descriptive_only": changed_lines}
 
 
-def blind_tasks(rows):
+def blind_evidence(value, root):
+    """Remove checkout/evidence paths from logs that otherwise disclose the arm."""
+    if isinstance(value, dict):
+        return {key: blind_evidence(child, root) for key, child in value.items()}
+    if isinstance(value, list):
+        return [blind_evidence(child, root) for child in value]
+    if isinstance(value, str) and root is not None:
+        evidence = root.parent / f"{root.name}-evidence"
+        return value.replace(str(evidence), "/candidate-evidence").replace(str(root), "/candidate")
+    return value
+
+
+def blind_tasks(rows, root=None):
+    # Resource figures can reveal the assigned arm; join them after judgments freeze.
     return [
         {
             "task": row["task"],
             "patch": row["patch"],
-            "outcome": row["outcome"],
-            "coding_elapsed_seconds": row["coding"]["elapsed_seconds"],
-            "coding_tokens": row["coding"]["tokens"],
+            "outcome": blind_evidence(row["outcome"], root),
         }
         for row in rows
     ]
@@ -1168,11 +1181,11 @@ def completed_prefix(config, previous):
                     root / arm, arm, stage
                 ):
                     raise ValueError("Completed blind patch differs from saved coding evidence")
-            if json.loads((bundle / "outcomes.json").read_text()) != [
-                row["outcome"] for row in rows
-            ]:
+            if json.loads((bundle / "outcomes.json").read_text()) != blind_evidence(
+                [row["outcome"] for row in rows], root / arm
+            ):
                 raise ValueError("Completed blind outcomes differ from saved coding outcomes")
-            if json.loads((bundle / "tasks.json").read_text()) != blind_tasks(rows):
+            if json.loads((bundle / "tasks.json").read_text()) != blind_tasks(rows, root / arm):
                 raise ValueError("Completed blind task metadata differs from saved coding evidence")
             mapping[labels[arm]] = {"scenario": name, "replicate": replicate, "arm": arm}
     existing = config.state / "blind-map.private.json"
@@ -1265,9 +1278,17 @@ def resume_preparation(config, previous):
 
 
 def run_trial(config):
+    if getattr(config, "campaign_plan", None):
+        if __package__:
+            from .campaign import verify
+        else:
+            from campaign import verify
+        verify(config)
     config.state = config.state.resolve()
-    expected_scenarios = ["workshop"] if config.track == "discovery" else list(SCENARIOS)
-    config.scenarios = config.scenarios or expected_scenarios
+    expected_scenarios = DISCOVERY_SCENARIOS if config.track == "discovery" else SCENARIOS
+    config.scenarios = config.scenarios or (
+        ["workshop"] if config.track == "discovery" else list(SCENARIOS)
+    )
     if not set(config.scenarios) <= set(expected_scenarios):
         raise ValueError("Choose scenarios from the selected guided or discovery track")
     if config.runtime:
@@ -1430,8 +1451,11 @@ def run_trial(config):
                     output.parent.mkdir(parents=True, exist_ok=True)
                     output.write_text(content)
                 # Exclude advice, agent claims and arm labels from the reviewer view.
-                write(destination / "outcomes.json", [row["outcome"] for row in arms[arm]])
-                write(destination / "tasks.json", blind_tasks(arms[arm]))
+                write(
+                    destination / "outcomes.json",
+                    blind_evidence([row["outcome"] for row in arms[arm]], roots[arm]),
+                )
+                write(destination / "tasks.json", blind_tasks(arms[arm], roots[arm]))
                 export_blind_diffs(roots[arm], arm, destination, config.stages)
             write(config.state / "blind-map.private.json", blind_map)
             write(config.state / "run.private.json", manifest)
@@ -1452,6 +1476,7 @@ def parser():
     mode.add_argument("--synthetic", action="store_true")
     result.add_argument("--state", type=Path, required=True)
     result.add_argument("--runtime", type=Path)
+    result.add_argument("--campaign-plan", type=Path, help="Verify a frozen opt-in campaign")
     result.add_argument("--agent", default="codex")
     result.add_argument(
         "--track",
@@ -1459,7 +1484,7 @@ def parser():
         default="guided",
         help="Guided oracle qualification, or unprescribed architectural discovery",
     )
-    result.add_argument("--scenarios", nargs="+", choices=(*SCENARIOS, "workshop"))
+    result.add_argument("--scenarios", nargs="+", choices=(*SCENARIOS, *DISCOVERY_SCENARIOS))
     result.add_argument("--replicates", type=int, default=1)
     result.add_argument("--stages", type=int, choices=range(1, 5), default=4)
     result.add_argument(

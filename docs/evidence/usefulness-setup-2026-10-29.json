@@ -1,0 +1,339 @@
+{
+  "recorded_at": "2026-10-29T13:39:02.780710+00:00",
+  "runtime_git_head": "54dfb518e9c7c7efa5308fb366dc0ee98bc4ef52",
+  "experiment": "V2 historical owner replay and synthetic campaign qualification",
+  "owner_replay": {
+    "evidence_kind": "real historical source, no model calls",
+    "command": "uv run python experiments/owner_replay/replay.py --source /home/hcekne/repos/anaxigraph-v2 --workdir <private-state>/owner-replay --commits 12 --mode structural",
+    "commits": [
+      "7ebc133385596c6bd1f42dffce1ea58cc2c6d6c3",
+      "94156a62abfb3f1b746ce7f17d7662647c52bb4a",
+      "5601d023b64c60b287fec1d01a0ec92f43907960",
+      "cead5d1844b1f06d76ddbab92d774841ba641e8a",
+      "5d461e34f6ebaa4c1298c63de2236524343294f4",
+      "855dbbe673a4a685ed1ffd89ed948ed7c36a55d6",
+      "37121af99c301119ad9567719fdc9db2ec680ee4",
+      "d28e4520a40731cbd21b3031c82186d263ca5c41",
+      "9d797e86fcd0e79781d41829764f44e5473f7fa0",
+      "65ac77e05c49f8fa3b5f65620be3d9af1d28760d",
+      "fab9e08bef70ba31a2f21ccef4c48fc9b6eaffdd",
+      "54dfb518e9c7c7efa5308fb366dc0ee98bc4ef52"
+    ],
+    "manifest_sha256": "832206062b8ea961af50b1887e2349d5e78b161787d5511ea2ead7f956f294aa",
+    "results_sha256": "90e5beca2f76508622e4d895612b51e55573405b806a90014e3b69845a5eed7b",
+    "summary": {
+      "commits": 12,
+      "owner_evaluable_commits": 11,
+      "owners": {
+        "structural": {
+          "hit@1": "2/11",
+          "hit@3": "7/11"
+        },
+        "structural_uncapped": {
+          "hit@1": "2/11",
+          "hit@3": "7/11"
+        },
+        "grep": {
+          "hit@1": "4/11",
+          "hit@3": "7/11"
+        },
+        "symbols": {
+          "hit@1": "3/11",
+          "hit@3": "6/11"
+        },
+        "fused": {
+          "hit@1": "4/11",
+          "hit@3": "7/11"
+        }
+      },
+      "metrics": {
+        "oracle_candidate_budget": {
+          "mean": 6.0,
+          "n": 11
+        },
+        "oracle_consumer_precision_anaxigraph": {
+          "mean": 0.052,
+          "n": 7
+        },
+        "oracle_consumer_precision_combined": {
+          "mean": 0.262,
+          "n": 7
+        },
+        "oracle_consumer_precision_grep": {
+          "mean": 0.143,
+          "n": 7
+        },
+        "oracle_consumer_precision_history": {
+          "mean": 0.19,
+          "n": 7
+        },
+        "oracle_consumer_recall_anaxigraph": {
+          "mean": 0.286,
+          "n": 7
+        },
+        "oracle_consumer_recall_combined": {
+          "mean": 0.452,
+          "n": 7
+        },
+        "oracle_consumer_recall_grep": {
+          "mean": 0.381,
+          "n": 7
+        },
+        "oracle_consumer_recall_history": {
+          "mean": 0.238,
+          "n": 7
+        },
+        "oracle_consumer_size_anaxigraph": {
+          "mean": 2.545,
+          "n": 11
+        },
+        "oracle_consumer_size_combined": {
+          "mean": 4.182,
+          "n": 11
+        },
+        "oracle_consumer_size_grep": {
+          "mean": 3.545,
+          "n": 11
+        },
+        "oracle_consumer_size_history": {
+          "mean": 2.455,
+          "n": 11
+        },
+        "oracle_test_precision_anaxigraph": {
+          "mean": 0.343,
+          "n": 9
+        },
+        "oracle_test_precision_combined": {
+          "mean": 0.269,
+          "n": 9
+        },
+        "oracle_test_precision_grep": {
+          "mean": 0.296,
+          "n": 9
+        },
+        "oracle_test_precision_history": {
+          "mean": 0.269,
+          "n": 9
+        },
+        "oracle_test_recall_anaxigraph": {
+          "mean": 0.519,
+          "n": 9
+        },
+        "oracle_test_recall_combined": {
+          "mean": 0.759,
+          "n": 9
+        },
+        "oracle_test_recall_grep": {
+          "mean": 0.593,
+          "n": 9
+        },
+        "oracle_test_recall_history": {
+          "mean": 0.352,
+          "n": 9
+        },
+        "oracle_test_size_anaxigraph": {
+          "mean": 3.0,
+          "n": 11
+        },
+        "oracle_test_size_combined": {
+          "mean": 5.182,
+          "n": 11
+        },
+        "oracle_test_size_grep": {
+          "mean": 3.818,
+          "n": 11
+        },
+        "oracle_test_size_history": {
+          "mean": 2.636,
+          "n": 11
+        },
+        "task_structural_affected_prod_size": {
+          "mean": 9.417,
+          "n": 12
+        },
+        "task_structural_affected_recall": {
+          "mean": 0.655,
+          "n": 11
+        },
+        "task_structural_delivered_affected_recall": {
+          "mean": 0.574,
+          "n": 11
+        },
+        "task_structural_delivered_prod_size": {
+          "mean": 4.083,
+          "n": 12
+        },
+        "task_structural_delivered_test_recall": {
+          "mean": 0.37,
+          "n": 9
+        },
+        "task_structural_delivered_test_size": {
+          "mean": 2.667,
+          "n": 12
+        },
+        "task_structural_test_recall": {
+          "mean": 0.481,
+          "n": 9
+        },
+        "task_structural_test_size": {
+          "mean": 8.5,
+          "n": 12
+        },
+        "task_structural_uncapped_affected_prod_size": {
+          "mean": 9.417,
+          "n": 12
+        },
+        "task_structural_uncapped_affected_recall": {
+          "mean": 0.655,
+          "n": 11
+        },
+        "task_structural_uncapped_delivered_affected_recall": {
+          "mean": 0.609,
+          "n": 11
+        },
+        "task_structural_uncapped_delivered_prod_size": {
+          "mean": 6.5,
+          "n": 12
+        },
+        "task_structural_uncapped_delivered_test_recall": {
+          "mean": 0.407,
+          "n": 9
+        },
+        "task_structural_uncapped_delivered_test_size": {
+          "mean": 4.667,
+          "n": 12
+        },
+        "task_structural_uncapped_test_recall": {
+          "mean": 0.481,
+          "n": 9
+        },
+        "task_structural_uncapped_test_size": {
+          "mean": 8.5,
+          "n": 12
+        },
+        "task_structural_uncapped_with_delivered_history_prod_size": {
+          "mean": 7.667,
+          "n": 12
+        },
+        "task_structural_uncapped_with_delivered_history_recall": {
+          "mean": 0.622,
+          "n": 11
+        },
+        "task_structural_uncapped_with_delivered_history_test_recall": {
+          "mean": 0.463,
+          "n": 9
+        },
+        "task_structural_uncapped_with_delivered_history_test_size": {
+          "mean": 5.25,
+          "n": 12
+        },
+        "task_structural_with_delivered_history_prod_size": {
+          "mean": 5.833,
+          "n": 12
+        },
+        "task_structural_with_delivered_history_recall": {
+          "mean": 0.609,
+          "n": 11
+        },
+        "task_structural_with_delivered_history_test_recall": {
+          "mean": 0.426,
+          "n": 9
+        },
+        "task_structural_with_delivered_history_test_size": {
+          "mean": 3.417,
+          "n": 12
+        }
+      },
+      "eligible_list_sizes": {
+        "consumer_anaxigraph": {
+          "mean": 3.0,
+          "n": 7
+        },
+        "consumer_grep": {
+          "mean": 3.857,
+          "n": 7
+        },
+        "consumer_history": {
+          "mean": 1.857,
+          "n": 7
+        },
+        "consumer_combined": {
+          "mean": 4.286,
+          "n": 7
+        },
+        "test_anaxigraph": {
+          "mean": 2.778,
+          "n": 9
+        },
+        "test_grep": {
+          "mean": 4.0,
+          "n": 9
+        },
+        "test_history": {
+          "mean": 2.111,
+          "n": 9
+        },
+        "test_combined": {
+          "mean": 5.0,
+          "n": 9
+        }
+      }
+    },
+    "held_out": false,
+    "interpretation": "No owner-finding advantage demonstrated. Commit messages proxy tasks; changed paths are incomplete labels; this measures retrieval, not coding outcomes.",
+    "source_identity": {
+      "runtime_digest": "ccbabf03bc6dc12632fa059efcf5137908c6065f93f4f842dc670292c19fae42",
+      "task_digest": "31075cb2ccef988d810f9c156e07377af8f6d05312849e764d5645134ad599ee",
+      "harness_digest": "5d77e9f1313ac762f3743245bd2125f67da0b799bb367a3f13d275ea9e757870"
+    }
+  },
+  "automation_rehearsal": {
+    "evidence_kind": "synthetic",
+    "status": "completed",
+    "scenarios": [
+      "workshop",
+      "workshop-coupled"
+    ],
+    "pairs": 2,
+    "tasks": 16,
+    "qualified_tasks": 16,
+    "model_calls": 0,
+    "interpretation": "Known implementations verify automation and behavioral/state/CI oracles only. No model usefulness inference."
+  },
+  "new_live_coding_trials_run": 0,
+  "planned_natural_v2_tasks": "Module path filter, then combined annotation-status filter; independent acceptance qualification still required.",
+  "live_delivery_preflight": {
+    "status": "passed",
+    "evidence_kind": "live",
+    "at": "2026-10-29T13:41:33.767614+00:00",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "xhigh",
+    "calls": [
+      {
+        "tool": "scan",
+        "succeeded": true
+      },
+      {
+        "tool": "prepare_change",
+        "succeeded": true
+      },
+      {
+        "tool": "inspect",
+        "succeeded": true
+      }
+    ],
+    "server_event_kinds": [
+      "context_supplied",
+      "task_started"
+    ],
+    "elapsed_seconds": 18.050207,
+    "tokens": {
+      "input_tokens": 95726,
+      "output_tokens": 234,
+      "cached_input_tokens": 83456
+    },
+    "cost_usd": null,
+    "proof_sha256": "a85d9706ae5612c2bffc36a856c26417694187e515d02fe8763c26e98a9e8eed",
+    "interpretation": "One real model turn verified scan/prepare_change/inspect tool delivery and server-side ledger events. No coding task or model-backed analysis workflow ran."
+  }
+}

@@ -94,6 +94,13 @@ predeclared experiments; do not choose the favorable comparison after seeing out
 
 ## Run
 
+For the next campaign, see [the V2-first experiment protocol](campaign.md). It records
+the real V2 replay, natural V2 task briefs and the coupled/cohesive coding comparisons.
+`campaign.py` freezes source hashes and runnable commands without starting a model.
+`workshop-coupled` changes only the discovery starting source, preserving the same public
+behavior, future tasks and independent evaluator. This is a constructed comparison, not
+held-out real-project evidence. The default discovery scenario remains `workshop`.
+
 The synthetic fixtures exercise the discovery task chain and the guided calibration
 without calling a model, paid API or AnaxiGraph workflow:
 
@@ -188,9 +195,17 @@ measured production CI savings or live application latency.
 `comparison.json` records separate paired stage outcomes and coding/analysis usage,
 including known and missing observations. `blind-review/candidate-*` contains code,
 task changes and independent outcomes without arm labels, advice or adoption claims.
+Coding time and tokens stay out of the blind task sheets; they can reveal assignment.
 Give reviewers only those bundles and [the rubric](rubric.md); hold the assignment map
 until their judgments are frozen. If source prose inadvertently reveals treatment,
 record that unblinding rather than asserting perfect reviewer blindness.
+
+Use `python -m experiments.architecture_quality.review prepare` to create an unfilled
+JSON sheet and schema for a fresh reviewer. `freeze` validates every score and its quoted
+source/test evidence before saving a new immutable judgment file. `join` verifies those
+frozen artifacts before opening assignments and attaching correctness/resource data.
+Each command has `--help`. The tool cannot establish that a reviewer never read private
+files; launch grading subagents with `fork_turns="none"` and supply only anonymous bundles.
 
 The randomized checks are withheld from worker prompts/checkouts, but the benchmark
 implementation is public. This is not a security sandbox against a deliberately cheating
