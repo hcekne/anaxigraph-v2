@@ -4,11 +4,12 @@ The primary **discovery track** asks whether Patterns and Fresh Eyes help agents
 useful architectural opportunities while delivering ordinary product changes. It measures
 later behavior, state ownership, failure handling, verification scope and blinded design
 judgment. Counting recommendations or accepting the implementer's self-report cannot
-establish usefulness. No discovery effectiveness result is bundled here.
+establish usefulness. The first live cycle is recorded below; it does not establish an
+architectural advantage.
 
 `--track discovery` uses a workshop reservation product with catalog/pricing, capacity,
-payment effects, confirmation delivery and operator reporting tangled in an ordinary
-application. The initial task is a normal group-booking/reporting feature brief plus a
+payment effects, confirmation delivery and operator reporting in a small application.
+The initial task is a normal group-booking/reporting feature brief plus a
 generic quality goal. It prescribes no components, extraction, pattern or target layout.
 Subsequent product tasks are disclosed only when their fresh agent starts. They exercise
 changed provider behavior, cancellation/refund/retry ownership and shared settings/schema
@@ -204,7 +205,8 @@ buggy code can pass its own tests and still fail, understated inputs/CI scopes f
 the complete synthetic automation writes reviewable results. **Synthetic fixture success
 is evaluator evidence only.** Actual advice usefulness requires live paired task chains,
 observed successful tool delivery, independent behavior checks, blind review, and sufficient
-replication to characterize variance. No such effectiveness result is bundled here.
+replication to characterize variance. The first recorded cycle has a limited, already-cohesive
+seed and uses model reviewers; it does not establish broad effectiveness.
 Discovery calibration additionally accepts both monolithic and separated behaviorally
 correct designs, rejects state/effect/retry bugs hidden by candidate examples, and carries
 each candidate's real opaque persisted state across task edits. It does not impose a gold
@@ -215,5 +217,31 @@ contains one completed guided pair: all four tasks passed in both arms, with suc
 consultation. That run used the earlier full-inline, unmatched-charter protocol. Its large context
 and latency totals motivated the compact current protocol; it establishes working orchestration,
 not discovery effectiveness or an architecture/CI advantage.
+
+## Live discovery cycle — 29 October 2026
+
+[The recorded cycle](../../docs/evidence/architecture-discovery-2026-10-29.json) contains three
+paired four-task chains using GPT‑6.1‑Sol/xhigh, matched charters and compact advice delivery.
+
+| Observed result | Ordinary coding | AnaxiGraph-assisted |
+| --- | ---: | ---: |
+| Tasks passing independent behavior and CI checks | 12/12 | 12/12 |
+| Mean four-task coding time, excluding preparation | 14.8 min | 22.7 min |
+| Coding input tokens, including cached inputs | 4.01 million | 8.37 million |
+| Verified saved-advice consultation | — | 12/12 |
+
+Both independent blinded model reviewers found **no clear architectural preference in any pair**.
+This is model review, not human review; both flagged possible process-provenance leakage in one
+final contract document. No architectural advantage was demonstrated. Analysis added 50 actual
+calls, including one failed provider attempt; ten cache reuses are counted separately. Failed-call
+tokens and dollar costs are unknown. Recovery preserved completed tasks without extra coding turns.
+
+The seed is only 131 production lines and already supplies coherent private helpers and provider
+injection. Its first feature can be implemented with one production-line change. Keep this as a
+negative control for unnecessary abstraction; add held-out, genuinely coupled seeds to test useful
+architectural discovery. The run also exposed stale review references, decision-payload friction
+and an unavailable `python` command. Future seed instructions now use `python3`, verified by running
+all four generated checks. The frozen run retains all 91 missing-command failures and 20 MCP errors;
+these timing observations do not establish a causal product-performance effect or production CI savings.
 
 Codex launch and MCP approval settings follow the [official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).

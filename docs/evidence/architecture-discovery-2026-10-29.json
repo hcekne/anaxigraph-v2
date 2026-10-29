@@ -1,0 +1,345 @@
+{
+  "status": "completed",
+  "evidence_kind": "live",
+  "track": "discovery",
+  "control_mode": "normal",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "xhigh",
+  "replicates": 3,
+  "tasks_per_arm": 12,
+  "call_timeout_seconds": null,
+  "overall_deadline": null,
+  "arms": {
+    "control": {
+      "behavior_passed": 12,
+      "ci_safe": 12,
+      "qualified": 12,
+      "verified_advice_consultations": null,
+      "observed_isolation_audits_passed": 12,
+      "coding_usage": {
+        "input_tokens_reported": 4006332,
+        "output_tokens_reported": 132687,
+        "cached_input_tokens_reported": 3533696,
+        "token_receipts_known": 12,
+        "token_receipts_unknown": 0,
+        "elapsed_seconds_reported_sum": 2667.551055,
+        "elapsed_receipts_known": 12,
+        "elapsed_receipts_unknown": 0,
+        "cost_usd": null
+      },
+      "mean_four_task_coding_chain_seconds": 889.183685,
+      "four_task_coding_chain_seconds": [
+        808.858615,
+        866.5553,
+        992.1371399999999
+      ],
+      "mcp_calls": 0,
+      "mcp_successes": 0,
+      "mcp_failures": 0,
+      "mcp_error_categories": {},
+      "python_not_found_commands": 50,
+      "serialized_mcp_receipt_bytes": 0,
+      "available_mcp_text_bytes": 0
+    },
+    "treatment": {
+      "behavior_passed": 12,
+      "ci_safe": 12,
+      "qualified": 12,
+      "verified_advice_consultations": 12,
+      "observed_isolation_audits_passed": null,
+      "coding_usage": {
+        "input_tokens_reported": 8366281,
+        "output_tokens_reported": 163662,
+        "cached_input_tokens_reported": 7732096,
+        "token_receipts_known": 12,
+        "token_receipts_unknown": 0,
+        "elapsed_seconds_reported_sum": 4093.823856,
+        "elapsed_receipts_known": 12,
+        "elapsed_receipts_unknown": 0,
+        "cost_usd": null
+      },
+      "mean_four_task_coding_chain_seconds": 1364.607952,
+      "four_task_coding_chain_seconds": [
+        1221.584877,
+        1388.435252,
+        1483.803727
+      ],
+      "mcp_calls": 134,
+      "mcp_successes": 114,
+      "mcp_failures": 20,
+      "mcp_error_categories": {
+        "Each architecture decision needs proposal_id, decision and reason": 5,
+        "Saved review not found": 9,
+        "Checkout changed after mapping; scan again before preparing": 3,
+        "Architecture decision names an unknown or duplicate proposal": 3
+      },
+      "python_not_found_commands": 41,
+      "serialized_mcp_receipt_bytes": 839554,
+      "available_mcp_text_bytes": 778077
+    }
+  },
+  "analysis": {
+    "actual_provider_calls": 50,
+    "completed_calls": 49,
+    "failed_calls": 1,
+    "cache_reuse_events": 10,
+    "reported_usage": {
+      "input_tokens_reported": 747895,
+      "output_tokens_reported": 169918,
+      "cached_input_tokens_reported": 284928,
+      "token_receipts_known": 49,
+      "token_receipts_unknown": 1,
+      "elapsed_seconds_reported_sum": 5187.399741891306,
+      "elapsed_receipts_known": 50,
+      "elapsed_receipts_unknown": 0,
+      "cost_usd": null
+    },
+    "failed_provider_usage": {
+      "duration_seconds": 3.3492714350577444,
+      "tokens": null,
+      "cost_usd": null
+    },
+    "per_pair": [
+      {
+        "actual_calls": 17,
+        "statuses": {
+          "completed": 17
+        },
+        "cache_reuse_events": 0
+      },
+      {
+        "actual_calls": 18,
+        "statuses": {
+          "completed": 17,
+          "failed": 1
+        },
+        "cache_reuse_events": 10
+      },
+      {
+        "actual_calls": 15,
+        "statuses": {
+          "completed": 15
+        },
+        "cache_reuse_events": 0
+      }
+    ]
+  },
+  "administration": {
+    "successful_preflights": 2,
+    "initial_preflight_calls": 1,
+    "recovery_preflight_calls": 1,
+    "preflight_usage": {
+      "input_tokens_reported": 188498,
+      "output_tokens_reported": 589,
+      "cached_input_tokens_reported": 167168,
+      "token_receipts_known": 2,
+      "token_receipts_unknown": 0,
+      "elapsed_seconds_reported_sum": 34.94968,
+      "elapsed_receipts_known": 2,
+      "elapsed_receipts_unknown": 0,
+      "cost_usd": null
+    },
+    "preparation_recoveries": 1,
+    "coordinator_revisions": 1,
+    "unmeasured_coordinator_recovery_overhead_seconds": null
+  },
+  "independent_verification": {
+    "completed_coding_threads": 24,
+    "completed_coding_turns": 24,
+    "failed_coding_turns": 0,
+    "tasks_with_exactly_one_completed_turn": 24,
+    "raw_usage_matches_saved_for_all_tasks": true,
+    "approval_failure_occurrences": 0,
+    "recognized_control_command_or_MCP_contamination": {},
+    "recorded_candidate_import_audits_passed": 12,
+    "original_prefix_fingerprints_verified_unchanged": 16
+  },
+  "preparation_wall_seconds": [
+    {
+      "pair": 0,
+      "recovered": false,
+      "original_full_wall_seconds": 950.929597,
+      "cached_refreeze_seconds": null,
+      "wall_measurement_complete": true,
+      "note": "Initial complete preparation wall time if available"
+    },
+    {
+      "pair": 1,
+      "recovered": true,
+      "original_full_wall_seconds": null,
+      "cached_refreeze_seconds": 5.506108,
+      "wall_measurement_complete": false,
+      "note": "Recovered refreeze duration is not original preparation wall time"
+    },
+    {
+      "pair": 2,
+      "recovered": false,
+      "original_full_wall_seconds": 1111.191202,
+      "cached_refreeze_seconds": null,
+      "wall_measurement_complete": true,
+      "note": "Initial complete preparation wall time if available"
+    }
+  ],
+  "architecture_review": {
+    "type": "two independent blinded model reviewers",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "xhigh",
+    "status": "frozen before joining assignments",
+    "human_review_performed": false,
+    "reviewers": 2,
+    "pairs_reviewed_per_reviewer": 3,
+    "clear_preferences": 0,
+    "no_clear_preferences": 6,
+    "dimensions": [
+      "behavioral_contracts",
+      "responsibility_private_boundaries",
+      "independent_verification",
+      "ci_scope_assurance",
+      "later_change_difficulty",
+      "simplicity"
+    ],
+    "reviews": [
+      {
+        "reviewer": "A",
+        "replicate": 0,
+        "preference": "no clear preference",
+        "scores_equal_between_arms": true,
+        "dimension_scores_both_arms": [
+          3,
+          3,
+          3,
+          1,
+          3,
+          3
+        ],
+        "suspected_provenance_leak": false
+      },
+      {
+        "reviewer": "B",
+        "replicate": 0,
+        "preference": "no clear preference",
+        "scores_equal_between_arms": true,
+        "dimension_scores_both_arms": [
+          3,
+          3,
+          3,
+          2,
+          3,
+          3
+        ],
+        "suspected_provenance_leak": false
+      },
+      {
+        "reviewer": "A",
+        "replicate": 1,
+        "preference": "no clear preference",
+        "scores_equal_between_arms": true,
+        "dimension_scores_both_arms": [
+          3,
+          3,
+          3,
+          1,
+          3,
+          3
+        ],
+        "suspected_provenance_leak": false
+      },
+      {
+        "reviewer": "B",
+        "replicate": 1,
+        "preference": "no clear preference",
+        "scores_equal_between_arms": true,
+        "dimension_scores_both_arms": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "suspected_provenance_leak": false
+      },
+      {
+        "reviewer": "A",
+        "replicate": 2,
+        "preference": "no clear preference",
+        "scores_equal_between_arms": true,
+        "dimension_scores_both_arms": [
+          3,
+          3,
+          3,
+          1,
+          3,
+          3
+        ],
+        "suspected_provenance_leak": true
+      },
+      {
+        "reviewer": "B",
+        "replicate": 2,
+        "preference": "no clear preference",
+        "scores_equal_between_arms": true,
+        "dimension_scores_both_arms": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "suspected_provenance_leak": true
+      }
+    ],
+    "suspected_blinding_leak": {
+      "affected_pairs": 1,
+      "affected_candidates": 1,
+      "description": "A final contract document mentions frozen review/disposition and inspect provenance. Both reviewers flagged it; references were not followed. Perfect blinding is not claimed."
+    },
+    "review_tokens": null,
+    "review_cost_usd": null
+  },
+  "fixture_limit": {
+    "seed_production_lines": 131,
+    "seed_functions": 11,
+    "first_feature_minimal_production_lines_changed": 1,
+    "note": "Seed already has a public facade, private helpers, provider injection, draft/commit and coherent state ownership. Three repeats sample one small scenario; architecture discovery and large-project CI generalization remain limited."
+  },
+  "architecture_advantage_claim": null,
+  "ci_speedup_claim": null,
+  "cost_usd": null,
+  "limits": [
+    "One already-cohesive small seed; three repeats sample variation on it, not large-project architecture or production CI.",
+    "Verified inspection establishes delivery, not semantic adoption. Model review is not human review; source provenance may compromise one pair\u2019s blinding.",
+    "Shared missing-python failures and application-interface errors add friction; timing observations do not isolate a causal tool effect.",
+    "Control audits cover observable commands, tools and imports, not an adversarial isolation guarantee.",
+    "Dollar costs and one failed provider\u2019s tokens are unknown. Recovered preparation wall time is unknown; cached refreeze is separate."
+  ],
+  "date": "2026-10-29",
+  "runtime_source_commit": "05561516b8ba241e836ebf42879984844746f884",
+  "wheel_sha256": "3622f932a1bb48775e7ea24a86ddaefeba6c383dc51597afaf8dfb93c77a1c49",
+  "coordinator_source_commits": [
+    "05561516b8ba241e836ebf42879984844746f884",
+    "fab9e08bef70ba31a2f21ccef4c48fc9b6eaffdd"
+  ],
+  "recovery_protocol": {
+    "model_task_seed_evaluator_unchanged": true,
+    "completed_pair_repeated": false,
+    "accepted_preparation_retained": true,
+    "extra_coding_turns": 0,
+    "instrumentation_change": "Resume only next unstarted pair; completed artifacts and deterministic randomization verified."
+  },
+  "observed_conclusion": "No architectural advantage was demonstrated in these three small paired chains. Assisted coding took more time and input tokens, with additional analysis overhead. The already-cohesive seed is a weak test of discovering improvements in coupled code.",
+  "future_harness_correction": {
+    "brief_command": "python3 tests/test_<id>.py",
+    "generated_seed_checks_verified": 4,
+    "frozen_run_modified": false
+  },
+  "measurement_notes": {
+    "coding_time": "Sum of actual sequential task-agent elapsed times per arm; means divide three four-task chains. Includes agent reasoning, tool work and local checks.",
+    "analysis_time": "Sum of measured provider invocation elapsed times; parallel work means this is not whole-run wall time.",
+    "tokens": "Reported CLI receipts; cached input tokens are a subset of input tokens. Failed-provider tokens and all dollar costs remain unknown.",
+    "receipt_bytes": "Serialized tool receipts and available text, not guaranteed model-visible context or billable tokens.",
+    "review_scores": "Separate ordinal dimensions; no summed architecture score or statistical superiority claim."
+  },
+  "source_ordering_note": "Per-review dimension vectors follow architecture_review.dimensions."
+}

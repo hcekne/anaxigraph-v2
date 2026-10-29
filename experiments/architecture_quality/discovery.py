@@ -80,7 +80,7 @@ sorted by workshop ID. Each row contains workshop, local_date, seats, gross_cent
 pending_messages. Count successful bookings and their historical paid amounts; pending_messages
 counts unsent events for that workshop. Current report offset/schema apply to every summary.
 
-Existing product checks run as `python tests/test_<id>.py` for reservations, notifications,
+Existing product checks run as `python3 tests/test_<id>.py` for reservations, notifications,
 reports and smoke. ci_select.py reads {changed_paths:[...],changed_contracts:[...]} on stdin and
 returns a JSON list of retained check IDs. Keeping all checks is safe. You may improve selection
 if you can justify its inputs. Always keep smoke; shared settings/schema/build/check-selection
