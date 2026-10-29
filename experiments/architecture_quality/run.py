@@ -128,31 +128,48 @@ def delta(before, after):
     return {"changed_paths": changed, "changed_lines_descriptive_only": changed_lines}
 
 
-def export_blind_diffs(root: Path, arm: str, destination: Path, stages: int):
+def blind_tasks(rows):
+    return [
+        {
+            "task": row["task"],
+            "patch": row["patch"],
+            "outcome": row["outcome"],
+            "coding_elapsed_seconds": row["coding"]["elapsed_seconds"],
+            "coding_tokens": row["coding"]["tokens"],
+        }
+        for row in rows
+    ]
+
+
+def blind_diff(root: Path, arm: str, stage: int):
     import difflib
 
-    for stage in range(stages):
-        evidence = root.parent / f"{arm}-evidence"
-        before = json.loads((evidence / f"task-{stage}/baseline.private.json").read_text())["files"]
-        next_baseline = evidence / f"task-{stage + 1}/baseline.private.json"
-        after = (
-            json.loads(next_baseline.read_text())["files"]
-            if next_baseline.is_file()
-            else snapshot(root)
-        )
-        lines = []
-        for path in sorted(before.keys() | after.keys()):
-            lines.extend(
-                difflib.unified_diff(
-                    before.get(path, "").splitlines(keepends=True),
-                    after.get(path, "").splitlines(keepends=True),
-                    fromfile="before/" + path,
-                    tofile="after/" + path,
-                )
+    evidence = root.parent / f"{arm}-evidence"
+    before = json.loads((evidence / f"task-{stage}/baseline.private.json").read_text())["files"]
+    next_baseline = evidence / f"task-{stage + 1}/baseline.private.json"
+    after = (
+        json.loads(next_baseline.read_text())["files"]
+        if next_baseline.is_file()
+        else snapshot(root)
+    )
+    lines = []
+    for path in sorted(before.keys() | after.keys()):
+        lines.extend(
+            difflib.unified_diff(
+                before.get(path, "").splitlines(keepends=True),
+                after.get(path, "").splitlines(keepends=True),
+                fromfile="before/" + path,
+                tofile="after/" + path,
             )
-        directory = destination / "diffs"
-        directory.mkdir(exist_ok=True)
-        (directory / f"task-{stage}.patch").write_text("".join(lines))
+        )
+    return "".join(lines)
+
+
+def export_blind_diffs(root: Path, arm: str, destination: Path, stages: int):
+    directory = destination / "diffs"
+    directory.mkdir(exist_ok=True)
+    for stage in range(stages):
+        (directory / f"task-{stage}.patch").write_text(blind_diff(root, arm, stage))
 
 
 def ledger(root: Path) -> list[dict]:
@@ -1065,16 +1082,125 @@ def client_identity(config):
     return identity
 
 
-def resume_preparation(config, previous):
-    if not config.live or previous.get("status") != "incomplete" or previous.get("pairs"):
+def pair_draw(rng):
+    sample_seed = rng.randrange(2**32)
+    order = ["control", "treatment"]
+    rng.shuffle(order)
+    return sample_seed, order, {arm: f"candidate-{rng.getrandbits(64):016x}" for arm in order}
+
+
+def completed_prefix(config, previous):
+    """Verify immutable completed pairs before permitting another preparation attempt."""
+    schedule = [
+        (replicate, name) for replicate in range(config.replicates) for name in config.scenarios
+    ]
+    pairs = previous.get("pairs", [])
+    if len(pairs) >= len(schedule):
+        raise ValueError("Preparation recovery requires a remaining unstarted pair")
+    rng, mapping = random.Random(config.random_seed), {}
+    for index, pair in enumerate(pairs):
+        replicate, name = schedule[index]
+        if (pair.get("replicate"), pair.get("scenario")) != (replicate, name):
+            raise ValueError("Completed pairs are not the frozen schedule prefix")
+        sample_seed, order, labels = pair_draw(rng)
+        if pair.get("hidden_sample_seed") != sample_seed or set(pair.get("arms", {})) != set(order):
+            raise ValueError("Completed pair randomization or arms differ from the frozen trial")
+        root = config.state / f"{name}-{replicate}"
+        with tempfile.TemporaryDirectory() as temporary:
+            scenario_seed(Path(temporary), name)
+            if digest(snapshot(Path(temporary))) != pair.get("starting_digest"):
+                raise ValueError("Completed pair seed differs from the frozen trial")
+        for arm in order:
+            rows = pair["arms"][arm]
+            evidence = root / f"{arm}-evidence"
+            advice_path = root / (
+                "advice.private.json" if arm == "treatment" else "control-advice.private.json"
+            )
+            if arm == "treatment" or config.control_mode == "review":
+                advice = json.loads(advice_path.read_text())
+                advice_digest = advice.get("frozen_digest")
+                if (
+                    digest({key: value for key, value in advice.items() if key != "frozen_digest"})
+                    != advice_digest
+                ):
+                    raise ValueError("Completed pair advice differs from its frozen digest")
+                if any(row.get("advice_frozen_digest") != advice_digest for row in rows):
+                    raise ValueError("Completed coding outcomes refer to different advice")
+                if pair["analysis_model_receipts"].get(arm) != advice.get("model_receipts", []):
+                    raise ValueError("Completed analysis receipts differ from frozen advice")
+            elif pair["analysis_model_receipts"].get(arm) != []:
+                raise ValueError("Unreviewed control has unexpected analysis receipts")
+            expected_tasks = {f"task-{stage}" for stage in range(config.stages)}
+            if (
+                len(rows) != config.stages
+                or {path.name for path in evidence.glob("task-*")} != expected_tasks
+            ):
+                raise ValueError("Completed pair has missing or additional coding opportunities")
+            bundle = config.state / "blind-review" / labels[arm]
+            bundled_source = {
+                path: content
+                for path, content in snapshot(bundle).items()
+                if path not in {"outcomes.json", "tasks.json"} and not path.startswith("diffs/")
+            }
+            if not bundled_source or snapshot(root / arm) != bundled_source:
+                raise ValueError("Completed candidate differs from its frozen blind bundle")
+            for stage, row in enumerate(rows):
+                directory = evidence / f"task-{stage}"
+                baseline = json.loads((directory / "baseline.private.json").read_text())
+                if (
+                    row.get("stage") != stage
+                    or row.get("task") != scenario_task(name, stage)
+                    or json.loads((directory / "result.private.json").read_text()) != row
+                    or digest(baseline["files"]) != baseline["digest"]
+                    or baseline["digest"] != row["baseline_digest"]
+                    or (stage == 0 and baseline["digest"] != pair["starting_digest"])
+                ):
+                    raise ValueError("Completed coding evidence differs from the saved outcomes")
+                next_baseline = evidence / f"task-{stage + 1}/baseline.private.json"
+                after = (
+                    json.loads(next_baseline.read_text())["files"]
+                    if next_baseline.is_file()
+                    else bundled_source
+                )
+                if delta(baseline["files"], after) != row["patch"]:
+                    raise ValueError("Completed coding patch differs from its saved source")
+                if (bundle / f"diffs/task-{stage}.patch").read_text() != blind_diff(
+                    root / arm, arm, stage
+                ):
+                    raise ValueError("Completed blind patch differs from saved coding evidence")
+            if json.loads((bundle / "outcomes.json").read_text()) != [
+                row["outcome"] for row in rows
+            ]:
+                raise ValueError("Completed blind outcomes differ from saved coding outcomes")
+            if json.loads((bundle / "tasks.json").read_text()) != blind_tasks(rows):
+                raise ValueError("Completed blind task metadata differs from saved coding evidence")
+            mapping[labels[arm]] = {"scenario": name, "replicate": replicate, "arm": arm}
+    existing = config.state / "blind-map.private.json"
+    if existing.is_file() and json.loads(existing.read_text()) != mapping:
+        raise ValueError("Completed blind assignment map differs from the frozen randomization")
+    if {p.name for p in (config.state / "blind-review").glob("candidate-*")} != set(mapping):
+        raise ValueError("Completed blind candidate exports are missing or unexpected")
+    expected_directories = {
+        config.state / f"{name}-{replicate}" / f"{arm}-evidence" / f"task-{stage}"
+        for replicate, name in schedule[: len(pairs)]
+        for arm in ("control", "treatment")
+        for stage in range(config.stages)
+    }
+    if set(config.state.glob("*/*-evidence/task-*")) != expected_directories:
         raise ValueError(
-            "Preparation recovery requires an incomplete live trial with no coding outcomes"
+            "Unfinished or unexpected pair has coding artifacts; no extra turns permitted"
         )
-    if list(config.state.glob("*/*-evidence/task-*/*")):
-        raise ValueError("Coding preparation started; no extra coding opportunities are permitted")
+    return set(schedule[: len(pairs)])
+
+
+def resume_preparation(config, previous):
+    if not config.live or previous.get("status") != "incomplete":
+        raise ValueError("Preparation recovery requires an incomplete live trial")
     saved = json.loads((config.state / "invocation.private.json").read_text())
     if saved != invocation(config):
         raise ValueError("Preparation recovery configuration differs from the frozen invocation")
+    if previous.get("client_identity") != client_identity(config):
+        raise ValueError("Preparation recovery coding client changed")
     proof = json.loads((config.state / "preflight.json").read_text())
     if (
         proof["runtime"] != str(config.runtime)
@@ -1089,9 +1215,16 @@ def resume_preparation(config, previous):
         or source_hashes(source_root) != provenance["files"]
     ):
         raise ValueError("Preparation recovery runtime source changed or cannot be established")
+    completed = completed_prefix(config, previous)
     for replicate in range(config.replicates):
         for name in config.scenarios:
             pair_root = config.state / f"{name}-{replicate}"
+            if (replicate, name) in completed:
+                continue
+            if list(pair_root.glob("*-evidence/task-*")):
+                raise ValueError(
+                    "Coding preparation started; no extra coding opportunities are permitted"
+                )
             with tempfile.TemporaryDirectory() as temporary:
                 expected = Path(temporary)
                 scenario_seed(expected, name)
@@ -1120,7 +1253,8 @@ def resume_preparation(config, previous):
             "prior_status": previous["status"],
             "prior_error_type": previous.get("error_type"),
             "prior_error": previous.get("error"),
-            "basis": "same executable, source, seed and configuration; no coding started; accepted analyses reused",
+            "completed_pairs_preserved": len(completed),
+            "basis": "same client, executable, source, seed and configuration; completed pairs immutable; pending coding unstarted; accepted analyses reused",
         }
     )
     config.preflight_attempt = index
@@ -1216,8 +1350,18 @@ def run_trial(config):
             return manifest
     rng = random.Random(config.random_seed)
     blind_map = {}
+    completed = {(pair["replicate"], pair["scenario"]) for pair in manifest["pairs"]}
     for replicate in range(config.replicates):
         for name in config.scenarios:
+            sample_seed, order, labels = pair_draw(rng)
+            if (replicate, name) in completed:
+                blind_map.update(
+                    {
+                        labels[arm]: {"scenario": name, "replicate": replicate, "arm": arm}
+                        for arm in order
+                    }
+                )
+                continue
             pair_root = config.state / f"{name}-{replicate}"
             roots = {arm: pair_root / arm for arm in ("control", "treatment")}
             for root in roots.values():
@@ -1249,9 +1393,6 @@ def run_trial(config):
                     opportunities,
                     advice["quality_charter"],
                 )
-            sample_seed = rng.randrange(2**32)
-            order = list(roots)
-            rng.shuffle(order)
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
                 futures = {
                     arm: pool.submit(
@@ -1280,7 +1421,7 @@ def run_trial(config):
             }
             manifest["pairs"].append(pair)
             for arm in order:
-                label = f"candidate-{rng.getrandbits(64):016x}"
+                label = labels[arm]
                 blind_map[label] = {"scenario": name, "replicate": replicate, "arm": arm}
                 destination = config.state / "blind-review" / label
                 destination.mkdir(parents=True)
@@ -1290,20 +1431,9 @@ def run_trial(config):
                     output.write_text(content)
                 # Exclude advice, agent claims and arm labels from the reviewer view.
                 write(destination / "outcomes.json", [row["outcome"] for row in arms[arm]])
-                write(
-                    destination / "tasks.json",
-                    [
-                        {
-                            "task": row["task"],
-                            "patch": row["patch"],
-                            "outcome": row["outcome"],
-                            "coding_elapsed_seconds": row["coding"]["elapsed_seconds"],
-                            "coding_tokens": row["coding"]["tokens"],
-                        }
-                        for row in arms[arm]
-                    ],
-                )
+                write(destination / "tasks.json", blind_tasks(arms[arm]))
                 export_blind_diffs(roots[arm], arm, destination, config.stages)
+            write(config.state / "blind-map.private.json", blind_map)
             write(config.state / "run.private.json", manifest)
     manifest.update(status="completed", finished_at=now())
     manifest["inference"] = (

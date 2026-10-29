@@ -442,6 +442,7 @@ def preparation_fixture(tmp_path):
         ]
     )
     config.runtime = config.runtime.resolve()
+    config.synthetic_transport = False
     for arm in ("control", "treatment"):
         seed(tmp_path / "checkout-0" / arm, "checkout")
     source_root = tmp_path / "frozen-source"
@@ -465,6 +466,7 @@ def preparation_fixture(tmp_path):
     previous = {
         "status": "incomplete",
         "pairs": [],
+        "client_identity": run.client_identity(config),
         "error_type": "RuntimeError",
         "error": "preparation failed",
     }

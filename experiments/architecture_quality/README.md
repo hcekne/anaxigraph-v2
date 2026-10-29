@@ -125,12 +125,12 @@ AnaxiGraph worker timeout symmetrically. There is no total-run deadline. Do not 
 another experiment into an existing state directory: frozen trials cannot silently
 resume against a new source or model. `--runtime-source-root /path/to/anaxigraph` records
 the exact installed runtime source. An explicit `--resume-preparation` can recover an
-incomplete live preparation only before any coding artifact exists, with identical
-configuration, executable, recorded runtime source and both seed trees. It retains the
-previous failure, reruns preflight, counts administrative/retry costs, and reuses accepted
-analyses through the existing workflow runner. Cache reuses are retained separately from
-actual model-call receipts. This never grants another coding or repair turn. Active
-control reviews already started and later coding interruptions require a new trial.
+incomplete live preparation for the next unstarted pair, with identical configuration,
+client, executable, recorded runtime source and seed trees. Completed pairs and blind
+exports are verified and retained; their coding never repeats. Recovery retains the
+failure, reruns preflight, counts administrative/retry costs and reuses accepted analyses.
+Cache reuses remain separate from actual model-call receipts. Any coding artifact in an
+unfinished pair, or active control reviews already started there, requires a new trial.
 No repository commits, pushes or releases occur.
 
 A custom `--agent` executable is always classified synthetic, even with a live-shaped
