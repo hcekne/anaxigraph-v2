@@ -7,6 +7,11 @@ request is reasonable on its own and nobody holds the overall shape. This benchm
 path. One coding agent grows the same product through 20 requests in several arms, and neutral
 tools measure behaviour, structure, CI cost and how easy the end result is to change.
 
+The companion [26-issue compatibility and delivery qualification](../drift/README.md) adds
+externally owned check capabilities, retained-state fault probes, immutable artifact identities
+and last-successful-release recovery. Its passing reference run qualifies those mechanisms;
+it is separate from this campaign's live coding results.
+
 ## Scenario
 
 **Switchboard** connects a business to outside services (weather, CRM, calendar, accounting,
@@ -47,7 +52,8 @@ session per request, the same prompt, sandbox (no network), and timeout.
 | `anaxigraph` | Charter plus AnaxiGraph over MCP. Before every request the harness scans and refreshes semantic mapping; at steps 6, 11 and 16 it also runs Patterns and CI/CD reviews. The prompt asks for `prepare_change` → `assess_plan` → `validate_change`. |
 | `anaxigraph-only` | AnaxiGraph without the charter: does the tool deliver the philosophy itself? |
 
-`charter` is the bar AnaxiGraph has to clear: a static page of good advice costs nothing.
+`charter` is the bar AnaxiGraph has to clear: a static page needs no separate review-model calls.
+Its prompt tokens still contribute to coding usage.
 
 ## Measures
 
@@ -56,7 +62,7 @@ After every step, with tools that do not use AnaxiGraph:
 - **Behaviour:** hidden pass rate for the new request; cumulative pass rate; *regressions*
   (tests that passed at their own step and fail now).
 - **Change amplification:** existing production files edited and lines changed per step.
-  A rising curve is spaghetti made measurable.
+  This is descriptive change effort; file counts alone do not establish poor architecture.
 - **Shape:** production size, largest module, function length and complexity, import cycles,
   fan-in/out and duplicated blocks.
 - **CI (from step 6):** for every production file, the share of tests the agent's own selector
@@ -75,10 +81,22 @@ The probe agent is a fresh session with the same model, no charter and no AnaxiG
 code alone is being judged. We measure probe pass rate, regressions, existing files edited and
 the CI selection for the probe's diff.
 
-## Decision rule (fixed before the full run)
+## Decision rule (amended 30 October 2026, before a full comparison)
+
+The original rule admitted an efficiency win when both arms missed planted bugs, and collapsed
+unknown mutation evidence to zero misses. The amended report preserves unknowns and applies a
+safety gate before any comparative win. Every included chain must contain all 20 requests and
+all three probes with successful, complete verification. Recorded CI checkpoints, including the
+final one, must contain usable baseline/selection/fault evidence and zero missed suite-detected
+mutants. Zero detected faults is insufficient evidence of selector safety. A failed or incomplete
+checkpoint remains visible; averages and a later repair cannot erase it.
+
+The comparative verdict requires at least three matched, complete replicates. Partial pilots
+retain their descriptive measurements and an incomplete verdict. Historical raw records remain
+unchanged; the amendment does not turn a pilot into full-run evidence.
 
 Compare `anaxigraph` with `charter`, averaged over replicates (at least 3). AnaxiGraph is better
-only if:
+under this rule only after the safety and completeness gates pass and:
 
 1. its final cumulative hidden pass rate is no more than 2 points below charter's, and
 2. it meets at least two of:
@@ -87,7 +105,7 @@ only if:
    - **easier to change:** more probe tests pass, or the same number pass with at least 20%
      fewer existing files edited;
    - **cheaper safe CI:** the mean selected-test share at step 20 is at least 20% lower, with no
-     more planted bugs missed.
+     missed suite-detected planted bugs.
 
 Report the time ratio (agent plus analysis, versus charter) beside the verdict. Above 1.5× the
 benefit must be large to matter. `report.py` applies this rule mechanically. Results that miss
@@ -143,6 +161,9 @@ replicates) plus 9 probe sessions per replicate, and AnaxiGraph refreshes. Run t
 
 - One product, one language and one model. The scenario rewards one architectural idea, plug-in
   families with cross-cutting platform rules, because that is the failure we are testing for.
+- Edited-file and line counts describe effort, not architectural quality by themselves. Examine
+  actual contracts, state ownership, isolated verification and later patches with blinded review
+  before interpreting a mechanical comparison as an architectural advantage.
 - The hidden tests encode a reading of each request. A reference implementation built from the
   request text alone was used to find tests that demand more than the text says.
 - Planted bugs are simple single-site mutations, and coverage-based "executing tests" ignore

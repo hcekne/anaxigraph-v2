@@ -18,7 +18,7 @@ LENSES = {
     "boundaries": (
         "Find independently changing responsibilities, mixed ownership, private-data access and "
         "accidental coupling across files. Propose smaller public contracts; name private internals "
-        "and consumer needs. Check exports/facades first: unresolved references and re-exports "
+        "and consumer needs, including API/MCP capability discovery. Check exports/facades first: unresolved references and re-exports "
         "do not establish illegal private access."
     ),
     "packages": (
@@ -27,11 +27,11 @@ LENSES = {
         "isolated agent context, releases and domain/data ties. Establish existing package_context "
         "first; a root project version is not an independently released internal component. "
         "An already isolated library may need no extraction. Require incremental benefits above "
-        "costs; separation need not introduce services/network calls."
+        "costs; isolated packaging/test dependencies do not require independent deployment or network calls."
     ),
     "verification": (
         "Find evidenced obstacles to independent development/testing: neighbor-dependent fixtures, "
-        "shared mutable resources, missing contract checks or broad setup. Specify a local test "
+        "shared mutable resources, missing contract checks or broad dependency installation/setup. Specify a local test "
         "seam and retained consumer/shared checks. Empty test links do not establish absent tests. "
         "Without an evidenced obstacle, report unknown; do not invent missing isolation/checks."
     ),

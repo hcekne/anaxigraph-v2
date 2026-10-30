@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
@@ -18,17 +19,23 @@ class BuildLauncherTests(unittest.TestCase):
             Path("/home/test/repo"), Path("/home/test/state"), "http://127.0.0.1:18782/mcp"
         )
         self.assertEqual(args[args.index("--model") + 1], "gpt-6.1-sol")
-        self.assertIn('model_reasoning_effort="xhigh"', args)
+        self.assertIn('model_reasoning_effort="high"', args)
         self.assertIn('approval_policy="never"', args)
         self.assertIn('mcp_servers.anaxigraph.default_tools_approval_mode="approve"', args)
         self.assertIn('mcp_servers.anaxigraph.url="http://127.0.0.1:18782/mcp"', args)
         self.assertTrue({"--ignore-user-config", "--ignore-rules", "--ephemeral"} <= set(args))
         self.assertFalse(any("mcp_servers.anaxigraph.command=" in item for item in args))
 
+    def test_mismatched_coding_receipt_cannot_be_relabelled(self):
+        with patch.object(run_build.trial, "record") as record:
+            with self.assertRaisesRegex(ValueError, "receipt model/effort"):
+                run_build.record_coding(
+                    None, {}, {"model": "gpt-6.1-sol", "reasoning_effort": "xhigh"}
+                )
+            record.assert_not_called()
+
     def test_unlimited_worker_records_only_successful_mcp_calls_as_delivery(self):
-        temporary_root = Path.home() / ".cache/anaxigraph/tmp"
-        temporary_root.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=temporary_root) as temporary:
+        with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             binary = root / "codex"
             binary.write_text("""#!/usr/bin/env python3
@@ -58,6 +65,8 @@ for event in events:
                     lambda: snapshots.append(dict(progress)),
                 )
             self.assertEqual(result["status"], "completed")
+            self.assertEqual(result["model"], "gpt-6.1-sol")
+            self.assertEqual(result["reasoning_effort"], "high")
             self.assertEqual(result["mcp_successes"], 1)
             self.assertEqual(result["mcp_failures"], 1)
             self.assertEqual(result["input_tokens"], 20)
@@ -81,6 +90,18 @@ class FakeWorkflows:
 
 
 class BuildWorkflowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_old_build_effort_cannot_be_relabelled_on_resume(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original = {"model": "gpt-6.1-sol", "reasoning_effort": "xhigh", "milestones": {}}
+            (root / "progress.json").write_text(json.dumps(original))
+            config = SimpleNamespace(repo=root, state=root, dry_run=False)
+            with patch.object(run_build, "connect") as connect:
+                with self.assertRaisesRegex(RuntimeError, "model/effort differs"):
+                    await run_build.main_async(config)
+                connect.assert_not_called()
+            self.assertEqual(json.loads((root / "progress.json").read_text()), original)
+
     async def test_provider_failure_retries_same_model_and_preserves_saved_work(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

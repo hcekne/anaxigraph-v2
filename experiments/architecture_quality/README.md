@@ -34,12 +34,12 @@ guided track's checkout authorization, notification dispatch and report export a
 separate behavioral scenarios. Each has a refactoring milestone followed by a policy extension,
 an independently replaceable provider change, and a shared configuration/schema change
 that keeps public signatures unchanged. Future tasks are disclosed only at their turn.
-Every task uses a new ephemeral coding context with `gpt-6.1-sol`, `xhigh`, the same
+Future tasks use a new ephemeral coding context with `gpt-6.1-sol`, `high`, the same
 per-call timeout (default **none**), the same four opportunities, and no extra repair
 turns. The two arms run concurrently; launch order and blind labels are randomized.
 
 The coordinator runs mapping, Patterns (including architecture and CI scouts), and
-Fresh Eyes before implementation. All stages explicitly select the same model and
+Fresh Eyes before implementation. Analysis has its own explicitly recorded model and
 effort, without fallback upgrades. It freezes actual reviews, baseline identity,
 configuration, model receipts and Fresh Eyes request packets before either arm codes.
 Fresh Eyes runs through AnaxiGraph's tool-free, fresh-context workers; its packets are
@@ -258,5 +258,12 @@ architectural discovery. The run also exposed stale review references, decision-
 and an unavailable `python` command. Future seed instructions now use `python3`, verified by running
 all four generated checks. The frozen run retains all 91 missing-command failures and 20 MCP errors;
 these timing observations do not establish a causal product-performance effect or production CI savings.
+
+The coding default changed to **Sol/high on 30 October**. The cycle above and its frozen receipts
+remain Sol/xhigh. Future runs must freeze new source/configuration identities; their results cannot
+be silently combined with the earlier effort setting. The
+[integration drift benchmark](../drift/README.md) adds a longer provider, state and CI/CD task
+sequence, reusing the coding transport and evidence machinery. Deterministic qualification of that
+harness remains separate from live architectural-effectiveness evidence.
 
 Codex launch and MCP approval settings follow the [official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).

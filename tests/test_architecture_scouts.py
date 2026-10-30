@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import replace
 
 import pytest
 
 from anaxigraph.analysis.architecture import LENSES, architecture_scopes, reconcile_architecture
+from anaxigraph.analysis.charter import CHARTER
 from anaxigraph.analysis.packets import build_request, plan_scopes
 from anaxigraph.analysis.portable import input_identity
 from anaxigraph.analysis.validation import canonical_result, validate_result
@@ -54,6 +56,26 @@ def graph(tmp_path):
 
 def request(graph, lens="boundaries"):
     return build_request(graph, "architecture", ["pkg/a.py", "pkg/b.py"], lens=lens)
+
+
+@pytest.mark.parametrize("kind", ["architecture", "patterns", "pattern-screen", "fresh-eyes"])
+def test_review_requests_share_one_canonical_component_policy_and_identity(graph, kind, tmp_path):
+    options = {"pattern_ids": ["adapter"]} if kind == "patterns" else {}
+    packet = build_request(graph, kind, ["pkg/a.py"], **options)
+    assert packet["packet"]["charter"] == CHARTER
+    assert json.dumps(packet).count(json.dumps(CHARTER)) == 1
+    changed = copy.deepcopy(packet)
+    changed["packet"]["charter"][0]["guidance"] += " Revised ownership obligations."
+    assert input_identity(changed) != input_identity(packet)
+    annotation = build_request(
+        graph, "annotate", ["pkg/a.py"], sources={"pkg/a.py": (tmp_path / "pkg/a.py").read_text()}
+    )
+    assert "charter" not in annotation["packet"]
+    policy = {item["id"]: item["guidance"] for item in CHARTER}
+    assert "API/MCP" in policy["public-surface"] and "discover" in policy["public-surface"]
+    assert "a thousand more feature requests" in policy["change-locality"]
+    assert "unchanged syntax or signatures" in policy["contracts"]
+    assert "authorization" in policy["contracts"] and "resource obligations" in policy["contracts"]
 
 
 def answer(packet, *, finding=True):

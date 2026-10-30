@@ -90,6 +90,8 @@ whether the resulting implementation works.
 - [Architecture and component contracts](docs/architecture.md)
 - [Measured results and known limits](docs/evidence/ci-delivery-qualification.json)
 - [Architectural advice and later-change experiment](experiments/architecture_quality/README.md)
+- [Feature drift through 20 product requests and fresh-agent probes](experiments/feature_drift/README.md)
+- [Integration drift and selective CI benchmark](experiments/drift/README.md)
 - [V2-first usefulness experiments and subagent protocol](experiments/architecture_quality/campaign.md)
 - [Owner-finding replay and inexpensive baselines](experiments/owner_replay/README.md)
 

@@ -33,6 +33,7 @@ DEFAULT_STATE = Path.home() / ".local/state/anaxigraph/experiments/snow-rankings
 TASKS = ("01-foundation", "02-ranking", "03-resilience", "04-maintenance")
 DISABLED = ("memories", "apps", "plugins", "hooks", "multi_agent", "daemon_auto_start")
 LOG_LIMIT = 4_000_000
+MODEL, EFFORT = "gpt-6.1-sol", "high"
 
 
 def now() -> str:
@@ -82,7 +83,7 @@ def command(
     for feature in DISABLED:
         args += ["--disable", feature]
     settings = {
-        "model_reasoning_effort": '"xhigh"',
+        "model_reasoning_effort": json.dumps(EFFORT),
         "approval_policy": '"never"',
         "project_doc_max_bytes": "0",
         "sandbox_workspace_write.network_access": "true",
@@ -115,7 +116,7 @@ def command(
         "--ephemeral",
         "--json",
         "--model",
-        "gpt-6.1-sol",
+        MODEL,
         "--sandbox",
         "workspace-write",
         "--color",
@@ -253,7 +254,14 @@ def coding(
             start_new_session=True,
         )
         progress.update(
-            {"pid": process.pid, "attempt": attempts, "phase": "coding", "status": "running"}
+            {
+                "pid": process.pid,
+                "attempt": attempts,
+                "phase": "coding",
+                "status": "running",
+                "model": MODEL,
+                "reasoning_effort": EFFORT,
+            }
         )
         save()
         process.stdin.write(prompt.encode())
@@ -339,6 +347,8 @@ def coding(
         time.sleep(min(2, max(0, deadline - time.monotonic())))
     return {
         "status": status,
+        "model": MODEL,
+        "reasoning_effort": EFFORT,
         "session_id": session,
         "attempts": attempts,
         **usage,
@@ -362,7 +372,7 @@ def preflight(directory: Path, runtime: Path, minutes: float = 3) -> dict[str, A
         root = Path(temporary)
         (root / "probe.py").write_text("def available():\n    return True\n")
         subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
-        progress = {"task": "mcp-preflight", "model": "gpt-6.1-sol", "reasoning_effort": "xhigh"}
+        progress = {"task": "mcp-preflight", "model": MODEL, "reasoning_effort": EFFORT}
         result = coding(
             root,
             "treatment",
@@ -386,6 +396,8 @@ def preflight(directory: Path, runtime: Path, minutes: float = 3) -> dict[str, A
                     db.backup(saved)
         success = (
             result["status"] == "completed"
+            and result.get("model") == MODEL
+            and result.get("reasoning_effort") == EFFORT
             and result["mcp_successes"] >= 2
             and not result["mcp_failures"]
             and {"task_started", "context_supplied"} <= kinds
@@ -395,8 +407,8 @@ def preflight(directory: Path, runtime: Path, minutes: float = 3) -> dict[str, A
             "status": "passed" if success else "failed",
             "runtime": str(runtime),
             "elapsed_seconds": round(time.monotonic() - started, 2),
-            "model": "gpt-6.1-sol",
-            "reasoning_effort": "xhigh",
+            "model": MODEL,
+            "reasoning_effort": EFFORT,
             "server_events": sorted(kinds),
             "coding": result,
             "basis": "real Codex MCP replies plus independent server-side SQLite evidence",
@@ -542,8 +554,8 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
         "experiment_id": config.experiment_id,
         "assessment_version": config.assessment_version,
         "root": str(root),
-        "model": "gpt-6.1-sol",
-        "reasoning_effort": "xhigh",
+        "model": MODEL,
+        "reasoning_effort": EFFORT,
         "coordinator_pid": os.getpid(),
         "started_at": now(),
         "status": "starting",
@@ -570,8 +582,8 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
                 {
                     "task": task,
                     "starting_revision": revision,
-                    "model": "gpt-6.1-sol",
-                    "reasoning_effort": "xhigh",
+                    "model": MODEL,
+                    "reasoning_effort": EFFORT,
                 },
             )
             result = coding(
@@ -595,6 +607,8 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
                 save,
                 experiment_id=config.experiment_id,
             )
+            if result.get("model") != MODEL or result.get("reasoning_effort") != EFFORT:
+                raise ValueError("Coding receipt model/effort differs from this campaign")
             elapsed = time.monotonic() - started
             trial.record(
                 config.state / "trial.sqlite",
@@ -605,6 +619,8 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
                     key: result.get(key)
                     for key in (
                         "session_id",
+                        "model",
+                        "reasoning_effort",
                         "input_tokens",
                         "output_tokens",
                         "cached_input_tokens",
@@ -613,8 +629,8 @@ def arm(arm_name: str, config: argparse.Namespace) -> dict[str, Any]:
                     )
                 }
                 | {
-                    "model": "gpt-6.1-sol",
-                    "reasoning_effort": "xhigh",
+                    "model": MODEL,
+                    "reasoning_effort": EFFORT,
                     "status": result["status"],
                     "elapsed_seconds": elapsed,
                 },
@@ -753,14 +769,45 @@ def main() -> int:
         )
         return 0
     config.state.mkdir(parents=True, exist_ok=True)
+    for arm_name in ("treatment", "control"):
+        prior = config.state / arm_name / "progress.json"
+        if prior.exists():
+            saved = json.loads(prior.read_text())
+            if saved.get("model") != MODEL or saved.get("reasoning_effort") != EFFORT:
+                raise ValueError("Existing coding progress differs; use a new state directory")
+    manifest = config.state / "manifest.json"
+    expected = {"experiment_id": config.experiment_id, "model": MODEL, "reasoning_effort": EFFORT}
+    if manifest.exists():
+        recorded = json.loads(manifest.read_text())
+        if any(recorded.get(key) != value for key, value in expected.items()):
+            raise ValueError("Existing campaign model/effort differs; use a new state directory")
+    elif (config.state / "trial.sqlite").exists():
+        raise ValueError(
+            "Existing evidence lacks a matching campaign manifest; use a new state directory"
+        )
+    else:
+        atomic(
+            manifest,
+            {
+                "schema_version": 1,
+                "status": "configured",
+                **expected,
+                "tasks": list(TASKS[: config.task_limit]),
+                "runtime_path": str(config.runtime),
+                "coding_minutes_per_task": config.minutes,
+            },
+        )
     if config.preflight_proof:
         proof = json.loads(config.preflight_proof.read_text())
         if not (
             proof.get("status") == "passed"
             and proof.get("runtime") == str(config.runtime)
-            and proof.get("model") == "gpt-6.1-sol"
-            and proof.get("reasoning_effort") == "xhigh"
+            and proof.get("model") == MODEL
+            and proof.get("reasoning_effort") == EFFORT
             and {"task_started", "context_supplied"} <= set(proof.get("server_events", []))
+            and proof.get("coding", {}).get("model") == MODEL
+            and proof.get("coding", {}).get("reasoning_effort") == EFFORT
+            and proof.get("coding", {}).get("status") == "completed"
             and proof.get("coding", {}).get("mcp_successes", 0) >= 2
             and proof.get("coding", {}).get("mcp_failures") == 0
         ):
@@ -775,10 +822,7 @@ def main() -> int:
         jobs = {pool.submit(arm, name, config): name for name in ("treatment", "control")}
         results = {jobs[job]: job.result() for job in concurrent.futures.as_completed(jobs)}
     atomic(config.state / "summary.json", {"finished_at": now(), "arms": results})
-    manifest = config.state / "manifest.json"
-    comparison = trial.compare(
-        config.state / "trial.sqlite", manifest if manifest.is_file() else HERE / "manifest.json"
-    )
+    comparison = trial.compare(config.state / "trial.sqlite", manifest)
     atomic(config.state / "comparison.json", comparison)
     print(json.dumps({name: value["status"] for name, value in results.items()}))
     return int(any(value["status"] != "completed" for value in results.values()))

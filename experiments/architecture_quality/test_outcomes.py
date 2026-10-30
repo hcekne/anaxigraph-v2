@@ -320,7 +320,7 @@ def test_commands_pin_same_resource_settings_and_new_contexts():
     for runtime in (None, Path("/runtime")):
         command = run.command(Path("/repo"), runtime)
         assert command[command.index("--model") + 1] == "gpt-6.1-sol"
-        assert 'model_reasoning_effort="xhigh"' in command
+        assert 'model_reasoning_effort="high"' in command
         assert "--ephemeral" in command and "--ignore-rules" in command
         assert "mcp_servers={}" in command
         assert any("mcp_servers.anaxigraph.command=" in argument for argument in command) == (

@@ -5,8 +5,9 @@ the hundredth change, not this one.
 
 **Rooms and interfaces.** Think of the system as a large house. Each room (component) owns its
 behavior and data behind a small, stable interface. Work inside one room should only require
-testing that room plus the contract tests of its interface. If the interfaces stay the same,
-the rest of the house keeps working. Plumbing that genuinely runs through several rooms
+testing that room plus the contract tests of its interface. The agreement includes behavior,
+authorization, errors, state, side effects and shared resource obligations; unchanged signatures
+or passing substitutes alone do not prove compatibility. Plumbing that genuinely runs through several rooms
 (shared infrastructure) is allowed, but keep it small, explicit and covered by its own tests.
 
 **Uniform plug-ins for open-ended families.** When something comes in kinds that will keep

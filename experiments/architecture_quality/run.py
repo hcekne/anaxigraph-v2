@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import ast
 import concurrent.futures
+import copy
 import hashlib
 import json
 import os
@@ -32,7 +33,8 @@ except ImportError:
     from evaluate import evaluate
     from scenarios import SCENARIOS, brief, seed, task
 
-MODEL, EFFORT = "gpt-6.1-sol", "xhigh"
+MODEL, EFFORT = "gpt-6.1-sol", "high"
+ANALYSIS_EFFORT = "xhigh"
 STAGES = (
     "annotate",
     "pattern-screen",
@@ -196,12 +198,14 @@ def ledger(root: Path) -> list[dict]:
         ]
 
 
-def command(root: Path, runtime: Path | None, agent="codex") -> list[str]:
+def command(
+    root: Path, runtime: Path | None, agent="codex", *, model=MODEL, effort=EFFORT
+) -> list[str]:
     result = [agent]
     for feature in DISABLED:
         result += ["--disable", feature]
     settings = {
-        "model_reasoning_effort": json.dumps(EFFORT),
+        "model_reasoning_effort": json.dumps(effort),
         "approval_policy": '"never"',
         "project_doc_max_bytes": "0",
         "mcp_servers": "{}",
@@ -229,7 +233,7 @@ def command(root: Path, runtime: Path | None, agent="codex") -> list[str]:
         "--skip-git-repo-check",
         "--json",
         "--model",
-        MODEL,
+        model,
         "--sandbox",
         "workspace-write",
         "--color",
@@ -408,7 +412,13 @@ def agent_call(root: Path, directory: Path, runtime: Path | None, prompt: str, c
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     started, started_at, status = time.monotonic(), now(), "failed"
     process = subprocess.Popen(
-        command(root, runtime, config.agent),
+        command(
+            root,
+            runtime,
+            config.agent,
+            model=getattr(config, "coding_model", MODEL),
+            effort=getattr(config, "coding_effort", EFFORT),
+        ),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -456,9 +466,9 @@ def agent_call(root: Path, directory: Path, runtime: Path | None, prompt: str, c
         "usage_basis": "Codex turn.completed usage; null if absent",
         "cost_usd": None,
         "cost_basis": "unknown; no billing receipt supplied",
-        "model": MODEL,
+        "model": getattr(config, "coding_model", MODEL),
         "control_isolation": control_violations(root, events) if runtime is None else None,
-        "reasoning_effort": EFFORT,
+        "reasoning_effort": getattr(config, "coding_effort", EFFORT),
         "call_timeout": config.call_timeout,
         "final_message": "\n".join(
             event["item"].get("text", "")
@@ -541,7 +551,7 @@ def workflow_configuration(config):
             stage: {
                 "provider": "codex",
                 "model": MODEL,
-                "reasoning_effort": EFFORT,
+                "reasoning_effort": ANALYSIS_EFFORT,
                 "fallbacks": [],
             }
             for stage in STAGES
@@ -747,7 +757,7 @@ def prompt_for(name, stage, advice, *, charter=None):
     return (
         "You are a fresh implementation agent for one task. Do not commit, push, contact external "
         "services, read coordinator state outside this repository, or inspect hidden evaluations. "
-        "Use stdlib only. Both arms use gpt-6.1-sol/xhigh, a fresh context and the same configured "
+        "Use stdlib only. Both arms use gpt-6.1-sol/high, a fresh context and the same configured "
         "per-call timeout; there is no overall deadline or extra repair budget. Preserve earlier "
         "task behavior. Run your checks and report actual results and limitations.\n\n"
         + QUALITY_GOAL
@@ -791,7 +801,11 @@ def freeze_control_review(
             + "\nMilestone:\n"
             + scenario_task(name, 0)
         )
-        receipt = agent_call(root, destination / f"control-review-{index}", None, prompt, config)
+        review_config = copy.copy(config)
+        review_config.coding_effort = ANALYSIS_EFFORT
+        receipt = agent_call(
+            root, destination / f"control-review-{index}", None, prompt, review_config
+        )
         if receipt["status"] != "completed" or snapshot(root) != before:
             raise RuntimeError("Read-only active control review failed or changed source")
         if not receipt["control_isolation"]["passed"]:

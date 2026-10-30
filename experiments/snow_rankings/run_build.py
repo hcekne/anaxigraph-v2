@@ -25,7 +25,7 @@ import trial
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-MODEL, EFFORT = "gpt-6.1-sol", "xhigh"
+MODEL, EFFORT = "gpt-6.1-sol", "high"
 KINDS = ("mapping", "patterns", "fresh-eyes")
 
 
@@ -142,6 +142,8 @@ def coding(root, directory, mcp_url, prompt, progress, save) -> dict[str, Any]:
         process.stdout.close()
     return {
         "status": status,
+        "model": MODEL,
+        "reasoning_effort": EFFORT,
         "session_id": session,
         **usage,
         "cost_usd": None,
@@ -305,6 +307,8 @@ async def preflight(config, client) -> dict[str, Any]:
     kinds = {row["kind"] for row in ledger_rows(config.repo, after=before)}
     passed = (
         result["status"] == "completed"
+        and result.get("model") == MODEL
+        and result.get("reasoning_effort") == EFFORT
         and result["mcp_failures"] == 0
         and {"scan", "prepare_change", "assess_plan"} <= result["mcp_tools"].keys()
         and {"task_started", "context_supplied"} <= kinds
@@ -453,6 +457,8 @@ async def coder(config, entry, save, *, review=False):
 
 
 def record_coding(config, entry, result, *, review=False):
+    if result.get("model") != MODEL or result.get("reasoning_effort") != EFFORT:
+        raise ValueError("Coding receipt model/effort differs from this build")
     trial.record(
         config.state / "trial.sqlite",
         "treatment",
@@ -652,6 +658,10 @@ async def main_async(config):
         }
     )
 
+    if progress.get("model") != MODEL or progress.get("reasoning_effort") != EFFORT:
+        lock.close()
+        raise RuntimeError("Existing build model/effort differs; use a new state directory")
+
     def save():
         progress["updated_at"] = run_pair.now()
         run_pair.atomic(path, progress)
@@ -669,6 +679,13 @@ async def main_async(config):
                     and proof.get("mcp_url") == config.mcp_url
                     and proof.get("model") == MODEL
                     and proof.get("reasoning_effort") == EFFORT
+                    and proof.get("coding", {}).get("model") == MODEL
+                    and proof.get("coding", {}).get("reasoning_effort") == EFFORT
+                    and proof.get("coding", {}).get("status") == "completed"
+                    and proof.get("coding", {}).get("mcp_failures") == 0
+                    and {"scan", "prepare_change", "assess_plan"}
+                    <= proof.get("coding", {}).get("mcp_tools", {}).keys()
+                    and {"task_started", "context_supplied"} <= set(proof.get("server_events", []))
                 ):
                     raise RuntimeError("Preflight proof does not match this HTTP build")
             else:

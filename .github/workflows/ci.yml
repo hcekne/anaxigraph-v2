@@ -38,6 +38,18 @@ jobs:
           uv run python scripts/quality.py
           node --check src/anaxigraph/interfaces/assets/app.js
           node --check src/anaxigraph/interfaces/assets/ci.js
+      - name: Qualify sequential drift behavior and verification selection
+        if: matrix.python == '3.12'
+        run: |
+          uv run python -m experiments.drift.campaign qualify \
+            --state "${RUNNER_TEMP}/drift-qualification"
+      - name: Retain drift qualification evidence
+        if: always() && matrix.python == '3.12'
+        uses: actions/upload-artifact@v6
+        with:
+          name: drift-qualification
+          path: ${{ runner.temp }}/drift-qualification/qualification.json
+          if-no-files-found: warn
       - name: Build the standalone V2 package
         run: uv build
       - name: Exercise the installed wheel through uvx

@@ -63,7 +63,7 @@ def delivery_packet(graph: Graph, context: dict) -> tuple[dict, dict]:
             "reusable workflows, scripts and declared inputs. Optimize independent verification "
             "and deployment speed while retaining security, isolation, release/correctness gates "
             "and required status reporting on skipped paths. Each improvement supplies a fast path, "
-            "widening triggers (contracts, shared state/config, lockfiles/toolchains, unknown impact), "
+            "widening triggers (behavior/auth/schema changes, runtime registrations/events, shared state/config, lockfiles/toolchains, unknown impact), "
             "cache keys/invalidation, safe reuse, parallelism/cancellation, consumer/deployment checks "
             "and next actions with evidence for every named pipeline. Ordering, stable signatures "
             "and bounded graphs do not prove independence. Compare existing behavior; never invent "
@@ -75,7 +75,7 @@ def delivery_packet(graph: Graph, context: dict) -> tuple[dict, dict]:
             "External actions/dynamic expressions remain opaque without supplied evidence. "
             "Recommendation IDs must equal exactly IDs assessed finding; no quota. Use explicit "
             "unknown for unsupported details. Priority: 1 optional, 2 material, 3 highly important. "
-            "Advice/proposed checks are unexecuted and do not authorize skipping CI."
+            "A private provider change should not test/deploy unrelated providers when declared inputs and behavioral contract checks justify isolation; directory names alone cannot. Advice/proposed checks are unexecuted and do not authorize skipping CI."
         ),
         "output_limits": {"recommendations": 3, "strategy_items": 12, "item_characters": 300},
     }

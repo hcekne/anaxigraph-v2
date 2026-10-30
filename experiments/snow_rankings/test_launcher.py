@@ -27,7 +27,7 @@ class LauncherTests(unittest.TestCase):
         for arm in ("treatment", "control"):
             command = run_pair.command(root, arm, directory, runtime)
             self.assertEqual(command[command.index("--model") + 1], "gpt-6.1-sol")
-            self.assertIn('model_reasoning_effort="xhigh"', command)
+            self.assertIn('model_reasoning_effort="high"', command)
             self.assertIn("--ignore-user-config", command)
             self.assertIn("--ignore-rules", command)
             self.assertIn("--ephemeral", command)
@@ -39,6 +39,51 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(scoped_approval in command, arm == "treatment")
         command = run_pair.command(root, "treatment", directory, runtime, experiment_id="new-trial")
         self.assertIn('mcp_servers.anaxigraph.env.ANAXIGRAPH_EXPERIMENT_ID="new-trial"', command)
+
+    def test_reused_preflight_rejects_old_or_mismatched_coding_effort(self):
+        for outer, inner in (("xhigh", "xhigh"), ("high", "xhigh")):
+            with self.subTest(outer=outer, inner=inner), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                proof = root / "proof.json"
+                proof.write_text(
+                    json.dumps(
+                        {
+                            "status": "passed",
+                            "runtime": str(Path("/bin/true").resolve()),
+                            "model": "gpt-6.1-sol",
+                            "reasoning_effort": outer,
+                            "server_events": ["task_started", "context_supplied"],
+                            "coding": {
+                                "status": "completed",
+                                "model": "gpt-6.1-sol",
+                                "reasoning_effort": inner,
+                                "mcp_successes": 2,
+                                "mcp_failures": 0,
+                            },
+                        }
+                    )
+                )
+                with (
+                    patch.object(
+                        sys,
+                        "argv",
+                        [
+                            "run_pair",
+                            "--state",
+                            str(root / "state"),
+                            "--runtime",
+                            "/bin/true",
+                            "--preflight-proof",
+                            str(proof),
+                            "--preflight-only",
+                        ],
+                    ),
+                    patch.object(run_pair.shutil, "which", return_value="codex"),
+                    patch.object(run_pair, "preflight") as launch,
+                ):
+                    with self.assertRaisesRegex(ValueError, "Preflight proof"):
+                        run_pair.main()
+                    launch.assert_not_called()
 
     def test_mcp_delivery_checks_errors_instead_of_completed_status(self):
         for reply, error, expected in (
@@ -220,9 +265,15 @@ print(json.dumps({'type':'turn.completed','usage':{'input_tokens':10,'output_tok
                         "status": "passed",
                         "runtime": str(Path("/bin/true").resolve()),
                         "model": "gpt-6.1-sol",
-                        "reasoning_effort": "xhigh",
+                        "reasoning_effort": "high",
                         "server_events": ["task_started", "context_supplied"],
-                        "coding": {"mcp_successes": 2, "mcp_failures": 0},
+                        "coding": {
+                            "model": "gpt-6.1-sol",
+                            "reasoning_effort": "high",
+                            "status": "completed",
+                            "mcp_successes": 2,
+                            "mcp_failures": 0,
+                        },
                     }
                 )
             )
@@ -258,6 +309,11 @@ print(json.dumps({'type':'turn.completed','usage':{'input_tokens':10,'output_tok
                 self.assertEqual(state["status"], "finished_with_failures")
             comparison = json.loads((root / "state" / "comparison.json").read_text())
             self.assertIsNone(comparison["arms"]["control"]["coding"]["cost_usd"]["reported_sum"])
+            self.assertEqual(comparison["requested_reasoning_effort"], "high")
+            self.assertEqual(comparison["experiment_id"], "state")
+            self.assertEqual(
+                json.loads((root / "state/manifest.json").read_text())["reasoning_effort"], "high"
+            )
 
 
 if __name__ == "__main__":

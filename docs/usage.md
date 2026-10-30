@@ -107,6 +107,12 @@ chosen boundaries and contracts. A separate guided track checks prescribed compo
 Ordinary coding and a generic architecture-review control are supported. Tokens, latency and
 additional analysis work remain separate from quality.
 
+For longer integration and CI/CD histories, use the
+[integration drift benchmark](../experiments/drift/README.md). It carries earlier code and state
+into later tasks, separates safety from work avoided, and includes faults that an unsafe selector
+must catch. Future coding launches default to **GPT-6.1 Sol / high**. Product analysis profiles and
+previously frozen experiment results retain their separately recorded settings.
+
 `prepare_change` needs a structural scan, not a full model mapping. Its three owner candidates
 combine source text, paths/symbols and current saved understanding, with matching evidence.
 Historical associations show files that changed together before the task baseline; inspect them

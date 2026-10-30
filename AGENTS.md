@@ -4,6 +4,10 @@ This standalone replacement targets the existing `anaxigraph` PyPI project at 1.
 checkout is `~/repos/anaxigraph`; do not import its runtime or change its services for V2 work.
 Build useful capabilities selectively rather than restoring every legacy feature.
 
+Use GPT-6.1 Sol with high reasoning effort as the default coding agent. Record explicit overrides
+and the actual settings when available. This coding preference does not replace the product's
+separate mapping, screening and architectural-review model profiles or historical trial records.
+
 Commit and push directly to `main` when finishing authorized work. Keep slow checks in CI,
 not pre-push. Exercise file-writing automation end to end. Distinguish local checks, CI,
 live model results, deployment and publication. Do not publish a release unless requested.
@@ -27,6 +31,9 @@ Prefer cohesive components, small public behavioral contracts and independent te
 separate-repository packages can compose in process. Functions and modular monoliths are valid;
 do not manufacture abstractions or services. Shared data/configuration can widen impact even
 with unchanged signatures. See [component principles](docs/component-architecture-principles.md).
+Ask whether another thousand similar requests would preserve those boundaries. Provider additions
+should use capability contracts, with private API/MCP details and focused executable verification;
+shared contracts, authorization, state and build inputs must widen the affected scope when needed.
 
 Fresh Eyes receives behavior only, without source identities or topology, and retains three
 alternatives. Default Patterns screen cheaply, review selected opportunities, and include

@@ -12,7 +12,7 @@ from anaxigraph.contracts import Graph, Node
 
 from .architecture_guidance import brief_proposals as architecture_proposals
 from .architecture_guidance import coverage as architecture_coverage
-from .charter import boundary_findings, module_facts
+from .charter import CHARTER, boundary_findings, module_facts
 
 
 def module_for(graph: Graph, value: str) -> Node | None:
@@ -215,12 +215,13 @@ def _review_proposals(
 def _coding_steps(
     graph: Graph, candidates: list[Node], matches: list[dict], tests: list[str], impacted: set[str]
 ) -> list[dict]:
+    principles = {item["id"]: item["guidance"] for item in CHARTER}
     if not candidates:
         return [
             {
                 "kind": "placement",
                 "basis": "insufficient-evidence",
-                "suggestion": "Inspect entry points and existing responsibilities before adding a module.",
+                "suggestion": principles["ownership"],
                 "evidence": [],
             }
         ]
@@ -233,13 +234,13 @@ def _coding_steps(
             "kind": "placement-and-reuse",
             "basis": "candidate-owner-and-source-observations",
             "owner": owner.id,
-            "suggestion": f"Inspect {owner.path} and {match.get('matched_symbol', reusable.name)} for reuse. Preserve contracts; verify stale obligations. Keep implementation behind the public interface.",
+            "suggestion": f"Inspect {owner.path} and {match.get('matched_symbol', reusable.name)} for reuse; verify stale obligations. {principles['ownership']} {principles['change-locality']}",
             "evidence": match.get("evidence", [{"path": owner.path, "line": reusable.line}])[:1],
         },
         {
             "kind": "compatibility-and-tests",
             "basis": "heuristic-backed-by-observed-consumers",
-            "suggestion": "Start with local behavior and contract checks. Check consumers for changed behavior, contracts or shared inputs. Keep required project checks; source links are not complete CI coverage.",
+            "suggestion": principles["component-tests"] + " " + principles["effects"],
             "consumers": sorted(impacted - {node.path for node in candidates} - set(tests))[:3],
             "tests": tests[:4],
             "component_tests": facts["observed_test_paths"][:4],
@@ -259,8 +260,6 @@ def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
     for contract in brief["contracts"]:
         contract["statement"] = _short(contract["statement"], 180)
         contract["statement_truncated"] |= contract["statement"].endswith("...")
-    for step in brief["implementation_advice"]["steps"]:
-        step["suggestion"] = _short(step["suggestion"], 180)
     brief["affected_paths"] = brief["affected_paths"][:3]
     brief["tests"] = brief["tests"][:3]
     return brief

@@ -89,6 +89,39 @@ def test_shared_roof_expands_only_the_requested_cadence_and_always(policy, files
     assert any("Shared input" in reason for reason in result["expansion_reasons"])
 
 
+@pytest.mark.parametrize(
+    "shared",
+    ["shared/auth.py", "shared/schema.json", "shared/registry.py", "shared/events.json", "uv.lock"],
+)
+def test_declared_provider_isolation_keeps_tests_builds_and_deployments_local(shared):
+    policy = {
+        "version": 1,
+        "targets": [
+            target(f"{provider}-{kind}", [f"providers/{provider}/**"], kind=kind)
+            for provider in ("email", "storage")
+            for kind in ("test", "build", "deploy")
+        ],
+        "shared_inputs": ["shared/**", "uv.lock"],
+    }
+    files = {
+        "providers/email/private.py": "private",
+        "providers/storage/private.py": "other",
+        shared: "shared",
+    }
+    local = plan_ci(policy, ["providers/email/private.py"], files)
+    assert set(selected(local)) == {"email-test", "email-build", "email-deploy"}
+    assert {item["id"] for item in local["excluded_targets"]} == {
+        "storage-test",
+        "storage-build",
+        "storage-deploy",
+    }
+    broad = plan_ci(policy, [shared], files)
+    assert set(selected(broad)) == {item["id"] for item in policy["targets"]}
+    assert broad["reevaluation_required"]
+    assert any(shared in reason for reason in broad["expansion_reasons"])
+    assert "not observed coverage" in broad["assurance"]
+
+
 def test_shared_change_without_any_applicable_check_remains_incomplete():
     policy = {
         "version": 1,

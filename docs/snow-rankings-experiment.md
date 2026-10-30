@@ -1,5 +1,9 @@
 # Snow Rankings controlled development experiment
 
+This protocol records the original Sol/xhigh experiment. From 30 October 2026, future coding
+launches default to Sol/high and require a separately identified run with matching recorded
+settings. The original manifest and results remain unchanged.
+
 The experiment tests whether AnaxiGraph helps an agent deliver correct software with clearer
 responsibilities and interfaces, and makes a subsequent change easier. Snow Rankings is a useful
 product in its own right; both implementations should pursue the same good result.

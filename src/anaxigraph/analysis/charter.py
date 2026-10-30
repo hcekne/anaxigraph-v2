@@ -15,17 +15,17 @@ CHARTER = (
     {
         "id": "ownership",
         "principle": "Give each responsibility one clear owner.",
-        "guidance": "Reuse the existing owner; extract a boundary when responsibilities change independently.",
+        "guidance": "Who owns this behavior and its consumer obligations? Reuse that owner; extract only when responsibilities need independent change.",
     },
     {
         "id": "public-surface",
         "principle": "Keep public interfaces small and explicit.",
-        "guidance": "Expose capabilities callers need; keep implementation helpers private.",
+        "guidance": "Expose operations callers need. For API/MCP providers, can clients discover supported capabilities and their behavioral contracts? Keep provider details and helpers private.",
     },
     {
         "id": "contracts",
         "principle": "Preserve behavior at component contracts.",
-        "guidance": "Publish inputs, outputs, failures, side effects and data/resource obligations; unchanged signatures alone do not establish compatibility.",
+        "guidance": "Publish inputs, outputs, failures, authorization, side effects and state/resource obligations; unchanged syntax or signatures alone do not establish behavioral compatibility.",
     },
     {
         "id": "encapsulation",
@@ -40,17 +40,17 @@ CHARTER = (
     {
         "id": "effects",
         "principle": "Keep side effects at explicit edges.",
-        "guidance": "Separate decisions from file, network and persistence operations when that enables local testing.",
+        "guidance": "Which runtime registrations, events, shared state/resources or configuration connect otherwise separate code? Contain file, network and persistence effects behind explicit boundaries for local testing.",
     },
     {
         "id": "component-tests",
         "principle": "Make components independently buildable and testable.",
-        "guidance": "Declare component CI inputs, local behavior and contract checks. Run independent checks in parallel; widen for changed contracts, shared infrastructure or unknown impact. Review CI scope when architecture changes.",
+        "guidance": "Can local checks install only this component's test dependencies? Declare build/test inputs and consumer contract checks; independent verification need not mean independent deployment. Keep required project checks; widen for behavioral/auth/schema/runtime/build changes or unknown impact.",
     },
     {
         "id": "change-locality",
         "principle": "Make components independent units of change.",
-        "guidance": "Let agents develop and verify cohesive components independently behind stable contracts; coordinate contract and shared-resource changes.",
+        "guidance": "Would a thousand more feature requests stay local behind stable capability contracts? Let agents verify cohesive components independently; coordinate contract and shared-resource changes.",
     },
     {
         "id": "simplicity",

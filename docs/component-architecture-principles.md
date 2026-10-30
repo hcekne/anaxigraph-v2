@@ -20,7 +20,7 @@ Neither review nor planning removes project CI checks or executes them.
 
 ## The house story
 
-Imagine a house with twenty rooms. You replace the kitchen fan so cooking produces less smoke.
+Imagine a house with 110 rooms. You replace the kitchen fan so cooking produces less smoke.
 You check the fan and the kitchen's behavior. If its electrical and ventilation requirements remain
 compatible, you should not need to redecorate the bedrooms or inspect every appliance in the house
 before using it. Your change belongs to the kitchen, and its verification should largely belong
@@ -104,6 +104,50 @@ These preferences guide judgment. They are not a quota for new packages, abstrac
 Fresh Eyes receives the generic preferences alongside behavior-only requirements, never the
 current component layout or this example's topology. It should still compare materially different
 ways to satisfy the requirements.
+
+## Integrations: common capabilities, private providers
+
+An application with many integrations should add a provider through a small published agreement.
+The host needs to discover available capabilities, understand their inputs and results, invoke an
+authorized capability and handle its documented failures. Each provider owns its implementation.
+Descriptions can include schemas, compatibility versions, required permissions, side effects and
+retry or cancellation guarantees. Discovery must agree with the behavior actually delivered.
+Typed capability payloads and explicit unsupported-operation responses keep a common invocation
+envelope from turning into an unchecked dictionary or a growing switch on provider names.
+
+API adapters and MCP adapters can share host-facing capability conventions while retaining their
+different transport and lifecycle requirements. A common transport helper is justified by shared
+behavior; it should not absorb every provider's business rules. An ordinary new provider should
+not require edits throughout orchestration, authorization, unrelated providers and application UI.
+Declarative registration and contract-level composition are useful when they remove that recurring
+work. No particular class hierarchy, plugin framework or network service is mandatory.
+
+Test the proposed independence by running a provider's checks without installing unrelated
+providers or bootstrapping the whole application's database. Add consumer checks for the actual
+host agreement, and verify important substitutes against the real adapter contract. A provider
+that passes only when every other implementation is importable has an environmental dependency
+even if its public method signature looks isolated.
+
+Packaging still determines deployment scope. A provider shipped inside one application image may
+have focused tests while requiring that application's image to be rebuilt and released. Independent
+provider deployment requires a real artifact/runtime boundary, compatible host contracts and
+release evidence. Choose that extra boundary when its maintenance or delivery benefits justify it.
+One million integrations is a design-pressure question, not a reason to create one million services.
+
+Use a few concrete questions at the relevant decision, rather than repeating a long checklist:
+
+- Who owns this capability, and can a new provider fit without changing its consumers?
+- What does the public contract promise about errors, authorization, state and side effects?
+- If another thousand similar requests arrived, which shared files or checks would keep growing?
+- Can this component be installed and verified with unrelated implementations unavailable?
+- Which changed inputs justify the selected checks, and what uncertainty requires a broader scope?
+- Which exact artifact was verified, which consumers need compatibility checks, and how is recovery
+  handled if this release fails?
+
+The [integration drift experiment](../experiments/drift/README.md) exercises these claims over a
+sequence of changes. Executable behavioral checks decide correctness; review of actual boundaries
+and subsequent changes decides whether the architecture improved. Naming a component or claiming
+compatibility does not earn that conclusion.
 
 ## The component view
 

@@ -11,10 +11,13 @@ brief and clean seed commit `901251e`. Its private repository is `hcekne/snow-ra
 earlier applications and both experiment records remain preserved. This is one new tool-assisted
 build, not a matched causal comparison with the earlier timed control.
 
-`run_build.py` uses GPT-6.1-Sol with explicit xhigh reasoning and has **no development deadline**.
+Future `run_build.py` coding launches use GPT-6.1-Sol with explicit **high** reasoning and have
+**no development deadline**. The coding default changed on 30 October; earlier xhigh receipts
+remain historical evidence and cannot be resumed under a different setting.
 AnaxiGraph runs independently as `anaxigraph-snow-rankings-v2.service` at
-`http://127.0.0.1:18782/mcp`. Its actual analysis settings explicitly select the same model and
-reasoning, with `timeout_seconds: null`. The build first verifies real authorized MCP calls and
+`http://127.0.0.1:18782/mcp`. Its analysis settings are independent of the coding default; the
+previously configured Sol/xhigh profile and `timeout_seconds: null` are not replaced by this
+coding preference. The build first verifies real authorized MCP calls and
 independent server-side effects; successful attachment alone is insufficient.
 
 ```sh
@@ -39,6 +42,10 @@ Completed analyses are explicitly checked; a launched or interrupted workflow is
 Structural coverage is currently Python/PYI; frontend JavaScript is fingerprinted but not parsed.
 
 ## Historical matched pair
+
+This section and the committed preregistration describe the original Sol/xhigh pair. Future
+`run_pair.py` launches use Sol/high and write their configured settings into a fresh state-local
+manifest; a new run must not overwrite the original experiment's evidence.
 
 Copy `brief.md`, `api-contract.md`, `seed.json` and `tasks/` into the shared initial commit. Both
 coding agents receive that same content and use GPT-6.1-Sol with xhigh reasoning. Only the treatment

@@ -6,6 +6,7 @@ import copy
 import json
 from dataclasses import replace
 
+from anaxigraph.analysis.charter import CHARTER
 from anaxigraph.analysis.guidance import prepare
 from anaxigraph.contracts import Edge, Graph, Node, Snapshot
 
@@ -215,6 +216,17 @@ def test_large_saved_descriptions_produce_a_bounded_progressive_brief():
     assert len(json.dumps(brief, ensure_ascii=False, indent=2).encode()) <= 7000
     assert brief["contract_overflow"] > 0
     assert brief["task_truncated"]
+    principles = {item["id"]: item["guidance"] for item in CHARTER}
+    steps = {item["kind"]: item for item in brief["implementation_advice"]["steps"]}
+    placement = steps["placement-and-reuse"]["suggestion"]
+    checks = steps["compatibility-and-tests"]["suggestion"]
+    assert principles["ownership"] in placement
+    assert principles["change-locality"] in placement
+    assert principles["component-tests"] in checks
+    assert principles["effects"] in checks
+    assert "independent deployment" in checks and "required project checks" in checks
+    assert "auth/schema/runtime/build" in checks and "runtime registrations" in checks
+    assert "principles" not in brief["implementation_advice"]
 
 
 def test_executable_owners_are_preferred_to_test_matches():
