@@ -10,11 +10,14 @@ choices, then give their findings to the coding agent as concrete work.
 1. **Scan** the exact checkout. A structural scan uses no model calls. If current semantic
    understanding is missing, run Mapping; compatible unchanged understanding is reused.
 2. **Prepare** a substantial task with `prepare_change`. Keep its baseline and task identity.
-   The compact reply names likely owners, contracts, test links and relevant saved recommendations.
+   The reply opens with a `design_brief`: questions to answer before planning and any closed
+   families near the task (see [component principles](component-architecture-principles.md)).
+   It then names likely owners, contracts, test links and relevant saved recommendations.
    Use `inspect` to expand a module or saved review; `inspect("charter")` returns the general principles.
 3. **Assess the plan** before a substantial edit. `assess_plan` continues the prepared task even
    when its description is reworded. Adopt, defer or reject relevant material architecture findings
-   with a reason. An accepted recommendation is a decision to do work, not evidence that it is done.
+   with a reason, including extension-point findings for plans that add a family member by
+   editing its registrar. An accepted recommendation is a decision to do work, not evidence that it is done.
 4. **Implement and check** the change. Prefer local behavior and public-contract tests; include
    consumers when contracts, behavior, shared resources or configuration can affect them. Keep the
    project's required checks.

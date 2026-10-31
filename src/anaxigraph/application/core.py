@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from anaxigraph import __version__
+from anaxigraph.analysis import extension
 from anaxigraph.analysis.behavior import annotation_behavior_problems
 from anaxigraph.analysis.changes import change_review, changed_paths
 from anaxigraph.analysis.charter import CHARTER, module_facts
@@ -31,8 +32,43 @@ from anaxigraph.contracts import Graph, Node
 from anaxigraph.evidence import Evidence
 from anaxigraph.indexing import IndexSession
 from anaxigraph.indexing.history import capture_history
+from anaxigraph.indexing.python import is_test
 from anaxigraph.storage import Store
 from anaxigraph.workflows.engine import WorkflowRunner
+
+
+def _extension_review(graph: Graph, previous: Graph | None) -> dict[str, Any]:
+    before = previous.snapshot.files if previous else {}
+    changed = set(changed_paths(graph, previous)) & set(graph.snapshot.files)
+    added = {path for path in changed if path not in before}
+    findings = extension.change_findings(graph, added, changed - added)
+    production = {path for path in changed if not is_test(path)}
+    return {
+        "status": "concern" if findings else "no_closed_family_growth",
+        "findings": findings,
+        "change_check_reach": extension.check_reach(graph, production),
+        "note": "Members added while editing a family's registrars; record why if the family "
+        "stays closed. Import reach is an over-approximation, not a CI selection.",
+    }
+
+
+def _plan_findings(graph: Graph, brief: dict, files: list[str]) -> tuple[list, list]:
+    """Closed-family decisions, then one reuse prompt for new modules outside any family."""
+    added = {path for path in files if path not in graph.snapshot.files}
+    closed = extension.change_findings(graph, added, set(files) - added)
+    joining = {path for item in closed for path in item["adding"]}
+    siblings = sorted(path for path in added - joining if not is_test(path))
+    existing = sorted(node["path"] for node in brief["likely_owners"])
+    if not siblings or not existing:
+        return closed, []
+    return closed, [
+        {
+            "paths": siblings,
+            "kind": "reuse-opportunity",
+            "message": "Compare existing responsibility owners before adding these modules.",
+            "existing": existing,
+        }
+    ]
 
 
 def _record_view(identity, kind, name, data, snapshot=None) -> dict:
@@ -312,11 +348,11 @@ class Application:
                 + component_architecture.owner_reviews(self, graph, owner_ids)
             }.values()
         )
-        result = prepare(
+        brief = extension.design_brief(graph, matched_paths)
+        result = {"design_brief": brief} | prepare(
             graph, matches, task, reviews=review_rows, delivery_advice=delivery.advice(self, graph)
-        ) | {
-            "baseline_id": pinned,
-        }
+        )
+        result["baseline_id"] = pinned
         baseline = (
             graph if pinned == graph.snapshot.id else self.store.load_graph(str(self.root), pinned)
         )
@@ -348,19 +384,8 @@ class Application:
         ):
             raise ValueError("Plan files must be repository-relative paths")
         brief = self.prepare_change(task, continue_task=True)
-        existing = {node["path"] for node in brief["likely_owners"]}
-        findings = []
-        for path in files:
-            if path not in self._current().snapshot.files and existing:
-                findings.append(
-                    {
-                        "path": path,
-                        "kind": "reuse-opportunity",
-                        "message": "Compare existing responsibility owners before adding a sibling module.",
-                        "existing": sorted(existing),
-                    }
-                )
-        architecture = component_architecture.assess(self, brief, files, decisions)
+        closed, findings = _plan_findings(self._current(), brief, files)
+        architecture = component_architecture.assess(self, brief, files, decisions, closed)
         return {
             "snapshot_id": brief["snapshot_id"],
             "files": files,
@@ -404,6 +429,7 @@ class Application:
         }
 
         result["architecture"] = component_architecture.followthrough(self, selected)
+        result["extension_points"] = _extension_review(graph, previous)
         result["historical_associations"] = self._history_advice(
             graph,
             set(changed_paths(graph, previous)),

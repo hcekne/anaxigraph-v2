@@ -53,6 +53,11 @@ CHARTER = (
         "guidance": "Would a thousand more feature requests stay local behind stable capability contracts? Let agents verify cohesive components independently; coordinate contract and shared-resource changes.",
     },
     {
+        "id": "extension-points",
+        "principle": "Let open-ended families grow by adding files, not by editing shared ones.",
+        "guidance": "When integrations, providers or channels keep multiplying, members implement one contract and a loader discovers them; no composition root, registry or contract test lists members by hand. CI then maps each member to its own tests plus the contract tests.",
+    },
+    {
         "id": "simplicity",
         "principle": "Use the simplest design that preserves the boundaries.",
         "guidance": "Use cohesive packages with small agent contexts; versioned libraries can live in separate repositories and run in process. Services need a deployment, isolation or scaling benefit.",
@@ -142,6 +147,12 @@ def _relations(graph: Graph, modules: dict[str, Node]):
                 "basis": target.data.get("public_basis", "naming-convention"),
             }
     return raw, witnesses
+
+
+def relations(graph: Graph) -> tuple[dict[str, Node], dict[str, dict[str, Any]]]:
+    """Modules by path and their resolved cross-module dependencies, consumers and tests."""
+    modules = {node.path: node for node in graph.nodes if node.kind == "module"}
+    return modules, _relations(graph, modules)[0]
 
 
 def _observations(graph: Graph) -> dict[str, dict[str, Any]]:

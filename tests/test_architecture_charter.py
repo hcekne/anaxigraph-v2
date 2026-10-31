@@ -136,7 +136,7 @@ def test_component_tests_and_consumer_checks_are_distinct_observations(tmp_path)
     application.scan()
     brief = application.prepare_change("change save")
     assert brief["implementation_advice"]["principles_ref"] == "charter"
-    assert len(application.inspect("charter")["entity"]["data"]["principles"]) == len(CHARTER) == 10
+    assert len(application.inspect("charter")["entity"]["data"]["principles"]) == len(CHARTER) == 11
     assert "principles" not in brief["implementation_advice"]
     check = next(
         item

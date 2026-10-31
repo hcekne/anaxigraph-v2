@@ -52,7 +52,7 @@ ARMS = {
 }
 DISABLED_FEATURES = ("memories", "apps", "plugins", "hooks", "multi_agent", "daemon_auto_start")
 EXCLUDE = [".venv/", "__pycache__/", ".pytest_cache/", ".coverage", "data/", ".anaxigraph-v2/",
-           "anaxigraph/", ".ruff_cache/", ".uv-cache/"]  # fmt: skip
+           "anaxigraph/", ".ruff_cache/", ".uv-cache/", "pytest-of-*/"]  # fmt: skip
 
 BASE_PROMPT = """You are the engineer maintaining this repository (Switchboard). A new product
 request has arrived. It is saved at `{path}`; earlier requests are in `docs/requests/`.

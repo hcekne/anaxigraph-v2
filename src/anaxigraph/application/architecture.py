@@ -28,12 +28,16 @@ def owner_reviews(app: Any, graph, owners: tuple[str, ...], *, limit: int = 6) -
     ]
 
 
-def assess(app: Any, brief: dict, files: list[str], decisions: Any) -> dict:
+def assess(
+    app: Any, brief: dict, files: list[str], decisions: Any, structural: list[dict] | None = None
+) -> dict:
+    """Structural extension-point findings come first: they are observed, not model proposals."""
     graph = app._current()
     owners = {item["id"] for item in brief["likely_owners"]}
     owners.update(node.id for node in graph.nodes if node.kind == "module" and node.path in files)
     rows = owner_reviews(app, graph, tuple(sorted(owners)), limit=19)
-    material = [item for item in proposals(rows, owners, 57) if item["opportunity"] >= 2]
+    scouted = [item for item in proposals(rows, owners, 57) if item["opportunity"] >= 2]
+    material = [*(structural or []), *scouted]
     result = decide(material[:12], decisions, truncated=len(rows) > 18 or len(material) > 12)
     event = app.evidence.record(
         "architecture_plan",

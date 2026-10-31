@@ -85,7 +85,7 @@ def test_default_screen_is_complete_compact_production_only_and_keeps_function_p
     assert len(packet["catalogue"]) == 133
     assert {"adapter", "singleton"} <= {card["id"] for card in packet["catalogue"]}
     assert all(set(card) == {"id", "name", "intent", "questions"} for card in packet["catalogue"])
-    assert len(packet["charter"]) == 10
+    assert len(packet["charter"]) == 11
     assert "without classes" in packet["instruction"]
     semantic = json.dumps(packet["modules"])
     assert all(
@@ -271,7 +271,7 @@ def test_selected_details_reuse_without_portable_export_after_unrelated_and_neig
     scope = ["app.py"]
     request = mapped.analysis_request("patterns", scope, pattern_ids=["adapter", "singleton"])
     assert "data" not in request["packet"]["modules"][0]
-    assert len(request["packet"]["charter"]) == 10
+    assert len(request["packet"]["charter"]) == 11
     exhaustive = mapped.analysis_request("patterns", scope)
     assert "data" in exhaustive["packet"]["modules"][0]
     assert "charter" not in exhaustive["packet"]

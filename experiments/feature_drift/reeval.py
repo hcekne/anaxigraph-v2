@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import metrics  # noqa: E402
 import runner  # noqa: E402
 
-MEASURES = ("hidden", "own", "ci")
+MEASURES = ("hidden", "own", "ci", "shape")
 
 
 def rescore_step(row: dict, tree: Path, out: Path, measures: set[str], mutants: int) -> None:
@@ -33,6 +33,9 @@ def rescore_step(row: dict, tree: Path, out: Path, measures: set[str], mutants: 
         row["hidden"] = runner.hidden_tests(tree, files, row["step"], out / "hidden-reeval.xml")
     if "own" in measures:
         row["own_suite"] = runner.own_suite(tree, out / "own-reeval.xml")
+    if "shape" in measures:
+        row["static"] = metrics.static_metrics(tree)
+        row["diff"] = metrics.diff_stats(tree, row["commit"] + "^", row["commit"])
     if "ci" in measures and "ci" in row:
         ci = metrics.ci_quality(tree, seed=row["step"], mutants=mutants)
         runner.write_json(out / "ci-reeval.json", ci)
@@ -68,6 +71,15 @@ def reevaluate(chain: Path, measures: set[str], mutants: int) -> None:
     for row in probes:
         probe_repo = chain / "probes" / row["probe"] / "repo"
         out = chain / "eval" / f"probe-{row['probe']}"
+        if "hidden" in measures:
+            number = int(row["probe"][1:].split("-")[0])
+            steps = [f"step_{n:02d}.py" for n in range(1, 21)]
+            row["hidden_probe"] = runner.hidden_tests(
+                probe_repo, [f"probe_{number}.py"], 20, out / "probe-reeval.xml"
+            )
+            row["hidden_regression"] = runner.hidden_tests(
+                probe_repo, steps, 20, out / "steps-reeval.xml"
+            )
         if "own" in measures:
             row["own_suite"] = runner.own_suite(probe_repo, out / "own-reeval.xml")
         if "ci" in measures:

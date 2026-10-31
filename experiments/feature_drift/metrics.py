@@ -24,6 +24,12 @@ from pathlib import Path, PurePosixPath
 SKIP_PARTS = {".venv", "node_modules", "__pycache__", "anaxigraph"}
 
 
+def is_scratch(path: str) -> bool:
+    """Tool output that agents sometimes leave in the checkout, such as pytest base temps."""
+    parts = PurePosixPath(path).parts[:-1]
+    return any(p.startswith(".") or p in SKIP_PARTS or p.startswith("pytest-of-") for p in parts)
+
+
 def is_test_path(path: str) -> bool:
     parts = PurePosixPath(path).parts
     name = parts[-1]
@@ -34,7 +40,7 @@ def python_files(root: Path) -> list[str]:
     found = []
     for path in root.rglob("*.py"):
         rel = path.relative_to(root)
-        if any(p.startswith(".") or p in SKIP_PARTS for p in rel.parts[:-1]):
+        if is_scratch(rel.as_posix()):
             continue
         found.append(rel.as_posix())
     return sorted(found)
@@ -222,7 +228,8 @@ def diff_stats(repo: Path, base: str, head: str = "HEAD") -> dict:
     status = {}
     for line in git(repo, "diff", "--name-status", "--no-renames", base, head).splitlines():
         parts = line.split("\t")
-        status[parts[-1]] = parts[0][0]
+        if not is_scratch(parts[-1]):
+            status[parts[-1]] = parts[0][0]
     stats = {
         "prod_added_files": 0,
         "prod_modified_files": 0,
@@ -237,6 +244,8 @@ def diff_stats(repo: Path, base: str, head: str = "HEAD") -> dict:
     }
     for line in git(repo, "diff", "--numstat", "--no-renames", base, head).splitlines():
         added, deleted, path = line.split("\t", 2)
+        if is_scratch(path):
+            continue
         added = int(added) if added.isdigit() else 0
         deleted = int(deleted) if deleted.isdigit() else 0
         if not path.endswith(".py"):

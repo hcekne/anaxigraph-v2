@@ -122,6 +122,16 @@ not require edits throughout orchestration, authorization, unrelated providers a
 Declarative registration and contract-level composition are useful when they remove that recurring
 work. No particular class hierarchy, plugin framework or network service is mandatory.
 
+AnaxiGraph checks this structurally. A *closed family* is a set of sibling modules on one shared
+contract that a production module (a composition root or hand-written registry) imports one by
+one. Adding a member then edits that registrar, and safe CI for the edit reaches every check that
+imports it. `prepare_change` lists closed families near the task in its `design_brief`;
+`assess_plan` requires an adopt, defer or reject decision when a plan adds a member and edits a
+registrar; `validate_change` reports the same growth from the diff. The suggested remedy is
+discovery: members export one contract object, a loader finds them, contract tests parametrize
+over discovered members and CI maps each member to its own tests plus the contract tests.
+Detection uses static imports only, so string or configuration wiring is not seen.
+
 Test the proposed independence by running a provider's checks without installing unrelated
 providers or bootstrapping the whole application's database. Add consumer checks for the actual
 host agreement, and verify important substitutes against the real adapter contract. A provider

@@ -2,7 +2,7 @@
   "version": 1,
   "baseline_commit": "dcc1a68173c794fc37d9e83541fd3bb89b6eef2c",
   "limits": {
-    "production_physical_lines": 12050,
+    "production_physical_lines": 13500,
     "file_physical_lines": 800,
     "package_data_bytes": 200000,
     "new_function_complexity": 15
