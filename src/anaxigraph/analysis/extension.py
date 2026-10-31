@@ -1,18 +1,20 @@
 """Open-ended families that grow by editing shared files, and what that costs safe CI.
 
 A family is a set of sibling modules built on one shared contract module. A registrar is a
-module that names several members through static imports: a composition root, a hand-written
-registry or a test that lists every member. Each new member then edits the registrar, and every
-check that imports the registrar is in scope for that edit. Discovery (package scanning, entry
-points) leaves no static registrar, so an open family produces no finding here.
+module that names most members: a composition root, a hand-written registry, a test that lists
+every member, or a file such as a test-selection map that names members by path or module name.
+Each new member then edits the registrar, and every check that imports the registrar is in scope
+for that edit. Discovery (package scanning, entry points) leaves no static registrar, so an open
+family produces no finding here.
 """
 
 from __future__ import annotations
 
+import math
 import threading
 import weakref
 from collections import Counter
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from anaxigraph.analysis.charter import relations
@@ -20,11 +22,12 @@ from anaxigraph.contracts import Graph
 
 _SKIP = {"__init__.py", "__main__.py", "conftest.py"}
 _MEMBER_CONSUMERS = 3
+_TEXT_LIMIT = 1_000_000
 _CACHE: tuple[weakref.ReferenceType[Graph], dict[str, Any]] | None = None
 _LOCK = threading.Lock()
 LIMITATION = (
-    "Static imports only: families wired through strings, configuration or dynamic imports are "
-    "not seen, and import reach over-approximates the checks a change can affect."
+    "Families are found from static imports; files that name members as strings are seen only "
+    "when a change edits them. Import reach over-approximates the checks a change can affect."
 )
 
 
@@ -65,13 +68,16 @@ def _analyse(graph: Graph) -> dict[str, Any]:
             contract, kin = found
             family = families.setdefault(
                 (directory, contract),
-                {"directory": directory, "contract": contract, "members": set(),
-                 "registrars": set(), "test_registrars": set()},
+                {"directory": directory, "contract": contract, "members": set(), "listing": {}},
             )  # fmt: skip
             family["members"] |= kin
-            family["test_registrars" if registrar in tests else "registrars"].add(registrar)
+            family["listing"][registrar] = kin
     for family in families.values():
-        family["registrars"] -= family["members"]
+        # A registrar lists most members; plumbing that uses one or two of them is not one.
+        need = max(2, math.ceil(len(family["members"]) / 2))
+        listing = {path for path, kin in family["listing"].items() if len(kin) >= need}
+        listing -= family["members"]
+        family["registrars"], family["test_registrars"] = listing - tests, listing & tests
     # Tests that import a few modules are ordinary unit tests unless production also enumerates.
     closed = [family for family in families.values() if family["registrars"]]
     return {"modules": modules, "raw": raw, "tests": tests, "families": closed}
@@ -138,8 +144,37 @@ def closed_families(graph: Graph, near: set[str] | None = None, limit: int = 3) 
     return [_view(graph, family) for family in rows[:limit]]
 
 
-def change_findings(graph: Graph, added: set[str], modified: set[str]) -> list[dict[str, Any]]:
-    """Members added to a family while editing that family's registrars."""
+def _names(path: str) -> set[str]:
+    stem = path.removesuffix(".py")
+    return {path, stem, stem.replace("/", ".")}
+
+
+def _text(root: Path | None, path: str) -> str:
+    target = root / path if root else None
+    if target is None or not target.is_file() or target.stat().st_size > _TEXT_LIMIT:
+        return ""
+    return target.read_text(errors="ignore")
+
+
+def _named(root: Path | None, path: str, members: set[str]) -> set[str]:
+    """Members a file names as a path or module string, as a hand-written map does."""
+    text = _text(root, path)
+    return {member for member in members if any(name in text for name in _names(member))}
+
+
+def change_findings(
+    graph: Graph,
+    added: set[str],
+    modified: set[str],
+    root: Path | None = None,
+    *,
+    applied: bool = False,
+) -> list[dict[str, Any]]:
+    """Members added to a family while editing files that list that family's members.
+
+    With `applied`, the change is already on disk: an edited registrar only counts when it now
+    names one of the added members, so plumbing edits that list nothing are not findings.
+    """
     state = _state(graph)
     findings = []
     for family in state["families"]:
@@ -150,10 +185,25 @@ def change_findings(graph: Graph, added: set[str], modified: set[str]) -> list[d
             and (path in family["members"] or _directory(path) == family["directory"])
             and PurePosixPath(path).name not in _SKIP
         )
-        edited = sorted(modified & (family["registrars"] | family["test_registrars"]))
-        if joining and edited:
+        if not joining:
+            continue
+        listing = family["registrars"] | family["test_registrars"]
+        need = max(2, math.ceil(len(family["members"]) / 2))
+        edited = sorted(
+            path
+            for path in modified - family["members"]
+            if path in listing or len(_named(root, path, family["members"] - set(joining))) >= need
+        )
+        if applied:
+            edited = [path for path in edited if _lists(state, root, path, set(joining))]
+        if edited:
             findings.append(_finding(graph, family, joining, edited))
     return findings
+
+
+def _lists(state: dict, root: Path | None, path: str, joining: set[str]) -> bool:
+    row = state["raw"].get(path)
+    return bool(row and row["dependencies"] & joining) or bool(_named(root, path, joining))
 
 
 def _finding(graph: Graph, family: dict, joining: list[str], edited: list[str]) -> dict:
@@ -185,7 +235,15 @@ def _finding(graph: Graph, family: dict, joining: list[str], edited: list[str]) 
             "file to its own tests plus the contract tests, and only loader or contract changes "
             "select everything. The next member then adds files only."
         ),
-        "decision": "adopt (open it in this change), defer (name when) or reject with a reason",
+        "cost_of_staying_closed": f"Every future member edits {', '.join(edited[:3])} and so "
+        f"selects about {reach['test_modules']} test modules instead of its own tests plus the "
+        "contract tests. Across 1,000 more members that "
+        f"is about {1000 * reach['test_modules']:,} test-module runs and 1,000 edits to the same "
+        "shared files.",
+        "decision": "adopt (open the family in this change). An explicit registry or selector "
+        "map is still a hand-written list, so it is not an open family. To defer or reject, "
+        "also give revisit_when: the member count or date at which the family will be opened.",
+        "requires_revisit_when": True,
         "limitations": LIMITATION,
     }
 

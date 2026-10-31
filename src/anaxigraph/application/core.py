@@ -37,11 +37,11 @@ from anaxigraph.storage import Store
 from anaxigraph.workflows.engine import WorkflowRunner
 
 
-def _extension_review(graph: Graph, previous: Graph | None) -> dict[str, Any]:
+def _extension_review(graph: Graph, previous: Graph | None, root: Path) -> dict[str, Any]:
     before = previous.snapshot.files if previous else {}
     changed = set(changed_paths(graph, previous)) & set(graph.snapshot.files)
     added = {path for path in changed if path not in before}
-    findings = extension.change_findings(graph, added, changed - added)
+    findings = extension.change_findings(graph, added, changed - added, root, applied=True)
     production = {path for path in changed if not is_test(path)}
     return {
         "status": "concern" if findings else "no_closed_family_growth",
@@ -52,10 +52,10 @@ def _extension_review(graph: Graph, previous: Graph | None) -> dict[str, Any]:
     }
 
 
-def _plan_findings(graph: Graph, brief: dict, files: list[str]) -> tuple[list, list]:
+def _plan_findings(graph: Graph, brief: dict, files: list[str], root: Path) -> tuple[list, list]:
     """Closed-family decisions, then one reuse prompt for new modules outside any family."""
     added = {path for path in files if path not in graph.snapshot.files}
-    closed = extension.change_findings(graph, added, set(files) - added)
+    closed = extension.change_findings(graph, added, set(files) - added, root)
     joining = {path for item in closed for path in item["adding"]}
     siblings = sorted(path for path in added - joining if not is_test(path))
     existing = sorted(node["path"] for node in brief["likely_owners"])
@@ -384,7 +384,7 @@ class Application:
         ):
             raise ValueError("Plan files must be repository-relative paths")
         brief = self.prepare_change(task, continue_task=True)
-        closed, findings = _plan_findings(self._current(), brief, files)
+        closed, findings = _plan_findings(self._current(), brief, files, self.root)
         architecture = component_architecture.assess(self, brief, files, decisions, closed)
         return {
             "snapshot_id": brief["snapshot_id"],
@@ -429,7 +429,7 @@ class Application:
         }
 
         result["architecture"] = component_architecture.followthrough(self, selected)
-        result["extension_points"] = _extension_review(graph, previous)
+        result["extension_points"] = _extension_review(graph, previous, self.root)
         result["historical_associations"] = self._history_advice(
             graph,
             set(changed_paths(graph, previous)),

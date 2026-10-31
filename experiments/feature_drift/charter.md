@@ -14,8 +14,9 @@ or passing substitutes alone do not prove compatibility. Plumbing that genuinely
 multiplying (integrations, providers, channels, report types), give the family one contract,
 like hiring people: every contractor answers "what can you do for me?" with a list of
 capabilities, takes requests in the same shape and is paid the same way, whether it is a
-plumber or an accountant. Adding the next one should mean adding one self-contained unit plus
-registering it, with no edits scattered through the rest of the code. Cross-cutting rules
+plumber or an accountant. Adding the next one should mean adding files only: the new unit and
+its tests. No existing file should list the members, not the app, a registry, a test or the CI
+selector; the platform discovers them. Cross-cutting rules
 (audit, quotas, caching, security) belong to the platform around the plug-ins, applied once,
 not re-implemented inside each one.
 

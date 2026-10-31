@@ -119,15 +119,20 @@ API adapters and MCP adapters can share host-facing capability conventions while
 different transport and lifecycle requirements. A common transport helper is justified by shared
 behavior; it should not absorb every provider's business rules. An ordinary new provider should
 not require edits throughout orchestration, authorization, unrelated providers and application UI.
-Declarative registration and contract-level composition are useful when they remove that recurring
-work. No particular class hierarchy, plugin framework or network service is mandatory.
+Contract-level composition with discovery removes that recurring work. A declarative registry,
+a list in the composition root or a hand-written test-selection map is still a file every new
+provider edits, so it does not. No particular class hierarchy, plugin framework or network
+service is mandatory.
 
 AnaxiGraph checks this structurally. A *closed family* is a set of sibling modules on one shared
 contract that a production module (a composition root or hand-written registry) imports one by
-one. Adding a member then edits that registrar, and safe CI for the edit reaches every check that
+one; a module must list at least half of the members to count. A file that names members as paths
+or module strings, such as a CI test-selection map, also counts when a change edits it. Adding a member then edits that registrar, and safe CI for the edit reaches every check that
 imports it. `prepare_change` lists closed families near the task in its `design_brief`;
-`assess_plan` requires an adopt, defer or reject decision when a plan adds a member and edits a
-registrar; `validate_change` reports the same growth from the diff. The suggested remedy is
+`assess_plan` requires a decision when a plan adds a member and edits a registrar. The finding
+states the cost of staying closed, and a defer or reject is refused unless it gives
+`revisit_when`, the member count or date at which the family will be opened. `validate_change`
+reports the same growth from the diff, only for registrar edits that name the new member. The suggested remedy is
 discovery: members export one contract object, a loader finds them, contract tests parametrize
 over discovered members and CI maps each member to its own tests plus the contract tests.
 Detection uses static imports only, so string or configuration wiring is not seen.

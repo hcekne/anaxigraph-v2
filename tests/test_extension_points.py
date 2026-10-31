@@ -120,3 +120,68 @@ def test_validation_reports_closed_family_growth_from_the_diff(tmp_path):
     assert review["status"] == "concern"
     assert review["findings"][0]["adding"] == ["app/providers/geo.py"]
     assert review["change_check_reach"]["test_modules"] == 1
+
+
+def test_defer_without_revisit_when_is_refused_and_costs_are_stated(tmp_path):
+    app = _closed_repo(tmp_path)
+    files = ["app/providers/geo.py", "app/main.py"]
+    [requirement] = app.assess_plan("Add a geo provider", files)["architecture"]["requirements"]
+    assert "1,000 more members" in requirement["cost_of_staying_closed"]
+    pid = requirement["proposal_id"]
+    plain = {"proposal_id": pid, "decision": "defer", "reason": "Later."}
+    refused = app.assess_plan("Add a geo provider", files, [plain])
+    assert refused["status"] == "decision_required"
+    assert refused["architecture"]["refused_decisions"][0]["proposal_id"] == pid
+    timed = app.assess_plan(
+        "Add a geo provider", files, [plain | {"revisit_when": "At 4 members."}]
+    )
+    assert timed["architecture"]["status"] == "decisions_recorded"
+
+
+def test_selector_map_naming_members_counts_as_a_registrar(tmp_path):
+    app = _closed_repo(tmp_path)
+    _write(
+        tmp_path,
+        {
+            "tools/select_tests.py": "MAP = {\n    'app/providers/weather.py': ['tests/test_weather.py'],\n"
+            "    'app/providers/crm.py': [],\n}\n"
+        },
+    )
+    app.scan()
+    plan = app.assess_plan("Add a geo provider", ["app/providers/geo.py", "tools/select_tests.py"])
+    [requirement] = plan["architecture"]["requirements"]
+    assert requirement["editing_registrars"] == ["tools/select_tests.py"]
+
+
+def test_plumbing_that_uses_few_members_is_not_a_registrar(tmp_path):
+    _write(
+        tmp_path,
+        {
+            "app/__init__.py": "",
+            "app/contract.py": CONTRACT,
+            "app/providers/__init__.py": "",
+            **{
+                f"app/providers/p{i}.py": MEMBER.format(cls=f"P{i}", name=f"p{i}") for i in range(6)
+            },
+            "app/main.py": "".join(f"from app.providers.p{i} import P{i}\n" for i in range(6))
+            + "\n\ndef providers():\n    return [P0(), P1(), P2(), P3(), P4(), P5()]\n",
+            "app/platform.py": "from app.providers.p0 import P0\nfrom app.providers.p1 import P1\n\n"
+            "def defaults():\n    return [P0, P1]\n",
+        },
+    )
+    app = Application(tmp_path)
+    app.scan()
+    [family] = closed_families(app._current())
+    assert family["registrars"] == ["app/main.py"]
+    plan = app.assess_plan("Add a geo provider", ["app/providers/geo.py", "app/platform.py"])
+    assert plan["architecture"]["requirements"] == []
+
+
+def test_validation_ignores_registrar_edits_that_do_not_name_the_new_member(tmp_path):
+    app = _closed_repo(tmp_path)
+    app.prepare_change("Add a geo provider")
+    (tmp_path / "app/providers/geo.py").write_text(MEMBER.format(cls="Geo", name="geo"))
+    main = tmp_path / "app/main.py"
+    main.write_text(main.read_text() + "\n\nTIMEOUT = 5\n")
+    app.scan()
+    assert app.validate_change()["extension_points"]["status"] == "no_closed_family_growth"

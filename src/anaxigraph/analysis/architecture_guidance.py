@@ -102,11 +102,23 @@ def decide(requirements: list[dict], decisions: Any, *, truncated: bool = False)
     expected = {item["proposal_id"] for item in requirements}
     if decisions is not None and (not isinstance(decisions, list) or len(decisions) > 12):
         raise ValueError("Architecture decisions must be a list of at most twelve dispositions")
+    strict = {item["proposal_id"] for item in requirements if item.get("requires_revisit_when")}
     accepted: list[dict[str, Any]] = []
+    refused: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in decisions or []:
         item = _decision(item, expected - seen)
         identity = item["proposal_id"]
+        if identity in strict and item["decision"] != "adopt" and not item.get("revisit_when"):
+            refused.append(
+                {
+                    "proposal_id": identity,
+                    "problem": "Deferring or rejecting this needs revisit_when: the member count "
+                    "or date at which the family will be opened. Without it, the cost repeats "
+                    "on every addition with no end.",
+                }
+            )
+            continue
         accepted.append(item)
         seen.add(identity)
     pending = sorted(expected - seen)
@@ -120,6 +132,7 @@ def decide(requirements: list[dict], decisions: Any, *, truncated: bool = False)
         else "no_current_material_proposals",
         "requirements": requirements,
         "decisions": accepted,
+        "refused_decisions": refused,
         "pending_ids": pending,
         "truncated": truncated,
         "implementation_status": "unverified",
@@ -128,8 +141,17 @@ def decide(requirements: list[dict], decisions: Any, *, truncated: bool = False)
 
 
 def _decision(item: Any, expected: set[str]) -> dict:
-    if not isinstance(item, dict) or set(item) != {"proposal_id", "decision", "reason"}:
-        raise ValueError("Each architecture decision needs proposal_id, decision and reason")
+    required = {"proposal_id", "decision", "reason"}
+    if not isinstance(item, dict) or not required <= set(item) <= required | {"revisit_when"}:
+        raise ValueError(
+            "Each architecture decision needs proposal_id, decision and reason, "
+            "and may add revisit_when"
+        )
+    revisit = item.get("revisit_when")
+    if revisit is not None and (
+        not isinstance(revisit, str) or not 1 <= len(revisit.strip()) <= 200
+    ):
+        raise ValueError("revisit_when must be a nonempty text of at most 200 characters")
     if not isinstance(item["proposal_id"], str) or item["proposal_id"] not in expected:
         raise ValueError("Architecture decision names an unknown or duplicate proposal")
     if item["decision"] not in ("adopt", "defer", "reject"):

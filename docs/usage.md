@@ -17,7 +17,7 @@ choices, then give their findings to the coding agent as concrete work.
 3. **Assess the plan** before a substantial edit. `assess_plan` continues the prepared task even
    when its description is reworded. Adopt, defer or reject relevant material architecture findings
    with a reason, including extension-point findings for plans that add a family member by
-   editing its registrar. An accepted recommendation is a decision to do work, not evidence that it is done.
+   editing its registrar. Deferring or rejecting one also needs `revisit_when`. An accepted recommendation is a decision to do work, not evidence that it is done.
 4. **Implement and check** the change. Prefer local behavior and public-contract tests; include
    consumers when contracts, behavior, shared resources or configuration can affect them. Keep the
    project's required checks.
