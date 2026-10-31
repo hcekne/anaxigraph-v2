@@ -149,7 +149,9 @@ uv run python experiments/feature_drift/runner.py --state ~/drift/full \
 uv run python experiments/feature_drift/report.py --state ~/drift/full --json ~/drift/full/summary.json
 ```
 
-Rerunning with the same `--state` resumes after the last completed step. Each chain keeps a git
+Rerunning with the same `--state` resumes after the last completed step. After a hidden-test or
+metric fix, `reeval.py --state ... --measures hidden,own,ci` re-scores saved commits without
+rerunning agents. Each chain keeps a git
 history (`<state>/<arm>-r<n>/repo`), agent transcripts and prompts (`logs/`), and evaluation
 artifacts (`eval/`). Pin the AnaxiGraph runtime (`--runtime`) for the whole run; its version and
 commit are recorded.

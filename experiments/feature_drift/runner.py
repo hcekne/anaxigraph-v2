@@ -419,6 +419,17 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
     return {"chain": chain.name, "steps": len(read_jsonl(results))}
 
 
+def selection_size(repo: Path, changed: list[str]) -> tuple[int | None, int]:
+    """Tests the candidate's selector picks for a change, and the suite size."""
+    targets, _ = metrics.select(repo, changed)
+    total = len(metrics.collect(repo, ["ALL"]) or [])
+    if targets is None:
+        return None, total
+    if targets == ["ALL"]:
+        return total, total
+    return len(metrics.collect(repo, targets) or []), total
+
+
 def run_probes(config, chain: Path, arm_name: str) -> None:
     results = chain / "probes.jsonl"
     done = {row["probe"] for row in read_jsonl(results)}
@@ -445,15 +456,7 @@ def run_probes(config, chain: Path, arm_name: str) -> None:
         changed_prod = [
             p for p in diff["changed_files"] if p.endswith(".py") and not metrics.is_test_path(p)
         ]
-        targets, _ = metrics.select(repo, diff["changed_files"])
-        total = len(metrics.collect(repo, ["ALL"]) or [])
-        selected = (
-            None
-            if targets is None
-            else total
-            if targets == ["ALL"]
-            else len(metrics.collect(repo, targets) or [])
-        )
+        selected, total = selection_size(repo, diff["changed_files"])
         row = {
             "probe": request.stem,
             "arm": arm_name,

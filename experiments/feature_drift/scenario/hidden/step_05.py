@@ -46,11 +46,12 @@ def test_revoked_token_is_replaced(app, hub):
     app.creds("calendar")
     params = {"from": "2026-01-10", "to": "2026-01-12"}
     assert app.get("/api/calendar/events", params=params).status_code == 200
+    before = len(calls(hub, "calendar", "/oauth/token"))  # 0 when an earlier test's token is cached
     with hub.lock:
         hub.tokens.clear()
     response = app.get("/api/calendar/events", params=params)
     assert response.status_code == 200 and response.json() == {"events": expected(*params.values())}
-    assert len(calls(hub, "calendar", "/oauth/token")) == 2
+    assert len(calls(hub, "calendar", "/oauth/token")) - before == 1
 
 
 def test_validation(app, hub):

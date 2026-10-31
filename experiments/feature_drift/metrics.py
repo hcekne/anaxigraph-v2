@@ -282,8 +282,40 @@ def candidate_env(repo: Path) -> dict:
     }
 
 
+def kept_addopts(repo: Path) -> list[str]:
+    """Options from the candidate's own pytest config that change how tests import.
+
+    The harness blanks `addopts` so coverage, `-x` or plugins cannot interfere, but a suite
+    that relies on `--import-mode=importlib` (duplicate test basenames) must keep it.
+    """
+    import configparser
+    import shlex
+    import tomllib
+
+    values: list[str] = []
+    try:
+        opts = tomllib.loads((repo / "pyproject.toml").read_text())["tool"]["pytest"]
+        opts = opts["ini_options"]["addopts"]
+        values += opts if isinstance(opts, list) else shlex.split(opts)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    for name, section in (
+        ("pytest.ini", "pytest"),
+        ("tox.ini", "pytest"),
+        ("setup.cfg", "tool:pytest"),
+    ):
+        parser = configparser.ConfigParser()
+        try:
+            parser.read(repo / name)
+            values += shlex.split(parser.get(section, "addopts"))
+        except (configparser.Error, ValueError):
+            pass
+    return [v for v in values if v.startswith("--import-mode=")][-1:]
+
+
 def pytest_argv(repo: Path) -> list[str]:
-    return [str(repo / ".venv" / "bin" / "python"), "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    python = str(repo / ".venv" / "bin" / "python")
+    return [python, "-m", "pytest", "-q", "-p", "no:cacheprovider", *kept_addopts(repo)]
 
 
 def collect(repo: Path, targets: list[str]) -> list[str] | None:
