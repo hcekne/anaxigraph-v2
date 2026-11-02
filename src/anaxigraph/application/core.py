@@ -18,6 +18,7 @@ from anaxigraph.analysis.changes import change_review, changed_paths
 from anaxigraph.analysis.charter import CHARTER, module_facts
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.history import cochange_advice
+from anaxigraph.analysis.patterns import production_modules
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
 from anaxigraph.analysis.retrieval import rank_owners
 from anaxigraph.application import architecture as component_architecture
@@ -78,6 +79,17 @@ def _record_view(identity, kind, name, data, snapshot=None) -> dict:
         "outgoing": [],
         "neighbors": [],
         "snapshot_id": snapshot,
+    }
+
+
+def _semantic_scope(graph: Graph | None, modules: list[Node], coverage: Counter) -> dict:
+    eligible = production_modules(graph) if graph else []
+    semantic = Counter(node.data.get("annotation_status", "missing") for node in eligible)
+    return {
+        "eligible_modules": len(eligible),
+        **{key: semantic[key] for key in ("current", "stale", "missing")},
+        "outside_scope": len(modules) - len(eligible),
+        "outside_current": coverage["current"] - semantic["current"],
     }
 
 
@@ -209,6 +221,7 @@ class Application:
             "relationships": len(edges),
             "unresolved_relationships": sum(edge.resolution != "resolved" for edge in edges),
             "annotations": {key: coverage[key] for key in ("current", "stale", "missing")},
+            "semantic_scope": _semantic_scope(graph, modules, coverage),
             "diagnostics": list(graph.diagnostics)[:30] if graph else [],
             "storage": {key: stats[key] for key in ("bytes", "max_bytes", "snapshots", "reviews")},
             "baseline_id": stats.get("pinned_snapshot_id"),
@@ -271,7 +284,9 @@ class Application:
             "next_offset": next_offset if next_offset < len(nodes) else None,
         }
 
-    def inspect(self, entity_id: str, limit: int = 30) -> dict[str, Any]:
+    def inspect(
+        self, entity_id: str, limit: int = 30, offset: int = 0, full: bool = False
+    ) -> dict[str, Any]:
         if entity_id == "charter":
             return _record_view(
                 "charter", "charter", "Architecture principles", {"principles": CHARTER}
@@ -292,7 +307,7 @@ class Application:
             self.evidence.consulted(entity_id, graph.snapshot.id)
             return _record_view(entity_id, "review", row["kind"], row, graph.snapshot.id)
 
-        result = neighborhood(graph, entity_id, _bounds(limit))
+        result = neighborhood(graph, entity_id, _bounds(limit), offset, full)
         result["snapshot_id"] = graph.snapshot.id
         entity = result["entity"]
         if entity["kind"] == "function":
@@ -301,7 +316,7 @@ class Application:
                 annotation = owner.data.get("annotation", {})
                 entity["data"]["overview"] = next(
                     (
-                        item["overview"]
+                        item["overview"] if full else item["overview"][:240]
                         for item in annotation.get("functions", [])
                         if item["node_id"] == entity["id"]
                     ),
@@ -350,7 +365,11 @@ class Application:
         )
         brief = extension.design_brief(graph, matched_paths)
         result = {"design_brief": brief} | prepare(
-            graph, matches, task, reviews=review_rows, delivery_advice=delivery.advice(self, graph)
+            graph,
+            matches,
+            task,
+            reviews=review_rows,
+            delivery_advice=delivery.advice(self, graph, sorted(matched_paths)),
         )
         result["baseline_id"] = pinned
         baseline = (
@@ -375,7 +394,11 @@ class Application:
         return result
 
     def assess_plan(
-        self, task: str, files: list[str], decisions: list[dict[str, Any]] | None = None
+        self,
+        task: str,
+        files: list[str],
+        decisions: list[dict[str, Any]] | None = None,
+        include_brief: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(files, list) or not files or len(files) > 30:
             raise ValueError("files must name between 1 and 30 relative paths")
@@ -388,9 +411,11 @@ class Application:
         architecture = component_architecture.assess(self, brief, files, decisions, closed)
         return {
             "snapshot_id": brief["snapshot_id"],
+            "task_id": brief["task_id"],
+            "baseline_id": brief["baseline_id"],
             "files": files,
             "findings": findings,
-            "brief": brief,
+            **({"brief": brief} if include_brief else {}),
             "status": architecture["status"]
             if architecture["status"] in {"decision_required", "scope_incomplete"}
             else "advisory",
@@ -428,7 +453,12 @@ class Application:
             }[basis],
         }
 
-        result["architecture"] = component_architecture.followthrough(self, selected)
+        result["architecture"] = component_architecture.followthrough(
+            self, selected, graph, previous, result["checks"]
+        )
+        result["ci_selection"] = delivery.selection_evidence(
+            self, graph, changed_paths(graph, previous)
+        )
         result["extension_points"] = _extension_review(graph, previous, self.root)
         result["historical_associations"] = self._history_advice(
             graph,

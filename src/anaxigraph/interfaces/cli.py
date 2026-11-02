@@ -77,6 +77,8 @@ def parser() -> argparse.ArgumentParser:
         elif name == "inspect":
             command.add_argument("entity_id")
             command.add_argument("--limit", type=int, default=30)
+            command.add_argument("--offset", type=int, default=0)
+            command.add_argument("--full", action="store_true")
         elif name == "modules":
             command.add_argument("--sort", default="path")
             command.add_argument("--descending", action="store_true")
@@ -86,6 +88,7 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("task")
             if name == "assess":
                 command.add_argument("--files", nargs="+", required=True)
+                command.add_argument("--include-brief", action="store_true")
                 command.add_argument(
                     "--decisions", type=Path, help="JSON array of proposal decisions"
                 )
@@ -190,6 +193,15 @@ def _check_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any
     return application.validate_change(receipts)
 
 
+def _plan_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
+    decisions = _read_json(args.decisions, list) if args.decisions else None
+    if args.include_brief:
+        return application.assess_plan(args.task, args.files, decisions, True)
+    if decisions is not None:
+        return application.assess_plan(args.task, args.files, decisions)
+    return application.assess_plan(args.task, args.files)
+
+
 def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     """Keep transport dispatch independent from application implementation."""
     if args.command == "scan":
@@ -199,6 +211,8 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "modules":
         return application.modules(args.sort, args.descending, args.limit, args.offset)
     if args.command == "inspect":
+        if args.offset or args.full:
+            return application.inspect(args.entity_id, args.limit, args.offset, args.full)
         return application.inspect(args.entity_id, args.limit)
     if args.command == "prepare":
         if args.continue_task:
@@ -207,9 +221,7 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
             return application.prepare_change(args.task, args.limit, args.baseline_id)
         return application.prepare_change(args.task, args.limit)
     if args.command == "assess":
-        if args.decisions is not None:
-            return application.assess_plan(args.task, args.files, _read_json(args.decisions, list))
-        return application.assess_plan(args.task, args.files)
+        return _plan_dispatch(application, args)
     if args.command in {"validate", "ci-plan"}:
         return _check_dispatch(application, args)
     if args.command == "request":

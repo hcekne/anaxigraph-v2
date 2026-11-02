@@ -288,6 +288,9 @@ def candidate_env(repo: Path) -> dict:
         "PATH": f"{repo / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
         "PYTHONDONTWRITEBYTECODE": "1",
         "VIRTUAL_ENV": str(repo / ".venv"),
+        "PYTHONPATH": os.pathsep.join(
+            path for path in (str(repo), str(repo / "src"), os.environ.get("PYTHONPATH")) if path
+        ),
     }
 
 
@@ -339,7 +342,7 @@ def collect(repo: Path, targets: list[str]) -> list[str] | None:
         candidate_env(repo),
     )
     ids = [line.strip() for line in result.stdout.splitlines() if "::" in line]
-    if result.returncode not in (0, 5) and not ids:
+    if result.returncode not in (0, 5):
         return None
     return ids
 
@@ -536,6 +539,18 @@ def ci_quality(repo: Path, seed: int, mutants: int = 10) -> dict:
             )
             if measured
             else None,
+            "production_files_measured": len(measured),
+            "mean_selected_tests": sum(r["selected"] for r in measured) / len(measured)
+            if measured
+            else None,
+            "omitted_execution_pairs": sum(
+                r["executing"] - r["executing_selected"] for r in measured
+            ),
+            "selection_completeness": "observed_gap"
+            if any(r["executing"] != r["executing_selected"] for r in measured)
+            else "observed_complete"
+            if measured
+            else "unverified",
             "mean_executing_fraction": round(
                 sum(r["executing"] for r in measured) / total / len(measured), 4
             )

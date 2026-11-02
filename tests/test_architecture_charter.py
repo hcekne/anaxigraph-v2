@@ -147,9 +147,9 @@ def test_component_tests_and_consumer_checks_are_distinct_observations(tmp_path)
     assert check["consumer_tests"] == ["tests/test_api.py"]
     assert "required project checks" in check["suggestion"]
     assert (
-        application.assess_plan("change save", ["store.py"])["brief"]["implementation_advice"][
-            "principles_ref"
-        ]
+        application.assess_plan("change save", ["store.py"], include_brief=True)["brief"][
+            "implementation_advice"
+        ]["principles_ref"]
         == brief["implementation_advice"]["principles_ref"]
     )
     assert len(json.dumps(brief, indent=2).encode()) <= 8000

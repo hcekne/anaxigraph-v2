@@ -4,7 +4,7 @@ Each chain (arm × replicate) copies the seed, then for every request:
 
 1. saves the request under `docs/requests/` and commits it;
 2. AnaxiGraph arms only: scans, refreshes semantic mapping and, at review steps, runs the
-   Patterns and CI/CD reviews, so the map is current like a maintained record;
+   configured broad reviews (Patterns already includes CI/CD);
 3. runs one fresh Codex session (no memory of earlier sessions) with the request;
 4. commits whatever the agent left and measures: hidden acceptance tests for every request so
    far, the agent's own suite, static shape, what the commit touched and CI selection quality.
@@ -73,7 +73,8 @@ When done, reply with a short summary of what you changed."""
 ANAXIGRAPH_PROMPT = """## AnaxiGraph
 
 AnaxiGraph is connected as MCP tools. Its map of this repository was refreshed just before this
-request (semantic mapping every request; Patterns and CI/CD reviews every few requests). Use it
+request (missing/stale production understanding every request; broad reviews at configured
+checkpoints). Use it
 as your architecture partner throughout:
 
 1. Before designing, call `prepare_change` with the request and inspect the owners, related
@@ -270,6 +271,9 @@ def workflow_summary(status: dict) -> dict:
         "error": item.get("error"),
         "model_calls": sum(s.get("model_calls", 0) for s in item.get("stage_timings") or []),
         "failed_batches": item.get("failed_batches"),
+        "reused_batches": item.get("reused_batches"),
+        "semantic_refresh": item.get("semantic_refresh"),
+        "stage_timings": item.get("stage_timings"),
     }
 
 
@@ -277,7 +281,7 @@ def refresh_anaxigraph(config, repo: Path, step: int) -> dict:
     started = time.monotonic()
     extra = ["--config", str(config.workflow_config)] if config.workflow_config else []
     report = {"scan": bool(runtime(config, repo, "scan").get("snapshot"))}
-    kinds = ["mapping"] + (["patterns", "ci"] if step in config.review_steps else [])
+    kinds = ["mapping"] + (list(config.review_kinds) if step in config.review_steps else [])
     for kind in kinds:
         report[kind] = workflow_summary(runtime(config, repo, "run", kind, *extra))
     report["seconds"] = round(time.monotonic() - started, 1)
@@ -494,6 +498,7 @@ def provenance(config) -> dict:
             ["git", "-C", str(Path(config.runtime).resolve().parents[2]), "rev-parse", "HEAD"]
         ),
         "review_steps": sorted(config.review_steps),
+        "review_kinds": list(config.review_kinds),
     }
 
 
@@ -516,7 +521,16 @@ def main() -> None:
     parser.add_argument("--agent-timeout", type=float, default=5400)
     parser.add_argument("--runtime", type=Path, default=DEFAULT_RUNTIME)
     parser.add_argument("--workflow-config", type=Path)
-    parser.add_argument("--review-steps", default="6,11,16")
+    parser.add_argument(
+        "--review-steps",
+        default="6,11,16",
+        help="Broad review checkpoints; blank disables scheduled reviews",
+    )
+    parser.add_argument(
+        "--review-kinds",
+        default="patterns",
+        help="Comma-separated patterns,architecture,ci,fresh-eyes; Patterns includes CI",
+    )
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--mutants", type=int, default=10)
     parser.add_argument("--ci-every", type=int, default=1)
@@ -525,6 +539,11 @@ def main() -> None:
     config.state = config.state.resolve()
     config.first_step, config.last_step = parse_steps(config.steps)
     config.review_steps = {int(s) for s in config.review_steps.split(",") if s}
+    config.review_kinds = tuple(
+        dict.fromkeys(s.strip() for s in config.review_kinds.split(",") if s.strip())
+    )
+    if set(config.review_kinds) - {"patterns", "architecture", "ci", "fresh-eyes"}:
+        parser.error("review kinds must be patterns,architecture,ci,fresh-eyes")
     arms = [a.strip() for a in config.arms.split(",") if a.strip()]
     unknown = set(arms) - set(ARMS)
     if unknown:

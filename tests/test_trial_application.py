@@ -52,6 +52,6 @@ def test_full_size_ledger_prunes_before_it_can_break_core_tools(tmp_path):
     assert app.evidence.path.stat().st_size <= app.evidence.max_bytes
     assert app.prepare_change("Improve service")["task_id"]
     assert app.inspect("module:service.py")["entity"]
-    assert app.assess_plan("Improve service implementation", ["service.py"])["brief"]
+    assert app.assess_plan("Improve service implementation", ["service.py"])["task_id"]
     assert app.validate_change()["candidate_snapshot_id"]
     assert Evidence(tmp_path).events()["items"]

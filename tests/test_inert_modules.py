@@ -102,7 +102,7 @@ def test_whole_mapping_patterns_and_fresh_eyes_cover_marker_without_inventing_re
         return marker_answer(request)
 
     runner = WorkflowRunner(application, provider)
-    mapping = runner.start("mapping", background=False)
+    mapping = runner.start("mapping", {"include_tests": True}, background=False)
     assert mapping["status"] == "completed", mapping
     assert mapping["reconciliation"]["annotated_modules"] == 2
     patterns = runner.start(
@@ -117,7 +117,7 @@ def test_whole_mapping_patterns_and_fresh_eyes_cover_marker_without_inventing_re
     assert plan_scopes(application._current(), "architecture") == [
         ["module:package/application.py"]
     ]
-    fresh = runner.start("fresh-eyes", background=False)
+    fresh = runner.start("fresh-eyes", {"include_tests": True}, background=False)
     assert fresh["status"] == "completed", fresh
     assert fresh["reconciliation"]["declared_modules"] == 2
     assert fresh["reconciliation"]["alternatives"] == 3
@@ -134,7 +134,9 @@ def test_inert_only_tail_batches_join_behavioral_scope_without_adding_requiremen
     application = app(tmp_path, count=2)
     (tmp_path / "zz_marker.py").write_text("pass\n")
     runner = WorkflowRunner(application, lambda request, *_args, **_kwargs: marker_answer(request))
-    assert runner.start("mapping", background=False)["status"] == "completed"
+    assert (
+        runner.start("mapping", {"include_tests": True}, background=False)["status"] == "completed"
+    )
     graph = application._current()
     marker = next(node for node in graph.nodes if node.path == "zz_marker.py")
     marker.data["annotation"]["capabilities"] = ["Defines an organizational placeholder."]

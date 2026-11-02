@@ -193,7 +193,7 @@ def test_exact_snapshot_identity_and_regular_paths_are_required(tmp_path):
             capture_ci_evidence(tmp_path, files, filters)
 
 
-def test_local_ci_selectors_are_fingerprinted_without_source_capture(tmp_path):
+def test_local_ci_selectors_are_captured_without_execution(tmp_path):
     files = write(
         tmp_path,
         {
@@ -207,11 +207,82 @@ def test_local_ci_selectors_are_fingerprinted_without_source_capture(tmp_path):
         "run-tests.sh",
         "scripts/select_tests.py",
     ]
-    assert "do not run or share" not in json.dumps(before)
+    assert "do not run or share" in json.dumps(before)
+    assert all(item["status"] == "captured" for item in before["script_references"]["files"])
     (tmp_path / "scripts/select_tests.py").write_text("print('changed selector')\n")
     after = capture_ci_evidence(tmp_path, index(tmp_path).snapshot.files)
     assert before["script_references"] != after["script_references"]
     assert redacted_command("FOO=privatevalue uv run pytest") == "FOO=[value omitted] uv run pytest"
+
+
+def test_script_capture_follows_local_selector_import_and_redacts_credentials(tmp_path):
+    files = write(
+        tmp_path,
+        {
+            ".github/workflows/ci.yml": "jobs:\n  test:\n    steps:\n      - run: python tools/run_ci.py\n",
+            "tools/run_ci.py": "from select_tests import select\nAPI_KEY='private-secret'\nraise RuntimeError('not executed')\n",
+            "tools/select_tests.py": "def select(paths):\n    return ['tests/contracts']\n",
+        },
+    )
+    result = capture_ci_evidence(tmp_path, files)
+    scripts = {item["path"]: item for item in result["script_references"]["files"]}
+    assert set(scripts) == {"tools/run_ci.py", "tools/select_tests.py"}
+    assert "return ['tests/contracts']" in scripts["tools/select_tests.py"]["source"]
+    assert "private-secret" not in json.dumps(result)
+    assert scripts["tools/run_ci.py"]["redacted"]
+    assert capture_coverage(result)["partial_evidence"]
+
+
+def test_script_capture_budgets_and_symlinks_remain_explicit(tmp_path):
+    files = write(
+        tmp_path,
+        {
+            ".github/workflows/ci.yml": "jobs:\n  test:\n    steps:\n      - run: python tools/selector.py\n",
+            "tools/selector.py": "#" * 16_385,
+        },
+    )
+    result = capture_ci_evidence(tmp_path, files)
+    assert result["script_references"]["files"][0]["status"] == "unknown"
+    assert capture_coverage(result)["partial_evidence"]
+    path = tmp_path / "tools/selector.py"
+    path.unlink()
+    external = tmp_path / "external.py"
+    external.write_text("print('never execute')")
+    path.symlink_to(external)
+    with pytest.raises(ValueError, match="could not be captured"):
+        capture_ci_evidence(tmp_path, files)
+
+
+def test_scripts_resolve_against_working_directory_and_missing_ones_remain_unknown(tmp_path):
+    files = write(
+        tmp_path,
+        {
+            ".github/workflows/ci.yml": "jobs:\n  test:\n    steps:\n      - run: python selector.py\n        working-directory: tools\n      - run: python missing.py\n        working-directory: '${{ inputs.folder }}'\n",
+            "tools/selector.py": "def select():\n    return ['ALL']\n",
+        },
+    )
+    result = capture_ci_evidence(tmp_path, files)
+    scripts = result["script_references"]
+    assert scripts["files"][0]["path"] == "tools/selector.py"
+    assert "return ['ALL']" in scripts["files"][0]["source"]
+    assert scripts["unresolved_paths_total"] == 1
+    assert capture_coverage(result)["partial_evidence"]
+
+
+def test_runner_literal_configuration_leads_to_the_actual_selector(tmp_path):
+    files = write(
+        tmp_path,
+        {
+            ".github/workflows/ci.yml": "jobs:\n  test:\n    steps:\n      - run: python tools/run_ci.py\n",
+            "tools/run_ci.py": 'from pathlib import Path\nCONFIG = Path("ci.json").read_text()\n',
+            "ci.json": json.dumps({"select": ["python", "tools/select_tests.py"]}),
+            "tools/select_tests.py": 'def select(paths):\n    return ["tests/contracts"]\n',
+        },
+    )
+    result = capture_ci_evidence(tmp_path, files)
+    scripts = {item["path"]: item for item in result["script_references"]["files"]}
+    assert set(scripts) == {"tools/run_ci.py", "ci.json", "tools/select_tests.py"}
+    assert 'return ["tests/contracts"]' in scripts["tools/select_tests.py"]["source"]
 
 
 def test_yaml_tags_never_construct_python_objects_and_alias_expansion_is_bounded(tmp_path):

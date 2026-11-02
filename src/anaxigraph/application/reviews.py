@@ -389,7 +389,7 @@ def analysis_reconcile(
     selected = {
         n.id
         for n in graph.nodes
-        if n.kind == "module" and (not scope or n.id in scope or n.path in scope)
+        if n.kind == "module" and (scope is None or n.id in scope or n.path in scope)
     }
     if kind in {"patterns", "architecture"} and not scope:
         selected = {node.id for node in production_modules(graph)}

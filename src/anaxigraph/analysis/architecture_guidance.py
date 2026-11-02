@@ -153,7 +153,10 @@ def _decision(item: Any, expected: set[str]) -> dict:
     ):
         raise ValueError("revisit_when must be a nonempty text of at most 200 characters")
     if not isinstance(item["proposal_id"], str) or item["proposal_id"] not in expected:
-        raise ValueError("Architecture decision names an unknown or duplicate proposal")
+        raise ValueError(
+            "Architecture decision names an unknown or duplicate proposal; "
+            f"remaining proposal IDs: {sorted(expected)}"
+        )
     if item["decision"] not in ("adopt", "defer", "reject"):
         raise ValueError("Architecture decision must adopt, defer or reject")
     if not isinstance(item["reason"], str) or not 1 <= len(item["reason"].strip()) <= 500:

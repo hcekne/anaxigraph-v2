@@ -40,6 +40,7 @@ def records():
         "coverage_run": {"returncode": 0},
         "tests_total": 3,
         "mean_selected_fraction": 0.3,
+        "executing_recall": 1.0,
         "mutants": {"planted": 4, "caught_by_suite": 2, "missed_by_selection": 0},
     }
     probes = [
@@ -89,6 +90,15 @@ def test_complete_checks_and_sparse_recorded_cadence_qualify():
         "ci_measured_steps": [20],
     }
     assert report.decide(arms())["verdict"] == "treatment better"
+
+
+def test_sampled_mutations_do_not_establish_completeness_of_omitted_consumers():
+    rows, probes = records()
+    rows[-1]["ci"]["executing_recall"] = 0.871
+    result = report.verification(rows, probes)
+    assert result["status"] == "incomplete"
+    assert any("contract substitutions unverified" in text for text in result["incomplete"])
+    assert not result["failures"]  # This is not a demonstrated escaped regression.
 
 
 @pytest.mark.parametrize(

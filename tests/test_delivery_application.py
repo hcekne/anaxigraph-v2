@@ -174,7 +174,7 @@ def test_agent_plan_and_validation_receive_actionable_ci_scope_before_and_after_
     proposed = application.assess_plan("improve payment calculation", ["payments/charge.py"])
     assert selected(proposed["proposed_ci_plan"]) == {"payments", "contracts"}
     assert not proposed["proposed_ci_plan"]["checks_executed"]
-    baseline = proposed["brief"]["baseline_id"]
+    baseline = proposed["baseline_id"]
     write(application.root, "payments/charge.py", "def calculate(amount):\n    return amount + 2\n")
     application.scan()
     validated = application.validate_change()

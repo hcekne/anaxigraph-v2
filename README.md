@@ -66,6 +66,8 @@ Mapping refreshes changed understanding; repeated unchanged workflows reuse comp
 Pattern runs include focused architecture scouts and one CI/CD review. Fresh Eyes is separate.
 Change preparation works after a structural scan, combining source, symbols and current summaries.
 It preserves three owner candidates and labels historical co-change suggestions separately.
+Entity inspection is compact and paged. Validation checks actual boundary changes against the
+task baseline; CI reviews can use selector source and fingerprinted test-execution evidence.
 
 [The usage guide](docs/usage.md) includes an instruction block for your project's `AGENTS.md`,
 reviewing recommendations, choosing a sensible cadence, and collecting feedback from agents.
@@ -89,6 +91,7 @@ whether the resulting implementation works.
 - [CI policy format and examples](docs/change-request-ci-delivery.md#declare-accepted-tasks)
 - [Architecture and component contracts](docs/architecture.md)
 - [Measured results and known limits](docs/evidence/ci-delivery-qualification.json)
+- [Verified advice and efficiency changes](docs/change-request-evidence-and-efficiency.md)
 - [Architectural advice and later-change experiment](experiments/architecture_quality/README.md)
 - [Feature drift through 20 product requests and fresh-agent probes](experiments/feature_drift/README.md)
 - [Integration drift and selective CI benchmark](experiments/drift/README.md)

@@ -55,42 +55,69 @@ def _module_edges(
     return incoming, outgoing
 
 
-def neighborhood(graph: Graph, entity_id: str, limit: int = 30) -> dict[str, Any]:
+def _compact_node(node: Node) -> dict[str, Any]:
+    data = {
+        key: node.data[key]
+        for key in ("loc", "annotation_status", "parse_status", "behavioral_validation")
+        if key in node.data
+    }
+    annotation = node.data.get("annotation")
+    if annotation:
+        data["annotation"] = {"overview": _short(annotation.get("overview"), 240)}
+    return asdict(Node(node.id, node.kind, node.name, node.path, node.line, data))
+
+
+def _entity_relations(graph: Graph, entity: Node) -> tuple[list[dict], list[dict]]:
+    incoming = [asdict(e) for e in graph.edges if e.target == entity.id and e.kind != "contains"]
+    outgoing = [asdict(e) for e in graph.edges if e.source == entity.id]
+    if entity.kind == "module":
+        return _module_edges(graph, entity, outgoing)
+    return incoming, outgoing
+
+
+def _relationship_page(graph: Graph, entity: Node, limit: int, offset: int) -> dict[str, Any]:
+    incoming, outgoing = _entity_relations(graph, entity)
+    page = [("incoming", edge) for edge in incoming] + [("outgoing", edge) for edge in outgoing]
+    selected = page[offset : offset + limit]
+    related = {e["source"] for _, e in selected} | {e["target"] for _, e in selected}
+    next_offset = offset + len(selected)
+    return {
+        "incoming": [edge for direction, edge in selected if direction == "incoming"],
+        "outgoing": [edge for direction, edge in selected if direction == "outgoing"],
+        "neighbors": [_compact_node(n) for n in graph.nodes if n.id in related - {entity.id}],
+        "incoming_total": len(incoming),
+        "outgoing_total": len(outgoing),
+        "offset": offset,
+        "next_offset": next_offset if next_offset < len(page) else None,
+        "truncated": offset > 0 or next_offset < len(page),
+    }
+
+
+def neighborhood(
+    graph: Graph, entity_id: str, limit: int = 30, offset: int = 0, full: bool = False
+) -> dict[str, Any]:
     entity = next((n for n in graph.nodes if entity_id == n.id), None) or module_for(
         graph, entity_id
     )
     if entity is None:
-        raise ValueError("Entity not found in this checkout's current graph")
-    incoming = [asdict(e) for e in graph.edges if e.target == entity.id and e.kind != "contains"]
-    outgoing = [asdict(e) for e in graph.edges if e.source == entity.id]
-    if entity.kind == "module":
-        incoming, outgoing = _module_edges(graph, entity, outgoing)
-    related = {e["source"] for e in incoming[:limit]} | {e["target"] for e in outgoing[:limit]}
-    neighbors = []
-    for node in graph.nodes:
-        if node.id in related:
-            brief = {
-                "loc": node.data.get("loc"),
-                "annotation_status": node.data.get("annotation_status"),
-            }
-            if node.data.get("annotation"):
-                brief["overview"] = node.data["annotation"]["overview"]
-            neighbors.append(
-                asdict(Node(node.id, node.kind, node.name, node.path, node.line, brief))
-            )
-    neighbors = neighbors[:limit]
-    return {
-        "entity": asdict(entity),
-        "incoming": incoming[:limit],
-        "outgoing": outgoing[:limit],
-        "neighbors": neighbors,
-        "incoming_total": len(incoming),
-        "outgoing_total": len(outgoing),
-        "truncated": len(incoming) > limit or len(outgoing) > limit,
+        raise ValueError("Entity not found; use modules to discover valid entity IDs")
+    if type(offset) is not int or offset < 0:
+        raise ValueError("offset must be a nonnegative integer")
+    result = _relationship_page(graph, entity, limit, offset) | {
+        "entity": asdict(entity) if full else _compact_node(entity),
+        "detail": "full" if full else "compact",
+        "expand": {"entity_id": entity.id, "full": True},
         "projection": "module rollup of observed symbol references"
         if entity.kind == "module"
         else "source observations",
     }
+    if not full:
+        contracts = _contracts(graph, {entity.path}, {entity.id})
+        result["contracts"] = contracts[:3]
+        result["contract_overflow"] = max(0, len(contracts) - 3)
+        if limit > 1 and len(json.dumps(result, ensure_ascii=False, indent=2).encode()) > 8000:
+            return neighborhood(graph, entity_id, max(1, limit // 2), offset, full)
+    return result
 
 
 def affected_paths(graph: Graph, paths: set[str], depth: int = 2) -> set[str]:

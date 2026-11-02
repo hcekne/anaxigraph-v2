@@ -2,9 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import ConfigDict, Field, with_config
+from typing_extensions import NotRequired, TypedDict
+
+
+@with_config(ConfigDict(extra="forbid"))
+class CheckReceipt(TypedDict):
+    command: Annotated[str, Field(min_length=1, pattern=r"\S")]
+    exit_code: Annotated[int, Field(strict=True)]
+    snapshot_id: Annotated[str, Field(min_length=1, pattern=r"\S")]
+
+
+@with_config(ConfigDict(extra="forbid"))
+class PlanDecision(TypedDict):
+    proposal_id: Annotated[str, Field(min_length=1, pattern=r"\S")]
+    decision: Literal["adopt", "defer", "reject"]
+    reason: Annotated[str, Field(min_length=1, max_length=500, pattern=r"\S")]
+    revisit_when: NotRequired[Annotated[str, Field(min_length=1, max_length=200, pattern=r"\S")]]
 
 
 def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
@@ -49,8 +66,10 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         return application.modules(sort, descending, limit, offset)
 
     @tool
-    def inspect(entity_id: str, limit: int = 30) -> dict:
-        """Expand a bounded entity neighborhood with evidence and resolution status."""
+    def inspect(entity_id: str, limit: int = 30, offset: int = 0, full: bool = False) -> dict:
+        """Page observed relationships; full=True expands entity metadata and annotations."""
+        if offset or full:
+            return application.inspect(entity_id, limit, offset, full)
         return application.inspect(entity_id, limit)
 
     @tool
@@ -66,16 +85,21 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
 
     @tool
     def assess_plan(
-        task: str, files: list[str], decisions: list[dict[str, Any]] | None = None
+        task: str,
+        files: list[str],
+        decisions: list[PlanDecision] | None = None,
+        include_brief: bool = False,
     ) -> dict:
-        """Check placement and explicitly adopt, defer or reject disclosed architecture proposals."""
+        """Return placement deltas and proposal decisions; include_brief=True repeats preparation."""
+        if include_brief:
+            return application.assess_plan(task, files, decisions, True)
         if decisions is not None:
             return application.assess_plan(task, files, decisions)
         return application.assess_plan(task, files)
 
     @tool
     def validate_change(
-        receipts: list[dict[str, Any]] | None = None, baseline_id: str | None = None
+        receipts: list[CheckReceipt] | None = None, baseline_id: str | None = None
     ) -> dict:
         """Compare saved states; supplied checks only count for their exact fingerprint."""
         if baseline_id:

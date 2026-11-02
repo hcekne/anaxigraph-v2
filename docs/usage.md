@@ -14,6 +14,9 @@ choices, then give their findings to the coding agent as concrete work.
    families near the task (see [component principles](component-architecture-principles.md)).
    It then names likely owners, contracts, test links and relevant saved recommendations.
    Use `inspect` to expand a module or saved review; `inspect("charter")` returns the general principles.
+   Entity inspection starts compact; follow `next_offset` to page relationships, or pass `full=true`
+   for complete entity annotations and contracts. Plan assessment returns changes and decisions;
+   `include_brief=true` explicitly repeats the preparation brief.
 3. **Assess the plan** before a substantial edit. `assess_plan` continues the prepared task even
    when its description is reworded. Adopt, defer or reject relevant material architecture findings
    with a reason, including extension-point findings for plans that add a family member by
@@ -23,6 +26,9 @@ choices, then give their findings to the coding agent as concrete work.
    project's required checks.
 5. **Scan and validate** the candidate against the original baseline. Supply check commands,
    exit codes and the candidate snapshot ID. Explain unresolved findings or missing checks.
+   Validation compares observed private accesses, cycles and consumers with the pinned baseline.
+   Persisted proposal obligations receive narrow predicate checks where possible; adopting a
+   proposal never establishes that its full behavior was implemented.
 
 Start a separate task with a new `prepare_change`. Use `continue_task=true` or an explicit
 `baseline_id` when continuing across changed wording or commits. Scanning alone does not advance
@@ -43,6 +49,11 @@ Frequency depends on how quickly the code is changing. Small edits usually need 
 and targeted checks, not every model workflow. You can scope Mapping and architectural reviews to
 relevant modules. Completed batches are saved immediately; resume unfinished work instead of
 starting everything again.
+
+Default semantic Mapping covers executable production modules. Tests and inert namespace markers
+remain in the structural map; use explicit module scopes or configuration `include_tests: true`
+to annotate them too. Progress reports needed/reused/excluded module counts. Unchanged compatible
+annotations need no model calls; explicit saved model and review choices remain part of reuse.
 
 Pattern runs include catalogue screening, detailed review of selected opportunities, and focused
 workers for boundaries, package/repository options, independent verification and CI/CD. They do
@@ -81,6 +92,28 @@ The CI/CD review reads pipeline declarations and proposes improvements. To use d
 selection, author `anaxigraph/ci-policy.json` and connect its `ci-plan` output to your runner.
 The [policy reference](change-request-ci-delivery.md#declare-accepted-tasks) explains task inputs,
 ordering, consumed outputs, fallbacks, cache keys and release/scheduled checks.
+
+CI reviews capture bounded literal runner/selector bodies and local Python script imports, including
+their working directories. Redaction, missing scripts and capture limits remain explicit. To supply
+observed test-selection evidence, use the separate experimental collector from this checkout:
+
+```bash
+uv run python experiments/feature_drift/collect_evidence.py \
+  --repo /path/to/repo --output /path/to/repo/anaxigraph/ci-evidence.json
+```
+
+The collector explicitly runs that repository's `.venv` tests and selector from `ci.json`; its test
+environment needs pytest-cov. The AnaxiGraph service never runs project tests. The canonical report
+refreshes atomically after success; other output paths must be new. Add `--measure-diff --changed path`
+(repeat `--changed` for the complete diff) to time full and selected checks on the same source.
+
+After scanning, CI review, `ci_plan` and change validation expose omissions from this versioned
+report. It contains exact input fingerprints, environment fingerprints, one test-ID inventory,
+and per-source executing/selected inventory indices. It excludes itself from input identity.
+Pass matching `runtime_context` to `ci_plan` when comparing environments. Stale/invalid reports,
+unobserved inputs, omitted consumers and environment uncertainty require review before using that
+report to narrow checks. Declared policies without reports keep their separate policy basis.
+Contract substitutions remain supplied claims; sampled fault success does not erase coverage gaps.
 
 Commit `anaxigraph/record.json` after full workflows or explicit export. A nightly cloud job can
 pull a repo, run its selected reviews, export and commit the record. Another clone scans locally

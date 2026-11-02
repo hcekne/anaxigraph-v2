@@ -89,7 +89,7 @@ def test_new_path_reuses_compatible_annotations_and_saved_reviews(tmp_path):
     saved = target.inspect("review:" + reviews["items"][0]["id"])["entity"]["data"]
     assert saved["result"]["result"] == result
     assert saved["status"] == "current"
-    annotation = target.inspect("module:billing.py")["entity"]["data"]["annotation"]
+    annotation = target.inspect("module:billing.py", full=True)["entity"]["data"]["annotation"]
     assert annotation["provenance"]["source_snapshot"] == original.status()["snapshot"]["id"]
     assert original.export_record()["bytes"] < 100_000
 

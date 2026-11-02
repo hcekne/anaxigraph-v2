@@ -69,8 +69,8 @@ def test_plan_rewording_cannot_rebase_an_in_progress_change(tmp_path):
     (app.root / "service.py").write_text("\n".join(f"value_{n} = {n}" for n in range(612)))
     app.scan()
     plan = app.assess_plan("Improve the implementation of the service", ["service.py"])
-    assert plan["brief"]["baseline_id"] == initial["baseline_id"]
-    assert plan["brief"]["task_id"] == initial["task_id"]
+    assert plan["baseline_id"] == initial["baseline_id"]
+    assert plan["task_id"] == initial["task_id"]
     assert any(f["change"] == "introduced" for f in app.validate_change()["findings"])
     assert app.prepare_change("Begin a separate feature")["baseline_id"] != initial["baseline_id"]
 

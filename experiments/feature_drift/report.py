@@ -89,6 +89,13 @@ def verification(rows: list[dict], probes: list[dict]) -> dict:
             failed.append(label + ": failed CI verification")
         if not ci.get("tests_total") or ci.get("mean_selected_fraction") is None:
             incomplete.append(label + ": missing CI test inventory")
+        recall = ci.get("executing_recall")
+        if type(recall) not in {int, float} or not 0 <= recall <= 1:
+            incomplete.append(label + ": missing observed consumer coverage")
+        elif recall < 1:
+            incomplete.append(
+                label + ": omitted observed consumers; contract substitutions unverified"
+            )
     for row in probes:
         label = row["probe"]
         index = label[1:2]
@@ -142,6 +149,9 @@ def chain_summary(chain: Path) -> dict:
                 "own_suite_seconds": row["own_suite"]["seconds"],
                 "ci_measured": bool(ci),
                 "ci_selected_fraction": ci.get("mean_selected_fraction"),
+                "ci_tests_total": ci.get("tests_total"),
+                "ci_mean_selected_tests": ci.get("mean_selected_tests"),
+                "ci_selection_completeness": ci.get("selection_completeness"),
                 "ci_executing_fraction": ci.get("mean_executing_fraction"),
                 "ci_executing_recall": ci.get("executing_recall"),
                 "ci_files_selecting_all": ci.get("files_selecting_all"),

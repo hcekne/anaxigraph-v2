@@ -8,6 +8,7 @@ import subprocess
 from typing import Any
 
 from anaxigraph.analysis.ci_context import component_context
+from anaxigraph.analysis.ci_obligations import REPORT_PATH, audit_selection
 from anaxigraph.analysis.ci_policy import plan_ci as select_checks
 from anaxigraph.analysis.ci_policy import validate_policy
 from anaxigraph.analysis.portable import input_identity
@@ -16,6 +17,29 @@ from anaxigraph.indexing import capture_sources
 from anaxigraph.indexing.ci_evidence import capture_ci_evidence, redacted_command
 
 POLICY_PATH = "anaxigraph/ci-policy.json"
+
+
+def selection_evidence(app: Any, graph, changed_paths=None, runtime_context=None) -> dict:
+    if REPORT_PATH not in graph.snapshot.files:
+        if (app.root / REPORT_PATH).exists():
+            return {"status": "invalid", "reason": "CI evidence is excluded from the snapshot."}
+        return audit_selection(None, graph.snapshot.files)
+    try:
+        source = capture_sources(app.root, [REPORT_PATH], graph.snapshot.files, maximum=1_000_000)
+        value = json.loads(source[REPORT_PATH])
+        if value is None:
+            raise ValueError("Present CI evidence must be a version 1 object, not null")
+        scope = (
+            [path for path in changed_paths if path != REPORT_PATH]
+            if changed_paths is not None
+            else None
+        )
+        return audit_selection(value, graph.snapshot.files, runtime_context, scope) | {
+            "report_path": REPORT_PATH,
+            "report_fingerprint": graph.snapshot.files[REPORT_PATH],
+        }
+    except (OSError, ValueError, UnicodeError, RecursionError) as error:
+        return {"status": "invalid", "reason": str(error)[:300], "checks_executed": False}
 
 
 def policy(app: Any, graph) -> dict | None:
@@ -60,6 +84,7 @@ def context(app: Any, graph, pipeline_paths: list[str] | None = None) -> dict:
             "components": component_context(graph),
             "package_context": package_context(app, graph),
             "ci_policy": _policy_context(app, graph),
+            "test_selection": selection_evidence(app, graph),
         }
         cached = (graph, selected, captured)
         app._delivery_context_cache = cached
@@ -86,7 +111,15 @@ def _scope(body: dict) -> dict:
     }
 
 
-def advice(app: Any, graph) -> dict:
+def advice(app: Any, graph, changed_paths=None) -> dict:
+    result = _review_advice(app, graph)
+    evidence = selection_evidence(app, graph, changed_paths)
+    if evidence["status"] != "not_supplied":
+        result["selection_evidence"] = evidence
+    return result
+
+
+def _review_advice(app: Any, graph) -> dict:
     rows = app.store.reviews(str(app.root), "delivery", include_requests=False, limit=1)
     if not rows:
         return {"status": "not_reviewed", "workflow": "ci", "suggestions": []}
@@ -194,11 +227,15 @@ def plan(
             "layers": [],
             "uncovered_paths": [],
             "next_step": "Run the CI/CD review, then declare accepted task inputs and dependencies in the policy file.",
+            "selection_evidence": selection_evidence(app, graph, changed_paths, runtime_context),
         }
     paths, comparison = _changed(app, graph, base_ref, base_snapshot_id, changed_paths)
     result = select_checks(
         declared, paths, graph.snapshot.files, cadence=cadence, runtime_context=runtime_context
     )
+    evidence = selection_evidence(app, graph, paths, runtime_context)
+    if evidence["status"] not in {"not_supplied", "reported_passed"}:
+        result |= {"execution_ready": False, "status": "selection_review_required"}
     app._require_live(graph)
     return result | {
         "comparison": comparison,
@@ -207,6 +244,7 @@ def plan(
         "candidate_commit": graph.snapshot.revision,
         "policy_fingerprint": graph.snapshot.files[POLICY_PATH],
         "checks_executed": False,
+        "selection_evidence": evidence,
         "assurance": "Declared policy and identified changes; not proof of behavioral compatibility or successful deployment.",
     }
 

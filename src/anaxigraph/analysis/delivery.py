@@ -76,6 +76,11 @@ def delivery_packet(graph: Graph, context: dict) -> tuple[dict, dict]:
             "Recommendation IDs must equal exactly IDs assessed finding; no quota. Use explicit "
             "unknown for unsupported details. Priority: 1 optional, 2 material, 3 highly important. "
             "A private provider change should not test/deploy unrelated providers when declared inputs and behavioral contract checks justify isolation; directory names alone cannot. Advice/proposed checks are unexecuted and do not authorize skipping CI."
+            " Read captured script bodies and test_selection observations. Identify exact omitted "
+            "consumer tests, composition-root dependencies and shared cache/state/config effects. "
+            "A supplied contract substitution is unverified until its obligations are checked. "
+            "Sampled fault success does not erase omitted consumers. Recommend a concrete selector "
+            "correction or targeted comparison, retaining existing checks until evidence supports narrowing."
         ),
         "output_limits": {"recommendations": 3, "strategy_items": 12, "item_characters": 300},
     }
@@ -204,6 +209,13 @@ def capture_coverage(context: dict) -> dict:
         "local_references_may_be_truncated": bool(context.get("local_references_may_be_truncated")),
         "package_scripts_truncated": bool(context.get("package_scripts", {}).get("truncated")),
         "script_references_truncated": bool(context.get("script_references", {}).get("truncated")),
+        "script_paths_unresolved": bool(
+            context.get("script_references", {}).get("unresolved_paths_total")
+        ),
+        "script_bodies_partial": any(
+            item.get("status") != "captured" or item.get("redacted")
+            for item in context.get("script_references", {}).get("files", [])
+        ),
         "policy_targets_truncated": bool(context.get("ci_policy", {}).get("targets_truncated")),
         "component_areas_truncated": bool(context.get("components", {}).get("areas_truncated")),
         "component_dependencies_truncated": bool(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path, PurePosixPath
@@ -20,7 +21,9 @@ _SENSITIVE = re.compile(
 _URL = re.compile(r"(?:https?|ssh|git\+https?)://[^\s'\"<>]+", re.I)
 _TOKEN = re.compile(r"\b(?:sk-|ghp_|github_pat_|xox[bap]-|AKIA)[A-Za-z0-9_\-]+")
 _ASSIGNMENT = re.compile(r"\b([A-Za-z_][A-Za-z_0-9]*)=(?:\"[^\"]*\"|'[^']*'|[^\s;]+)")
-_SCRIPT_PATH = re.compile(r"(?<![\w./-])(?:\./)?[A-Za-z0-9_./-]+\.(?:py|sh|bash|js|ts|mjs|cjs)\b")
+_SCRIPT_PATH = re.compile(
+    r"(?<![\w./-])(?:\./)?[A-Za-z0-9_./-]+\.(?:py|sh|bash|js|ts|mjs|cjs|json)\b"
+)
 _UNSUPPORTED = {
     ".gitlab-ci.yml",
     "Jenkinsfile",
@@ -357,26 +360,87 @@ def _scripts(root: Path, files: dict[str, str], sources: list[dict]) -> dict:
     }
 
 
-def _script_references(items: list[dict], scripts: dict, files: dict[str, str]) -> dict:
-    commands = [script["command"] for script in scripts["scripts"]]
+def _script_imports(path: str, source: str, files: dict[str, str]) -> set[str]:
+    if not path.endswith(".py"):
+        return set()
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, RecursionError):
+        return set()
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names.add(node.module)
+            names.update(node.module + "." + alias.name for alias in node.names)
+    candidates = {name.replace(".", "/") + ".py" for name in names}
+    candidates.update(str(PurePosixPath(path).parent / name) for name in tuple(candidates))
+    return candidates & files.keys()
+
+
+def _command_scripts(items: list[dict], scripts: dict, files: dict) -> tuple[list[str], list[str]]:
+    commands = [(script["command"], script["working_directory"]) for script in scripts["scripts"]]
     for item in items:
         steps = item.get("steps", []) + [
             step for job in item.get("jobs", []) for step in job["steps"]
         ]
-        commands.extend(step["run"] for step in steps if isinstance(step.get("run"), str))
+        commands.extend(
+            (step["run"], step["working_directory"])
+            for step in steps
+            if isinstance(step.get("run"), str)
+        )
     paths = {
-        path.removeprefix("./") for command in commands for path in _SCRIPT_PATH.findall(command)
+        str(PurePosixPath(directory) / path)
+        for command, directory in commands
+        for path in _SCRIPT_PATH.findall(command)
     }
-    present = sorted(
-        path for path in paths if ".." not in PurePosixPath(path).parts and path in files
-    )
+    present = {path for path in paths if path in files and ".." not in PurePosixPath(path).parts}
+    return sorted(present), sorted(paths - present)
+
+
+def _script_references(
+    root: Path, items: list[dict], scripts: dict, files: dict, sources: list
+) -> dict:
+    captured: list[dict] = []
+    seen: set[str] = set()
+    pending, unresolved = _command_scripts(items, scripts, files)
+    while pending and len(captured) < 8:
+        path = pending.pop(0)
+        if path in seen:
+            continue
+        seen.add(path)
+        item = {"path": path, "fingerprint": files[path], "status": "unknown"}
+        if (root / path).lstat().st_size <= 16_384:
+            source = capture_sources(root, [path], files, maximum=16_384)[path]
+            projected = "\n".join(_safe(line, 1000) for line in source.splitlines())
+            item |= {
+                "status": "captured",
+                "source": projected,
+                "redacted": projected != source.rstrip("\n"),
+            }
+            sources.append(
+                {
+                    "path": path,
+                    "fingerprint": files[path],
+                    "line_count": max(1, len(source.splitlines())),
+                }
+            )
+            children = _script_imports(path, source, files) | {
+                child.removeprefix("./")
+                for child in _SCRIPT_PATH.findall(source)
+                if child.removeprefix("./") in files
+            }
+            pending.extend(sorted(children - seen))
+        else:
+            item["reason"] = "Script exceeds its 16 KiB source capture budget."
+        captured.append(item)
     return {
-        "files": [
-            {"path": path, "fingerprint": files[path], "status": "present-body-opaque"}
-            for path in present[:40]
-        ],
-        "truncated": len(present) > 40,
-        "scope": "Literal script paths in captured command previews only; dynamic references and script bodies remain unknown.",
+        "files": captured,
+        "truncated": bool(set(pending) - seen),
+        "unresolved_paths": unresolved[:10],
+        "unresolved_paths_total": len(unresolved),
+        "scope": "Bounded literal scripts and local Python imports; redacted text and dynamic references remain unresolved.",
     }
 
 
@@ -405,7 +469,9 @@ def capture_ci_evidence(
         "local_references": related,
         "local_references_may_be_truncated": len(related) == MAX_LOCAL_FILES,
         "package_scripts": scripts,
-        "script_references": _script_references(pipelines + related, scripts, fingerprints),
+        "script_references": _script_references(
+            root, pipelines + related, scripts, fingerprints, sources
+        ),
         "source_files": sources,
         "timings": {"status": "not_supplied"},
         "capture_limits": {

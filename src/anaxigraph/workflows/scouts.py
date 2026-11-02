@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from anaxigraph.analysis.architecture import LENSES
 from anaxigraph.analysis.packets import plan_scopes
+from anaxigraph.analysis.patterns import production_modules
 from anaxigraph.analysis.validation import validate_result
 from anaxigraph.workflows.progress import plan_batch
 
@@ -150,3 +151,75 @@ def _component_stages(run):
         )
         if run["kind"] == kind or (run["kind"] == "patterns" and run.get(marker) == 1)
     ]
+
+
+def _mapping_scope(graph, run, planner):
+    scope = run["scope"]
+    if scope:
+        # Validate identities even when every selected module is current.
+        planner(graph, "annotate", scope, include_current=True)
+        return [n for n in graph.nodes if n.kind == "module" and (n.id in scope or n.path in scope)]
+    if run["config"].get("include_tests"):
+        return [n for n in graph.nodes if n.kind == "module"]
+    return production_modules(graph)
+
+
+def _refresh_modules(selected, pipeline, require_pipeline):
+    needed, reused = [], 0
+    reasons: dict[str, int] = {}
+    for node in selected:
+        annotation = node.data.get("annotation") or {}
+        reason = node.data.get("annotation_status", "missing")
+        if reason == "current":
+            recorded = (annotation.get("execution") or {}).get("pipeline")
+            if recorded == pipeline or not require_pipeline:
+                reused += 1
+                continue
+            reason = "model_pipeline_changed"
+        needed.append(node.id)
+        reasons[reason] = reasons.get(reason, 0) + 1
+    return needed, reused, reasons
+
+
+def _mapping_plan(runner, run, planner, select_worker):
+    graph = runner.application._current()
+    selected = _mapping_scope(graph, run, planner)
+    scope = [node.id for node in selected]
+    if run["kind"] in {"annotate", "fresh-eyes"} and run["scope"] is None:
+        run["scope"] = scope
+    choice = run["config"]["stages"]["annotate"]
+    pipeline = {
+        "worker": select_worker(choice)
+        | {"fallbacks": [select_worker(x) for x in choice.get("fallbacks", [])]},
+        "review_passes": [select_worker(x) for x in review_choices(run, "annotate")],
+    }
+    needed, reused, reasons = _refresh_modules(
+        selected, pipeline, run.get("mapping_pipeline_required", False)
+    )
+    excluded = sum(n.kind == "module" for n in graph.nodes) - len(selected)
+    run["semantic_refresh"] = {
+        "scope": scope[:20],
+        "scope_count": len(scope),
+        "scope_truncated": len(scope) > 20,
+        "needed_modules": len(needed),
+        "reused_modules": reused,
+        "skipped_modules": excluded,
+        "reasons": reasons | {"current_compatible": reused, "outside_scope": excluded},
+    }
+    # Ordered-review runs retain their existing batch accounting and reuse receipts.
+    return scope if run["config"]["review_passes"] else needed
+
+
+def plan_workflow_scopes(runner, run, kind, planner, select_worker):
+    scope = None if kind == "delivery" and run["kind"] != "delivery" else run["scope"]
+    if kind == "annotate":
+        scope = _mapping_plan(runner, run, planner, select_worker)
+        if not scope:
+            return
+    for group in planner(
+        runner.application._current(), kind, scope, include_current=kind == "annotate"
+    ):
+        options = {}
+        if kind == "delivery":
+            options["pipeline_paths"] = run["scope"] if run["kind"] == "delivery" else None
+        plan_batch(run, kind, group, **options)

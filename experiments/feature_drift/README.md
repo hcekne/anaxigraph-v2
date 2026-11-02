@@ -49,7 +49,7 @@ session per request, the same prompt, sandbox (no network), and timeout.
 | --- | --- |
 | `bare` | The request only |
 | `charter` | The request plus the [design charter](charter.md) (rooms and interfaces, uniform plug-ins, CI follows architecture) |
-| `anaxigraph` | Charter plus AnaxiGraph over MCP. Before every request the harness scans and refreshes semantic mapping; at steps 6, 11 and 16 it also runs Patterns and CI/CD reviews. The prompt asks for `prepare_change` → `assess_plan` → `validate_change`. |
+| `anaxigraph` | Charter plus AnaxiGraph over MCP. Before every request the harness scans and refreshes needed production understanding; at steps 6, 11 and 16 it runs Patterns, which includes CI/CD. The prompt asks for `prepare_change` → `assess_plan` → `validate_change`. |
 | `anaxigraph-only` | AnaxiGraph without the charter: does the tool deliver the philosophy itself? |
 
 `charter` is the bar AnaxiGraph has to clear: a static page needs no separate review-model calls.
@@ -90,6 +90,9 @@ all three probes with successful, complete verification. Recorded CI checkpoints
 final one, must contain usable baseline/selection/fault evidence and zero missed suite-detected
 mutants. Zero detected faults is insufficient evidence of selector safety. A failed or incomplete
 checkpoint remains visible; averages and a later repair cannot erase it.
+Observed consumer omissions also leave verification incomplete until the proposed replacement
+assurance is established. Passing sampled mutations alone does not qualify omitted consumers.
+This is an interpretation of available evidence, not proof that a historical regression escaped.
 
 The comparative verdict requires at least three matched, complete replicates. Partial pilots
 retain their descriptive measurements and an incomplete verdict. Historical raw records remain
@@ -158,6 +161,35 @@ commit are recorded.
 
 A full run is about 20 × arms × replicates agent sessions (180 for three arms and three
 replicates) plus 9 probe sessions per replicate, and AnaxiGraph refreshes. Run the pilot first.
+
+Set `--review-steps` and `--review-kinds` explicitly to compare other cadences. The default review
+kind is `patterns`; adding `fresh-eyes` requests independent blind designs at those checkpoints.
+Mapping records needed/reused scope counts and preserves explicit model configurations.
+
+## Inspect saved runs without new model calls
+
+```bash
+uv run python experiments/feature_drift/audit.py \
+  --state /path/to/frozen-run --output /path/to/new-audit.json
+uv run python experiments/feature_drift/fault_probes.py --output /path/to/local-faults.json
+uv run python experiments/feature_drift/fault_probes.py --selection widened \
+  --output /path/to/widened-faults.json
+```
+
+The audit writes outside the frozen run and verifies the saved inputs remain unchanged. It reports
+absolute test counts and denominators, omissions, sampled mutation evidence and tool interaction
+costs separately. Historical records that omitted test identities or selected-run timings keep
+those fields unknown.
+
+The disposable fault probe exercises tenant isolation, credential rotation, invalidation and
+circuit-breaker threshold/cooldown/scope. Its local selector deliberately omits consumer assertions;
+exit 1 identifies reference-detected faults it misses. Widened selection must detect the same faults.
+This qualifies the failure detector; it does not establish that those bugs existed in a saved arm.
+
+`collect_evidence.py --repo PATH --output NEW_FILE` explicitly runs coverage and the candidate's
+selector to produce a compact `anaxigraph/ci-evidence.json` report. Optional `--measure-diff` with
+repeated `--changed PATH` times full and selected checks on identical inputs. Use disposable copies
+to collect additional observations from historical code. Keep original trial results intact.
 
 ## Limits
 

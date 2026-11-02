@@ -1,0 +1,136 @@
+{
+  "date": "2026-11-02",
+  "baseline_commit": "c1c4316bcccebfa18e053f84aa4d423e1bb067eb",
+  "scope": "Implementation qualification of CI evidence, architecture follow-through, compact interfaces, selective refresh and retrospective measurement.",
+  "interaction_comparison": {
+    "basis": "Identical saved Switchboard source copied into two checkouts; baseline and updated Application, no product model calls. JSON serialization bytes, not token or wire counts.",
+    "before": {
+      "prepare_bytes": 6131,
+      "assess_bytes": 7346,
+      "inspect_bytes": 49065,
+      "owners": [
+        "switchboard/plugins.py",
+        "switchboard/breaker.py",
+        "switchboard/cache.py"
+      ],
+      "contract_count": 3,
+      "prepare_seconds": 0.3892390299588442,
+      "assess_seconds": 0.46883996995165944,
+      "inspect_seconds": 0.027455495670437813,
+      "assess_repeats_brief": true,
+      "next_offset": null,
+      "incoming_total": 121,
+      "outgoing_total": 85
+    },
+    "after": {
+      "prepare_bytes": 6131,
+      "assess_bytes": 1449,
+      "inspect_bytes": 6397,
+      "owners": [
+        "switchboard/plugins.py",
+        "switchboard/breaker.py",
+        "switchboard/cache.py"
+      ],
+      "contract_count": 3,
+      "prepare_seconds": 0.29987432016059756,
+      "assess_seconds": 0.3528076848015189,
+      "inspect_seconds": 0.06995607074350119,
+      "assess_repeats_brief": false,
+      "next_offset": 7,
+      "incoming_total": 121,
+      "outgoing_total": 85
+    }
+  },
+  "real_ci_evidence": {
+    "input_count": 105,
+    "tests": 1536,
+    "production_files": 36,
+    "report_bytes": 369640,
+    "report_sha256": "b21333a461f0688d05ad271a452b0c2c8325842f2e75a91e99169850b0b47327",
+    "source_environment_unchanged": true,
+    "review_omitted_execution_pairs": 1857,
+    "prepared_omitted_execution_pairs": 1855,
+    "selector_bodies": [
+      "tools/run_ci.py",
+      "ci.json",
+      "tools/select_tests.py"
+    ],
+    "full_seconds": 169.28995179524645,
+    "selected_seconds": 43.102148859295994,
+    "selected_tests": 189,
+    "full_passed": true,
+    "selected_passed": true,
+    "ci_plan_status": "not_configured",
+    "ci_gap_exposed": true,
+    "ci_scope_review_required_basis": "Declared policy is absent in this copied candidate; configured-policy gap blocking is separately unit-tested.",
+    "model_calls": 0
+  },
+  "real_ci_evidence_interpretation": "Collector and application handoff on the existing candidate, not a newly improved implementation. Full/selected timings are sequential observations on shared compute; no causal or general architectural speed claim. Fault sampling was not performed on this candidate.",
+  "retrospective": {
+    "checkpoints": 45,
+    "saved_inputs": 120,
+    "inputs_unchanged": true,
+    "input_digest": "2feaa8846a30151617e8a231b2f253dec6738d7d5acbda9c8b308d04dc0acb8e",
+    "treatment_tool_calls": 243,
+    "treatment_tool_errors": 30,
+    "treatment_payload_json_bytes": 2383619,
+    "no_material_assessments": 31,
+    "repeated_result_calls": 39,
+    "final_omitted_execution_pairs": 1857,
+    "historical_escaped_regression_demonstrated": false
+  },
+  "disposable_fault_probe": {
+    "basis": "Purpose-built fixture, not the historical candidate. Seven generic cache and circuit-breaker faults; normal behavior passes nine checks.",
+    "reference_detected": 7,
+    "local_selection_detected": 0,
+    "widened_selection_detected": 7,
+    "historical_bug_claim": false
+  },
+  "selective_refresh": {
+    "basis": "Real Application/WorkflowRunner persistence with explicitly synthetic provider responses.",
+    "unchanged_repeat_provider_calls": 0,
+    "isolated_edit_refreshed_modules": 1,
+    "unrelated_current_modules_reused": true,
+    "explicit_model_pipeline_and_full_scope_preserved": true
+  },
+  "architecture_checks": {
+    "basis": "Deterministic source observations and pinned-baseline regression fixtures.",
+    "checked": [
+      "private access changes",
+      "dependency cycle changes",
+      "consumer impact including composition roots",
+      "persisted extension enumeration predicates"
+    ],
+    "freeform_proposal_implementation": "unverified",
+    "independent_component_environment": "unverified"
+  },
+  "local_validation": {
+    "core_suite_passed": 742,
+    "experiment_suite_passed_before_final_collector_refinements": 174,
+    "final_collector_metrics_focused_passed": 18,
+    "later_ci_focused_passed": 54,
+    "ruff": "passed",
+    "formatting": "passed",
+    "mypy_files": 55,
+    "quality_violations": [],
+    "production_physical_lines_before": 12381,
+    "production_physical_lines_after": 13065,
+    "unchanged_production_ceiling": 13500,
+    "wheel_sdist_build": "passed",
+    "installed_wheel_operations": [
+      "scan",
+      "prepare",
+      "assess",
+      "inspect",
+      "request delivery"
+    ],
+    "feature_drift_focused_passed": 49,
+    "installed_selector_configuration_capture": "passed"
+  },
+  "limits": [
+    "No new paired coding campaign or live model recommendation-quality evaluation was run.",
+    "Historical omitted-test identities and selected-job timings were absent; new observations were collected separately.",
+    "Supplied coverage, substitutions and sampled faults do not attest complete behavioral equivalence."
+  ],
+  "production_tree_sha256": "c0a29d3a5a1a59d3bb704153a8c22794fc3fbed281e7bf5f26bb5ca963a993a3"
+}

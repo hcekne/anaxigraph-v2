@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, ConfigDict, Field
 
-from anaxigraph.interfaces.mcp import create_mcp
+from anaxigraph.interfaces.mcp import CheckReceipt, PlanDecision, create_mcp
 
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
@@ -117,11 +117,12 @@ class TaskInput(Input):
 class PlanInput(Input):
     task: str = Field(min_length=1, max_length=8000)
     files: list[str] = Field(max_length=100)
-    decisions: list[dict[str, Any]] | None = Field(default=None, max_length=30)
+    decisions: list[PlanDecision] | None = Field(default=None, max_length=12)
+    include_brief: bool = False
 
 
 class ValidationInput(Input):
-    receipts: list[dict[str, Any]] | None = Field(default=None, max_length=100)
+    receipts: list[CheckReceipt] | None = Field(default=None, max_length=50)
     baseline_id: str | None = Field(default=None, max_length=200)
 
 
@@ -242,8 +243,13 @@ def create_app(
         return application.modules(sort, descending, limit, offset)
 
     @server.get("/api/entity")
-    def entity(entity_id: str, limit: int = Query(default=30, ge=1, le=100)) -> dict:
-        return application.inspect(entity_id, limit)
+    def entity(
+        entity_id: str,
+        limit: int = Query(default=30, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+        full: bool = False,
+    ) -> dict:
+        return operations["inspect"](entity_id, limit, offset, full)
 
     @server.get("/api/reviews")
     def reviews(

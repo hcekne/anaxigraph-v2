@@ -91,9 +91,9 @@ function renderCoverage(data) {
 
 function renderMetrics(data) {
   $("#entity-count").textContent = `${data.modules || 0} / ${data.symbols || 0}`;
-  const annotations = data.annotations || {};
-  $("#annotation-count").textContent = `${annotations.current || 0} / ${data.modules || 0}`;
-  $("#annotation-state").textContent = `${annotations.stale || 0} stale · ${annotations.missing || 0} awaiting agent annotation`;
+  const annotations = data.semantic_scope || data.annotations || {};
+  $("#annotation-count").textContent = `${annotations.current || 0} / ${annotations.eligible_modules ?? data.modules ?? 0}`;
+  $("#annotation-state").textContent = `${data.semantic_scope ? "Production: " : ""}${annotations.stale || 0} stale · ${annotations.missing || 0} awaiting agent annotation${annotations.outside_scope ? ` · ${annotations.outside_scope} outside default scope (${annotations.outside_current || 0} annotated)` : ""}`;
   const storage = data.storage || {};
   $("#storage-size").textContent = bytes(storage.bytes ?? storage.database_bytes ?? storage.size_bytes);
 }
@@ -175,7 +175,7 @@ function addLinkGroup(name, edges, direction, nodes) {
 
 async function selectEntity(id) {
   const generation = ++entityGeneration;
-  const result = await api(`/api/entity?${new URLSearchParams({ entity_id: id, limit: 20 })}`);
+  const result = await api(`/api/entity?${new URLSearchParams({ entity_id: id, limit: 20, full: true })}`);
   if (generation !== entityGeneration) return;
   const entity = result.entity;
   state.selected = entity.id;

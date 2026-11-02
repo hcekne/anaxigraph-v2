@@ -5,6 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from anaxigraph.analysis.architecture_guidance import coverage, decide, proposals
+from anaxigraph.analysis.architecture_verification import (
+    boundary_delta,
+    independent_verification,
+    obligation,
+    verify_obligations,
+)
 from anaxigraph.indexing.package_metadata import capture_package_metadata
 
 
@@ -47,22 +53,40 @@ def assess(
             "operation": "assess_plan",
             "files": files,
             "status": result["status"],
-            "metrics": {key: result[key] for key in ("decisions", "pending_ids", "truncated")},
+            "metrics": {key: result[key] for key in ("decisions", "pending_ids", "truncated")}
+            | {"obligations": [obligation(item) for item in result["requirements"]]},
         },
     )
     return result | {"recorded": event is not None, "scout_coverage": coverage(rows, owners)}
 
 
-def followthrough(app: Any, baseline_id: str | None) -> dict:
+def followthrough(app: Any, baseline_id: str | None, graph, previous, checks: list[dict]) -> dict:
+    observed = {
+        "boundary_changes": boundary_delta(graph, previous),
+        "independent_verification": independent_verification(graph, previous, checks),
+    }
     event = app.evidence.latest("architecture_plan")
     if event is None:
-        return {"status": "not_assessed", "implementation_status": "unverified"}
-    if event.get("baseline_id") != baseline_id:
-        return {"status": "baseline_changed", "implementation_status": "unverified"}
-    return {
+        return observed | {"status": "not_assessed", "implementation_status": "unverified"}
+    if (
+        event.get("baseline_id") != baseline_id
+        or previous is None
+        or previous.snapshot.id != baseline_id
+    ):
+        return observed | {"status": "baseline_changed", "implementation_status": "unverified"}
+    metrics = event["metrics"]
+    obligations = metrics.get("obligations", [])
+    sources = (
+        app.indexer.captured_sources(graph.snapshot)
+        if any(item["predicate"] == "no-static-registrar-enumeration" for item in obligations)
+        else {}
+    )
+    verified = verify_obligations(obligations, graph, previous, sources)
+    return observed | {
         "status": event["status"],
         "assessed_snapshot_id": event["snapshot_id"],
-        **event["metrics"],
+        **metrics,
+        "obligations": verified,
         "implementation_status": "unverified",
-        "note": "Dispositions record plan intent. Adopted proposals still require source and check evidence; a passed supplied test does not prove implementation.",
+        "note": "Dispositions record intent. Per-obligation predicates do not establish full proposal implementation or behavior.",
     }

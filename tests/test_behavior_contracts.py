@@ -126,7 +126,7 @@ def test_legacy_four_leaking_contracts_are_stale_and_only_those_modules_are_rema
         path for path, node in modules.items() if node["data"]["annotation_status"] == "stale"
     } == set(LEAKS)
     for path in LEAKS:
-        data = app.inspect(f"module:{path}")["entity"]["data"]
+        data = app.inspect(f"module:{path}", full=True)["entity"]["data"]
         assert "contracts[0].statement" in data["annotation_stale_reason"]
         assert data["annotation"]["overview"] == f"Defines source behavior in {path}."
         assert all(

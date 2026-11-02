@@ -31,6 +31,7 @@ from anaxigraph.workflows.scouts import (
     finding_review_policy,
     linked_products,
     plan_scouts,
+    plan_workflow_scopes,
     review_choices,
     review_workflow,
 )
@@ -67,6 +68,7 @@ DEFAULTS: dict[str, Any] = {
     "workers": 32,
     "timeout_seconds": 600,
     "pattern_mode": "screened",
+    "include_tests": False,
     "stages": {
         **{
             kind: _default_model("gpt-6-luna", "low")
@@ -135,7 +137,7 @@ def _config(value: dict[str, Any] | None) -> dict[str, Any]:
     if value:
         if not isinstance(value, dict) or set(value) - set(DEFAULTS):
             raise ValueError(
-                "Workflow settings are workers, timeout_seconds, pattern_mode, stages and review_passes"
+                "Workflow settings are workers, timeout_seconds, pattern_mode, include_tests, stages and review_passes"
             )
         config.update(value)
         config["stages"] = _stage_choices(value.get("stages", {}))
@@ -143,6 +145,8 @@ def _config(value: dict[str, Any] | None) -> dict[str, Any]:
         raise ValueError("workers must be between 1 and 100")
     if config["pattern_mode"] not in ("screened", "exhaustive"):
         raise ValueError("pattern_mode must be screened or exhaustive")
+    if type(config["include_tests"]) is not bool:
+        raise ValueError("include_tests must be a boolean")
     timeout = config["timeout_seconds"]
     if timeout is not None and (type(timeout) is not int or not 30 <= timeout <= 3600):
         raise ValueError("timeout_seconds must be null for no deadline, or between 30 and 3600")
@@ -286,6 +290,7 @@ class WorkflowRunner:
             "active_workers": active,
             "failed_batches": sum(b["status"] == "failed" for b in batches),
             "reused_batches": sum(bool(b.get("reused")) for b in batches),
+            "semantic_refresh": run.get("semantic_refresh"),
             "elapsed_seconds": round(elapsed, 1),
             "workers": run["config"]["workers"],
             "effective_finding_review": finding_review_policy(run["config"]),
@@ -366,6 +371,8 @@ class WorkflowRunner:
                 "id": uuid.uuid4().hex,
                 "kind": KINDS[kind],
                 "scope": scope,
+                "mapping_pipeline_required": config is not None
+                or (self.directory / "settings.json").exists(),
                 "config": _config(config) if config is not None else self.configuration(),
                 "status": "queued",
                 "phase": "Source scan",
@@ -499,25 +506,7 @@ class WorkflowRunner:
             list(pool.map(lambda batch: self._batch(run, batch), batches))
 
     def _plan_scopes(self, run, kind):
-        graph = self.application._current()
-        scope = None if kind == "delivery" and run["kind"] != "delivery" else run["scope"]
-        if kind == "annotate" and run["kind"] in {"patterns", "architecture"} and scope is None:
-            scope = [
-                identity for group in plan_scopes(graph, "pattern-screen") for identity in group
-            ]
-            if not scope:
-                return
-        scopes = plan_scopes(
-            graph,
-            kind,
-            scope,
-            include_current=kind == "annotate" and bool(run["config"]["review_passes"]),
-        )
-        for scope in scopes:
-            options = {}
-            if kind == "delivery":
-                options["pipeline_paths"] = run["scope"] if run["kind"] == "delivery" else None
-            plan_batch(run, kind, scope, **options)
+        plan_workflow_scopes(self, run, kind, plan_scopes, _selected_worker)
 
     def _plan_details(self, run):
         for batch in list(run["batches"]):

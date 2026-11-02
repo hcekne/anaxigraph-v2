@@ -122,6 +122,9 @@ def test_supplied_passing_check_does_not_attest_that_the_architecture_was_implem
     )
     assert checked["behavioral_status"] == "reported-passed"
     assert checked["architecture"]["implementation_status"] == "unverified"
+    [obligation] = checked["architecture"]["obligations"]
+    assert obligation["status"] == obligation["proposal_status"] == "unresolved"
+    assert obligation["public_contract"] and obligation["verification"]
     (application.root / "pkg/a.py").write_text("def produce(value):\n    return value + 1\n")
     current = application.scan()["snapshot"]["id"]
     assert (
@@ -171,6 +174,6 @@ def test_refined_task_explicitly_continued_keeps_plan_followthrough(application)
     initial = application.trial_evidence()["summary"]["active_task_id"]
     continued = application.prepare_change("refined produce task", continue_task=True)
     repeated = application.prepare_change("refined produce task")
-    assert continued["baseline_id"] == repeated["baseline_id"] == decided["brief"]["baseline_id"]
+    assert continued["baseline_id"] == repeated["baseline_id"] == decided["baseline_id"]
     assert continued["task_id"] == repeated["task_id"] == initial
     assert application.validate_change()["architecture"]["status"] == "decisions_recorded"
