@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "id": "chronoweave",
+  "version": 1,
+  "name": "ChronoWeave Engine",
+  "status": "specification_only",
+  "evidence_kind": "unexecuted_specification",
+  "readiness_note": "Original proposed tasks and oracle ideas, never measured trial evidence. Public behavior contracts, reference implementations and per-step external acceptance checks are not complete; benchmark execution is unavailable. Architectural pressures are unverified hypotheses, not required source layout. Pressure commentary is adapted to neutral, testable risks without predicting outcomes for any arm.",
+  "source": "Google prototype src/engine/evalsBenchmark.ts: public titles and prompts preserved; architectural-pressure commentary adapted; synthetic outcomes and diagnoses excluded.",
+  "steps": [
+    {
+      "number": 0,
+      "phase": "Initial Design",
+      "title": "Design Bitemporal Causal Quarantine Engine (Seed Architecture)",
+      "prompt": "Design and implement ChronoWeave: an in-memory and SQLite-backed bitemporal ledger where every assertion carries (effective_at, asserted_at, causal_parents). Support speculative branch forking, retroactive tombstone retraction, and deterministic state materialization at any (effective_t, assertion_t) coordinate.",
+      "architectural_pressure": "Coupling bitemporal index storage directly to speculative branch state makes later retroactive clawbacks and seal verifiers require full-table rewrites."
+    },
+    {
+      "number": 1,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Retroactive Tombstone Cascade & Taint Propagation",
+      "prompt": "When an assertion is retracted at assertion_t2 for an earlier effective_t1, automatically mark all causally dependent downstream assertions as tainted_pending_reconcile unless insulated by a checkpoint.",
+      "architectural_pressure": "Mutating node taint flags inside materializer.py during read queries violates read/write separation and breaks repeatable historical reads."
+    },
+    {
+      "number": 2,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Epoch Seal Witnesses (Immutable Horizon Locks)",
+      "prompt": "Add cryptographic epoch seals that freeze effective_t intervals against retroactive assertions unless accompanied by an OverrideAuthority proof.",
+      "architectural_pressure": "Hardcoding seal verification inside timeline_store.append() couples storage to authority policy."
+    },
+    {
+      "number": 3,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Counterfactual Branch Diffing & Three-Way Causal Merge",
+      "prompt": "Allow forking a speculative branch from any historical (effective_t, assertion_t) coordinate, applying hypothetical assertions, and computing a minimal causal diff against main.",
+      "architectural_pressure": "Deep-copying the entire SQLite/in-memory store per speculative branch explodes memory and latency on nested forks."
+    },
+    {
+      "number": 4,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Non-Monotonic Grant Inversion Rules",
+      "prompt": "Support non-monotonic derived rules where a late-arriving negative assertion inverts a previously derived capability grant and emits a CompensationObligation record.",
+      "architectural_pressure": "Embedding rule evaluation inside the storage cursor creates a 3-module dependency cycle between store, rules, and obligations."
+    },
+    {
+      "number": 5,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Declared Component CI Policy & Fast Verification Path",
+      "prompt": "Configure deterministic test target selection so edits to a single rule or verifier run only its component and contract tests in <1s.",
+      "architectural_pressure": "Without declared input-to-target mappings, every small rule change runs the full bitemporal replay suite."
+    },
+    {
+      "number": 6,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Pluggable Conflict Resolver Family (3 Initial Strategies)",
+      "prompt": "Add three concurrent branch merge conflict resolvers: LastAssertionWins, CausalDepthPriority, and QuorumWitnessResolver.",
+      "architectural_pressure": "Using a central if/elif registry in merge.py forces every future resolver request to edit merge.py and re-run all merge suites."
+    },
+    {
+      "number": 7,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Fault Probe P1: Retroactive Clock-Skew Tie-Breaker Shift",
+      "prompt": "PROBE P1: Two assertions arriving with identical effective_t and asserted_at timestamps from different nodes must now break ties by deterministic BLAKE2b payload digest rather than insertion order.",
+      "architectural_pressure": "If tie-breaking was duplicated across materializer, diff engine, and conflict resolvers, changing it causes subtle divergence across 6+ files.",
+      "probe_id": "P1"
+    },
+    {
+      "number": 8,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Tenant-Isolated Bitemporal Namespaces & Quota Budgets",
+      "prompt": "Isolate assertions, speculative branches, and epoch seals by tenant_id with configurable per-tenant active branch and assertion byte budgets.",
+      "architectural_pressure": "Threading tenant_id manually through 30 helper functions instead of scoping at the session/envelope boundary."
+    },
+    {
+      "number": 9,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Four Additional Domain Verifiers (Escrow, Compliance, GeoFence, RateCap)",
+      "prompt": "Add four independent assertion pre-commit verifiers: EscrowHoldVerifier, GDPRRetentionVerifier, GeoFenceJurisdictionVerifier, and BurstRateCapVerifier.",
+      "architectural_pressure": "Central registrar edits and shared mutable verifier config dictionaries cause cross-verifier test interference."
+    },
+    {
+      "number": 10,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Portable Audit Bundle Export & Deterministic Replay Verification",
+      "prompt": "Export a canonical, zstd-compressed JSON audit bundle of any bitemporal slice that another node can import and verify without trusting local indexes.",
+      "architectural_pressure": "Serializing internal cache dictionaries or SQLite row IDs into the portable bundle breaks cross-node import."
+    },
+    {
+      "number": 11,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Retroactive Fee & Royalty Clawback Calculator",
+      "prompt": "Compute net financial adjustments when a historical grant assertion is retracted 30 days later, accounting for tiered volume brackets.",
+      "architectural_pressure": "Mixing decimal fee arithmetic directly into causal_graph traversal nodes."
+    },
+    {
+      "number": 12,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Streaming Horizon Compaction & Cold-Slice Archival",
+      "prompt": "Compact sealed bitemporal horizons older than a retention watermark into read-only summary checkpoints while preserving causal provenance hashes.",
+      "architectural_pressure": "Compaction deleting parent nodes that unsealed speculative branches still reference."
+    },
+    {
+      "number": 13,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Webhook & Event Sink Transports with Idempotency Keys",
+      "prompt": "Emit deterministic outbound notifications whenever a speculative branch is promoted or a retroactive taint invalidates a sealed grant.",
+      "architectural_pressure": "Performing synchronous network/webhook I/O inside the transaction commit lock."
+    },
+    {
+      "number": 14,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Fault Probe P2: Poisoned Speculative Merge & Partial Rollback",
+      "prompt": "PROBE P2: If a promoted speculative branch contains an assertion whose verifier depends on a concurrently retracted parent in main, abort promotion atomically and record a QuarantineReceipt.",
+      "architectural_pressure": "Partial promotion leaves main with half-applied assertions if verifiers run after state mutation.",
+      "probe_id": "P2"
+    },
+    {
+      "number": 15,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Declarative Query DSL for Bitemporal Lineage Predicates",
+      "prompt": "Add a compact query mini-language (e.g. `EFFECTIVE BETWEEN t1 AND t2 WHERE TAINTED BY author:x`) parsed into safe predicate ASTs.",
+      "architectural_pressure": "Using Python eval() or coupling the parser directly to SQLite SQL string interpolation."
+    },
+    {
+      "number": 16,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Circuit Breaker & Degraded Read-Only Mode for External Authority Oracles",
+      "prompt": "Wrap remote authority witness verification in a circuit breaker that falls back to cached quorum certificates during network partitions.",
+      "architectural_pressure": "Global circuit-breaker state shared across tenants causes one noisy tenant to trip degraded mode for all tenants."
+    },
+    {
+      "number": 17,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Five Regional Compliance Policy Plugins (EU, US-CA, JP, BR, SG)",
+      "prompt": "Add five regional data-residency and right-to-erasure bitemporal policy plugins with zero changes to existing verifiers or core engine.",
+      "architectural_pressure": "If Step 9 did not establish an open plugin discovery contract, adding 5 regional plugins touches 8+ core files."
+    },
+    {
+      "number": 18,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Zero-Knowledge Redaction Views (Role-Scoped Provenance Masking)",
+      "prompt": "Allow auditors without payload clearance to verify causal graph integrity and timestamp monotonicity using blinded commitment hashes.",
+      "architectural_pressure": "Mutating nodes in-place during redaction or leaking raw assertion payloads through error tracebacks."
+    },
+    {
+      "number": 19,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "MCP & HTTP JSON-RPC Transport Parity for ChronoWeave",
+      "prompt": "Expose all ChronoWeave inspection, branch simulation, and audit export operations identically over CLI, MCP stdio, and HTTP.",
+      "architectural_pressure": "Duplicating validation and business logic inside HTTP route handlers and CLI subcommands."
+    },
+    {
+      "number": 20,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Fault Probe P3: Cross-Epoch Diamond Causal Cycle & Compaction Race",
+      "prompt": "PROBE P3: Handle a diamond causal graph where two speculative branches merge across a compacted horizon boundary while a retroactive retraction arrives on the shared ancestor.",
+      "architectural_pressure": "Spaghetti interaction between compaction (Step 12), branch merge (Step 6), and taint cascade (Step 1) causes infinite recursion or silent data loss.",
+      "probe_id": "P3"
+    }
+  ],
+  "oracle_ideas": [
+    "INV-CW-01: Historical queries at (effective_t, assertion_t) must be 100% repeatable even after later retractions or compactions.",
+    "INV-CW-02: Adding a new Verifier or ConflictResolver plugin must require 0 edits to core timeline_store.py or merge.py registrars.",
+    "INV-CW-03: Speculative branch promotion must be atomic; concurrent parent retraction aborts promotion and emits a QuarantineReceipt."
+  ],
+  "post_history_probes": []
+}

@@ -225,3 +225,41 @@ def test_chain_and_arm_summary_preserve_unknown_mutants_and_incomplete_individua
     assert summary["verification_status"] == "incomplete"
     assert summary["mutants_missed_by_selection"] is None
     assert summary["final_ci_selected_fraction"] == 0.3
+
+
+def test_specification_only_tracks_never_qualify_even_with_fabricated_passing_rows():
+    scenario = report.scenarios.requirements(report.scenarios.describe("chronoweave"))
+    rows, _ = records()
+    initial = copy.deepcopy(rows[0])
+    initial.update(step=0, hidden=hidden(["step_00"]))
+    rows.insert(0, initial)
+    for row in rows:
+        row["hidden"] = hidden(f"step_{k:02d}" for k in range(row["step"] + 1))
+        if row["step"] in (7, 14, 20):
+            row["probe_id"] = {7: "P1", 14: "P2", 20: "P3"}[row["step"]]
+    result = report.verification(rows, [], scenario)
+    assert result["status"] == "incomplete"
+    assert result["incomplete"] == [
+        "Specification-only track: external acceptance checks are not ready"
+    ]
+    summary = arms()
+    for arm in summary.values():
+        arm["scenarios"] = [scenario] * 3
+    assert report.decide(summary)["verdict"] == "incomplete"
+
+
+def test_initial_design_and_inline_probes_are_required_from_scenario_metadata():
+    scenario = report.scenarios.requirements(report.scenarios.describe("aetherloom"))
+    rows, _ = records()
+    result = report.verification(rows, [], scenario)
+    assert any("0..20" in reason for reason in result["incomplete"])
+    assert any("inline probe P1" in reason for reason in result["incomplete"])
+    assert any("missing hidden verification" in reason for reason in result["incomplete"])
+    assert not any("post-history" in reason for reason in result["incomplete"])
+
+
+def test_distinct_frozen_scenario_identities_cannot_be_aggregated_into_a_win():
+    summary = arms()
+    summary["anaxigraph"]["scenario_identities"] = [{"oracle_sha256": "one"}] * 3
+    summary["charter"]["scenario_identities"] = [{"oracle_sha256": "two"}] * 3
+    assert report.decide(summary)["verdict"] == "incomplete"

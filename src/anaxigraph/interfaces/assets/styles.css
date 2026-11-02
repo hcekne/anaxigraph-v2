@@ -14,10 +14,10 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--text); background: var(--bg); font-size: 14px; line-height: 1.6; }
-button, textarea, select { font: inherit; }
+button, textarea, select, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .45; }
-button, a, summary, textarea, select { outline-offset: 4px; }
+button, a, summary, textarea, select, input { outline-offset: 4px; }
 :focus-visible { outline: 2px solid var(--accent); }
 a { color: var(--accent); }
 button { border: 1px solid transparent; border-radius: 7px; padding: .65rem .9rem; font-weight: 600; }
@@ -25,7 +25,7 @@ button { border: 1px solid transparent; border-radius: 7px; padding: .65rem .9re
 .primary:hover { background: #d0f8e4; }
 .secondary { border-color: var(--line); color: var(--text); background: var(--surface-raised); }
 .quiet { padding: .4rem .65rem; color: var(--muted); background: transparent; }
-.quiet:hover { color: var(--text); background: var(--surface-raised); }
+.quiet:hover:not(:disabled) { color: var(--text); background: var(--surface-raised); }
 .topbar { display: flex; align-items: center; gap: 2rem; min-height: 77px; padding: 0 3vw; border-bottom: 1px solid var(--line); background: #131d1f; }
 .brand { display: flex; align-items: center; gap: .65rem; flex-shrink: 0; color: var(--text); font-size: 1.05rem; font-weight: 700; text-decoration: none; letter-spacing: -.03em; }
 .brand-mark { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid #6e9c89; border-radius: 9px; color: var(--accent); background: #213b30; }
@@ -170,3 +170,35 @@ form button, #submit-analysis { margin-top: .8rem; }
 .run-phase { font-weight:600; }
 .run-error { color:#df9a8e; }
 .manual-analysis > summary { cursor:pointer; font-weight:600; }
+
+.secondary:hover:not(:disabled) { border-color: #466b5b; }
+.eval-hero { margin-bottom: 1.5rem; }
+.eval-track-grid, .eval-main-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.eval-track-grid article { padding: 1rem; border: 1px solid var(--line); border-radius: 8px; background: #142022; }
+.eval-track-grid p, .eval-track-grid a { color: var(--muted); font-size: .8rem; }
+.eval-heading, .eval-drafts { margin: 1rem 0; }
+.eval-heading .record-actions { margin: 0; }
+.eval-main-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; }
+.eval-events { max-height: 380px; overflow: auto; margin-bottom: 1rem; }
+.eval-event { display: block; width: 100%; padding: .8rem; border-bottom: 1px solid var(--line); border-radius: 0; color: var(--text); background: transparent; text-align: left; font-size: .75rem; overflow-wrap: anywhere; }
+.eval-event:hover, .eval-event[aria-pressed=true] { background: #22392f; color: var(--accent); }
+.eval-inspector pre { min-height: 220px; }
+.eval-report { margin-top: 1.5rem; }
+.eval-file { margin: 0; border: 1px solid var(--line); border-radius: 7px; padding: .6rem .8rem; font-weight: 600; }
+.eval-file input { display: block; max-width: 240px; margin-top: .4rem; font-size: .7rem; }
+.eval-arm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .8rem; margin: 1rem 0; }
+.eval-arm { background: #142022; }
+.eval-arm h3 { overflow-wrap: anywhere; }
+.eval-stat-list { margin: 1rem 0; }
+.eval-stat-list > div { display: flex; justify-content: space-between; gap: .5rem; border-bottom: 1px solid var(--line); padding: .4rem 0; font-size: .75rem; }
+.eval-stat-list dt { color: var(--muted); }
+.eval-stat-list dd { margin: 0; font-variant-numeric: tabular-nums; }
+.eval-chart { margin-bottom: 1rem; border: 1px solid var(--line); border-radius: 8px; overflow: auto; background: #121c1e; }
+.eval-chart svg { display: block; width: 100%; min-width: 500px; }
+.eval-chart text { fill: var(--muted); font: 10px ui-monospace, monospace; }
+.eval-gridline { stroke: var(--line); stroke-dasharray: 3 3; }
+.eval-trend { stroke: var(--accent); stroke-width: 2; }
+.eval-point { fill: var(--accent); }
+#page-evals .metrics strong { font-size: 1.3rem; overflow-wrap: anywhere; }
+@media (max-width: 1050px) { .eval-main-grid, .eval-track-grid { grid-template-columns: minmax(0, 1fr); } nav { max-width: 100%; overflow-x: auto; } .nav-item { white-space: nowrap; } }
+@media (max-width: 650px) { .eval-report > .panel-heading, .eval-heading { align-items: start; flex-direction: column; } }

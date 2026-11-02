@@ -88,6 +88,10 @@ see the [upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs
 
 ## Read further
 
+Source checkouts also include an **Evals & Benchmarks** dashboard for task evidence and measured
+campaign reports. The [prototype integration notes](https://github.com/hcekne/anaxigraph-v2/blob/main/docs/google-prototype-integration.md)
+describe the new scenario catalog, regression tests and their qualification status.
+
 - [Usage and upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/usage.md)
 - [1.0.0 release record](https://github.com/hcekne/anaxigraph-v2/releases/tag/v1.0.0)
 - [Component architecture principles](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/component-architecture-principles.md)

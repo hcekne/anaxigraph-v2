@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "id": "aetherloom",
+  "version": 1,
+  "name": "AetherLoom Synthesizer",
+  "status": "specification_only",
+  "evidence_kind": "unexecuted_specification",
+  "readiness_note": "Original proposed tasks and oracle ideas, never measured trial evidence. Public behavior contracts, reference implementations and per-step external acceptance checks are not complete; benchmark execution is unavailable. Architectural pressures are unverified hypotheses, not required source layout. Pressure commentary is adapted to neutral, testable risks without predicting outcomes for any arm.",
+  "source": "Google prototype src/engine/evalsBenchmark.ts: public titles and prompts preserved; architectural-pressure commentary adapted; synthetic outcomes and diagnoses excluded.",
+  "steps": [
+    {
+      "number": 0,
+      "phase": "Initial Design",
+      "title": "Design Deterministic Sub-Tick Hexagonal Field & Protocol Synthesizer",
+      "prompt": "Design and implement AetherLoom: a deterministic discrete spatial field engine on axial hex coordinates where protocol transducers exchange framed telemetry packets and enforce flux conservation across cell boundaries at sub-tick resolution.",
+      "architectural_pressure": "Updating hex cells in-place during a tick makes simulation results depend on dictionary iteration order and breaks conservation laws."
+    },
+    {
+      "number": 1,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Sub-Tick Phase Ordering & Deterministic Flux Conservation",
+      "prompt": "Divide each tick into 4 deterministic micro-phases (Emit, Propagate, Arbitrate, Commit) and verify that total scalar flux across all cells plus boundary sinks is conserved to 1e-12.",
+      "architectural_pressure": "Floating-point accumulation order drift across neighbor rings."
+    },
+    {
+      "number": 2,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Lossy Frame Window & Sliding CRC-16 Replay Buffer",
+      "prompt": "Add a sliding window protocol buffer that reorders out-of-sequence sub-tick frames, drops corrupted CRC frames, and requests selective NACK retransmissions.",
+      "architectural_pressure": "Mixing wire-framing state directly into spatial cell entities."
+    },
+    {
+      "number": 3,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Capability Dialect Negotiation Handshake",
+      "prompt": "Allow transducers to advertise supported capability bitmasks and negotiate the highest common protocol dialect version before streaming field updates.",
+      "architectural_pressure": "Hardcoding dialect version numbers as magic integers across codec, router, and field kernel."
+    },
+    {
+      "number": 4,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Sandboxed Policy Bytecode Compiler (No eval/exec)",
+      "prompt": "Compile declarative cell-routing expressions (.loom rules) into a bounded stack-machine bytecode with deterministic instruction fuel limits.",
+      "architectural_pressure": "Using Python eval() or allowing unbounded backward jumps in bytecode."
+    },
+    {
+      "number": 5,
+      "phase": "Phase 1: Core Contracts",
+      "title": "Component-Scoped CI Check Policy for Dialect & Kernel Suites",
+      "prompt": "Declare component test boundaries in anaxigraph/ci-policy.json so dialect additions run only dialect + contract tests.",
+      "architectural_pressure": "Running 10,000-tick spatial conservation convergence tests on every minor codec change."
+    },
+    {
+      "number": 6,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Four Telemetry Transducer Dialects (CompactBin, LineProtocol, CBORLite, DeltaFrame)",
+      "prompt": "Implement four wire-format transducer dialects that encode and decode sub-tick cell deltas.",
+      "architectural_pressure": "Central encoder/decoder switch table in codec.py grows with every dialect."
+    },
+    {
+      "number": 7,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Fault Probe P1: Coordinate Reflection & Reflective Boundary Inversion",
+      "prompt": "PROBE P1: Switch boundary cells from absorbing sinks to reflective barriers that invert radial flux vectors on odd sub-ticks.",
+      "architectural_pressure": "If neighbor-lookup math was copy-pasted across propagate, render, and conservation check modules, reflection breaks flux conservation.",
+      "probe_id": "P1"
+    },
+    {
+      "number": 8,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Multi-Layer Field Coupling (Thermal, Pressure, Electromagnetic Planes)",
+      "prompt": "Extend the spatial field from one scalar value per hex cell to N coupled physical planes with configurable cross-plane transfer matrices.",
+      "architectural_pressure": "Changing Cell data structure breaks all 6 dialect codecs if codecs read internal Cell fields directly."
+    },
+    {
+      "number": 9,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Dead-Letter Quarantine & Byzantine Transducer Isolation",
+      "prompt": "Automatically quarantine any transducer that emits 3 conservation-violating delta frames within 50 ticks and reroute its cells to fallback neighbors.",
+      "architectural_pressure": "Coupling quarantine state to the stateless bytecode VM."
+    },
+    {
+      "number": 10,
+      "phase": "Phase 2: Extension Growth",
+      "title": "Deterministic Checkpoint Snapshots & Time-Travel Replay",
+      "prompt": "Save compact binary/JSON checkpoints every K ticks and support fast-forwarding from the nearest checkpoint to any target (tick, sub_tick).",
+      "architectural_pressure": "Forgetting to serialize sliding-window PRNG/NACK state in checkpoints causes replay divergence."
+    },
+    {
+      "number": 11,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Cross-Dialect Schema Bridge & Lossless Down-Sampling",
+      "prompt": "Bridge high-frequency 64-bit float transducers to 16-bit quantized edge transducers while tracking quantization residual error in a compensation accumulator.",
+      "architectural_pressure": "Dropping quantization residuals silently violates global flux conservation."
+    },
+    {
+      "number": 12,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Hot-Swappable Bytecode Policy Reload with Zero Tick Drop",
+      "prompt": "Allow staging a new .loom bytecode program and activating it at the next tick boundary only after static fuel and stack-depth verification passes.",
+      "architectural_pressure": "Swapping bytecode mid-tick between Propagate and Commit phases."
+    },
+    {
+      "number": 13,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Six Domain Conservation Plugins (Mass, Momentum, Charge, EntropyCap, TokenQuota,HeatSink)",
+      "prompt": "Add six pluggable conservation/invariant auditors that can be enabled per field plane.",
+      "architectural_pressure": "Monolithic conservation checker with hardcoded plane indices."
+    },
+    {
+      "number": 14,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Fault Probe P2: Dynamic getattr Dialect Dispatch & Metaclass Registry",
+      "prompt": "PROBE P2: Refactor dialect resolution to support runtime alias registration and dynamic fallback chains when a frame header specifies an unknown minor version.",
+      "architectural_pressure": "Dynamic getattr/metaclass dispatch hides call edges from static AST analysis and can mask broken fallback targets.",
+      "probe_id": "P2"
+    },
+    {
+      "number": 15,
+      "phase": "Phase 3: Cross-Cutting State",
+      "title": "Spatial Partitioning into Autonomous Sub-Grids (Sector Sharding)",
+      "prompt": "Partition large hex grids into autonomous 16x16 sectors that step in parallel and exchange ghost-halo boundary rings at the Propagate phase.",
+      "architectural_pressure": "Corner hex cells shared by 3 sectors double-counting halo flux."
+    },
+    {
+      "number": 16,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Backpressure & Adaptive Tick Rate Throttling",
+      "prompt": "When downstream telemetry consumers lag by >3 windows, coalesce intermediate sub-tick frames into conservative summary deltas without halting the field kernel.",
+      "architectural_pressure": "Coalescing non-commutative arbitration events corrupts downstream state."
+    },
+    {
+      "number": 17,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Four Additional Edge Transducers (LoRaBurst, AcousticModem, OpticalLink, CANBus)",
+      "prompt": "Add four constrained-MTU physical link transducers with custom frame fragmentation and reassembly.",
+      "architectural_pressure": "Duplicating fragmentation reassembly buffers inside each transducer."
+    },
+    {
+      "number": 18,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Cryptographic Frame Attestation & Replay-Window Watermarks",
+      "prompt": "Verify per-transducer Ed25519/HMAC frame signatures and reject replayed frames even across checkpoint restores.",
+      "architectural_pressure": "Accepting old valid signatures after restoring an earlier field checkpoint."
+    },
+    {
+      "number": 19,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Unified CLI, MCP, and HTTP Telemetry & Simulation Control Plane",
+      "prompt": "Expose field stepping, dialect inspection, quarantine status, and conservation audit reports across CLI, MCP, and HTTP.",
+      "architectural_pressure": "Separate state instances between HTTP server and MCP tools."
+    },
+    {
+      "number": 20,
+      "phase": "Phase 4: Scale & Fault Probes",
+      "title": "Fault Probe P3: Simultaneous Sector Partition + Quantized Bridge + Quarantine Failover",
+      "prompt": "PROBE P3: During a 3-sector halo exchange, quarantine a Byzantine quantized transducer mid-tick while hot-reloading a .loom policy and verify 1e-12 conservation.",
+      "architectural_pressure": "Coupled ownership of sector halos, quarantine state and quantization residuals may cause conservation drift during simultaneous transitions; test each interleaving against the same accounting invariant.",
+      "probe_id": "P3"
+    }
+  ],
+  "oracle_ideas": [
+    "INV-AL-01: Total scalar flux across all hex cells + boundary sinks + quantization accumulators must remain invariant to 1e-12 across every sub-tick.",
+    "INV-AL-02: Bytecode policy hot-swaps and transducer quarantine transitions may only take effect at tick boundaries, never mid-tick.",
+    "INV-AL-03: Dialect codecs and conservation auditors must self-discover via capability contracts without central switch tables."
+  ],
+  "post_history_probes": []
+}

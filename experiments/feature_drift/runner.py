@@ -36,6 +36,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import metrics  # noqa: E402
 
+try:
+    from experiments.feature_drift import scenarios
+except ModuleNotFoundError:
+    import scenarios
+
 HERE = Path(__file__).resolve().parent
 SCENARIO = HERE / "scenario"
 SEED, HIDDEN = SCENARIO / "seed", SCENARIO / "hidden"
@@ -351,7 +356,7 @@ def own_suite(repo: Path, out: Path) -> dict:
 
 
 def evaluate(config, chain: Path, repo: Path, step: int, base: str, head: str) -> dict:
-    files = [f"step_{n:02d}.py" for n in range(1, step + 1)]
+    files = scenarios.acceptance_files(config.scenario, step)
     out = chain / "eval" / f"step-{step:02d}"
     row = {
         "hidden": hidden_tests(repo, files, step, out / "hidden.xml"),
@@ -382,10 +387,12 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
     arm = ARMS[arm_name]
     chain = config.state / f"{arm_name}-r{replicate}"
     repo, results = chain / "repo", chain / "steps.jsonl"
+    validate_resume(config, chain)
     if not repo.exists():
         prepare_repo(repo, SEED)
         commit(repo, "Seed")
         write_json(chain / "chain.json", {"arm": arm_name, **arm, "replicate": replicate,
+                                          "scenario": config.scenario,
                                           "started": now(), **config.provenance})  # fmt: skip
     done = {row["step"] for row in read_jsonl(results)}
     for request in REQUESTS:
@@ -397,6 +404,11 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
         shutil.copy2(request, repo / saved_as)
         base = commit(repo, f"Request {step}")
         row = {"step": step, "arm": arm_name, "replicate": replicate, "started": now()}
+        inline = next(
+            (probe for probe in config.scenario["inline_probes"] if probe["step"] == step), None
+        )
+        if inline:
+            row["probe_id"] = inline["id"]
         if arm["anaxigraph"] and config.agent not in ("noop",):
             row["anaxigraph"] = refresh_anaxigraph(config, repo, step)
         row["agent"] = run_agent(
@@ -418,7 +430,7 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
             f" {row['agent']['seconds']}s",
             flush=True,
         )
-    if config.probes and config.last_step == len(REQUESTS):
+    if config.probes and config.last_step == config.scenario["steps"][-1]:
         run_probes(config, chain, arm_name)
     return {"chain": chain.name, "steps": len(read_jsonl(results))}
 
@@ -465,9 +477,14 @@ def run_probes(config, chain: Path, arm_name: str) -> None:
             "probe": request.stem,
             "arm": arm_name,
             "agent": agent,
-            "hidden_probe": hidden_tests(repo, [f"probe_{number}.py"], 20, out / "probe.xml"),
+            "hidden_probe": hidden_tests(
+                repo, [f"probe_{number}.py"], config.last_step, out / "probe.xml"
+            ),
             "hidden_regression": hidden_tests(
-                repo, [f"step_{n:02d}.py" for n in range(1, 21)], 20, out / "steps.xml"
+                repo,
+                scenarios.acceptance_files(config.scenario, config.last_step),
+                config.last_step,
+                out / "steps.xml",
             ),
             "own_suite": own_suite(repo, out / "own.xml"),
             "diff": diff,
@@ -487,6 +504,18 @@ def provenance(config) -> dict:
             return None
 
     return {
+        "scenario_identity": config.scenario_identity,
+        "harness_sha256": scenarios.digest(
+            {
+                path.name: path.read_text()
+                for path in (
+                    Path(__file__),
+                    HERE / "metrics.py",
+                    HERE / "scenarios.py",
+                    HERE / "charter.md",
+                )
+            }
+        ),
         "model": config.model,
         "effort": config.effort,
         "agent": config.agent,
@@ -499,7 +528,43 @@ def provenance(config) -> dict:
         ),
         "review_steps": sorted(config.review_steps),
         "review_kinds": list(config.review_kinds),
+        "workflow_config_sha256": scenarios.digest(config.workflow_config.read_text())
+        if config.workflow_config
+        else None,
     }
+
+
+def validate_resume(config, chain: Path) -> None:
+    """Unknown or changed experiment inputs cannot be joined to a frozen chain."""
+    if not chain.exists():
+        return
+    metadata = chain / "chain.json"
+    if not metadata.is_file():
+        raise ValueError(f"Cannot resume {chain.name}: missing frozen chain provenance")
+    previous = json.loads(metadata.read_text())
+    keys = (
+        "scenario_identity",
+        "harness_sha256",
+        "model",
+        "effort",
+        "agent",
+        "runtime",
+        "runtime_version",
+        "runtime_commit",
+        "codex_version",
+        "review_steps",
+        "review_kinds",
+        "workflow_config_sha256",
+    )
+    changed = [
+        key for key in keys if key not in previous or previous[key] != config.provenance[key]
+    ]
+    if previous.get("scenario") != config.scenario:
+        changed.append("scenario")
+    if changed:
+        raise ValueError(
+            f"Cannot resume {chain.name}: incompatible frozen inputs: {', '.join(changed)}"
+        )
 
 
 def parse_steps(text: str) -> tuple[int, int]:
@@ -509,10 +574,26 @@ def parse_steps(text: str) -> tuple[int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--state", type=Path, required=True)
+    parser.add_argument("--state", type=Path)
+    parser.add_argument("--track", choices=scenarios.TRACK_IDS, default="switchboard")
+    parser.add_argument(
+        "--list-tracks", action="store_true", help="List executable and draft tracks without models"
+    )
+    parser.add_argument(
+        "--describe-track",
+        action="store_true",
+        help="Print the selected task specification without models",
+    )
+    parser.add_argument(
+        "--export-track",
+        type=Path,
+        help="Export the selected specification to a new JSON file without models",
+    )
     parser.add_argument("--arms", default="bare,charter,anaxigraph")
     parser.add_argument("--replicates", type=int, default=1)
-    parser.add_argument("--steps", default=f"1-{len(REQUESTS)}")
+    parser.add_argument(
+        "--steps", help="Inclusive range; defaults to the selected track's full history"
+    )
     parser.add_argument("--model", default="gpt-6.1-sol")
     parser.add_argument("--effort", default="high")
     parser.add_argument(
@@ -536,8 +617,51 @@ def main() -> None:
     parser.add_argument("--ci-every", type=int, default=1)
     parser.add_argument("--no-probes", dest="probes", action="store_false")
     config = parser.parse_args()
+    if config.list_tracks:
+        print(
+            json.dumps(
+                [
+                    {key: track[key] for key in ("id", "name", "status", "readiness_note")}
+                    for track in map(scenarios.describe, scenarios.TRACK_IDS)
+                ],
+                indent=2,
+            )
+        )
+        return
+    track = scenarios.describe(config.track)
+    if config.describe_track or config.export_track:
+        if config.export_track:
+            scenarios.export(track, config.export_track)
+        if config.describe_track:
+            print(
+                json.dumps(
+                    {"track": track, "scenario_identity": scenarios.identity(track)}, indent=2
+                )
+            )
+        return
+    if track["status"] != "executable":
+        parser.error(
+            f"{config.track} is specification-only: public behavior contracts and per-step "
+            "external acceptance checks are incomplete. No benchmark or model was launched. "
+            "Use --describe-track or --export-track PATH."
+        )
+    if config.state is None:
+        parser.error("--state is required for benchmark execution")
     config.state = config.state.resolve()
-    config.first_step, config.last_step = parse_steps(config.steps)
+    config.scenario = scenarios.requirements(track)
+    config.scenario_identity = scenarios.identity(track)
+    config.steps = config.steps or f"{config.scenario['steps'][0]}-{config.scenario['steps'][-1]}"
+    try:
+        config.first_step, config.last_step = parse_steps(config.steps)
+    except ValueError:
+        parser.error("--steps must be an integer or an inclusive range such as 1-20")
+    if not (
+        config.scenario["steps"][0]
+        <= config.first_step
+        <= config.last_step
+        <= config.scenario["steps"][-1]
+    ):
+        parser.error("--steps must be within the selected scenario's history")
     config.review_steps = {int(s) for s in config.review_steps.split(",") if s}
     config.review_kinds = tuple(
         dict.fromkeys(s.strip() for s in config.review_kinds.split(",") if s.strip())
@@ -548,11 +672,20 @@ def main() -> None:
     unknown = set(arms) - set(ARMS)
     if unknown:
         parser.error(f"unknown arms: {sorted(unknown)}")
+    if len(arms) != len(set(arms)):
+        parser.error("--arms must not repeat an arm; each chain needs one writer")
+    if not arms or config.replicates < 1 or config.concurrency < 1 or config.ci_every < 1:
+        parser.error("Provide nonempty arms and positive replicates, concurrency and CI cadence")
     config.provenance = provenance(config)
+    chains = [(arm, r) for r in range(config.replicates) for arm in arms]
+    try:
+        for arm, replicate in chains:
+            validate_resume(config, config.state / f"{arm}-r{replicate}")
+    except ValueError as error:
+        parser.error(str(error))
     write_json(
         config.state / f"run-{int(time.time())}.json", {"argv": sys.argv, **config.provenance}
     )
-    chains = [(arm, r) for r in range(config.replicates) for arm in arms]
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.concurrency) as pool:
         futures = {pool.submit(run_chain, config, arm, r): (arm, r) for arm, r in chains}
         for future in concurrent.futures.as_completed(futures):

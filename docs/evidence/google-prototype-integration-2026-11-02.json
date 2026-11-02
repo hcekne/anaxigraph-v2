@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-02",
+  "basis": "Local integration qualification, not a coding-arm effectiveness comparison",
+  "prototype": {"repository": "hcekne/anaxi_test_google", "commit": "8373f5b"},
+  "canonical_parent": "138a5bcd26d0d9385c10604ae2b69e0c9557475d",
+  "transferred": {
+    "native_evals_workspace": true,
+    "draft_tracks": 2,
+    "public_requests": 42,
+    "inline_probe_ideas": 6,
+    "adversarial_hypothesis_tests": 15,
+    "synthetic_arm_results_transferred": false
+  },
+  "checks": {
+    "core_pytest_passed": 754,
+    "experiments_pytest_passed": 217,
+    "node_tests_passed": 7,
+    "browser_checks_passed": 28,
+    "ruff": "passed",
+    "format": "passed",
+    "mypy": "passed",
+    "source_budget": "passed",
+    "wheel_and_sdist_build": "passed"
+  },
+  "browser": {
+    "application": "Real loopback HTTP application and temporary repository",
+    "provider": "Explicitly synthetic fixture answers; no external model client",
+    "viewports": ["1440x1100", "390x844"],
+    "covered": [
+      "map, sorting, graph and inspector",
+      "five workflow controls, persisted progress and saved reviews",
+      "prepare, assess and validation against a pinned baseline",
+      "ledger pagination, filtering, inspection and actual JSON download",
+      "report comparison, unknown measurements, step zero and chart gaps",
+      "unsafe labels and invalid, oversized or deeply nested report imports",
+      "active-page refresh, no implicit model jobs and no document overflow"
+    ]
+  },
+  "benchmark_tooling_smoke": {
+    "track": "switchboard",
+    "agent": "noop",
+    "steps": [1],
+    "hidden_acceptance": "0/6",
+    "expected": "A do-nothing candidate has not implemented the requested feature",
+    "verification": "failed",
+    "comparative_verdict": "incomplete",
+    "same_input_resume_preserves_completed_row": true,
+    "changed_harness_resume_rejected_without_overwriting_evidence": true
+  },
+  "runtime": {
+    "physical_lines_before": 13065,
+    "physical_lines_after": 13346,
+    "added_physical_lines": 281,
+    "unchanged_ceiling": 13500,
+    "new_package_dependencies": 0,
+    "local_unreleased_wheel_bytes": 212193
+  },
+  "new_tracks": {
+    "status": "specification_only",
+    "live_product_model_calls": 0,
+    "comparative_results": null,
+    "remaining_qualification": "Complete public behavior contracts, evaluator-owned per-step acceptance and fault sensitivity before a paid campaign"
+  }
+}

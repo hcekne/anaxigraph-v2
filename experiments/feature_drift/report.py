@@ -10,6 +10,11 @@ import json
 from pathlib import Path
 from statistics import mean
 
+try:
+    from experiments.feature_drift import scenarios
+except ModuleNotFoundError:
+    import scenarios
+
 
 def read_jsonl(path: Path) -> list[dict]:
     if not path.exists():
@@ -31,14 +36,24 @@ def regressions(rows: list[dict]) -> dict[int, int]:
     return result
 
 
-def verification(rows: list[dict], probes: list[dict]) -> dict:
+def verification(rows: list[dict], probes: list[dict], scenario: dict | None = None) -> dict:
     """Qualification precedes efficiency; absent measurements never imply passed checks."""
+    scenario = scenario or scenarios.requirements(scenarios.describe())
     incomplete, failed = [], []
-    if sorted(row["step"] for row in rows) != list(range(1, 21)):
-        incomplete.append("Expected each step 1..20 exactly once")
-    expected_probes = {"p1-geolookup", "p2-notes", "p3-timeouts"}
-    if len(probes) != 3 or {row["probe"] for row in probes} != expected_probes:
-        incomplete.append("Expected all three probes exactly once")
+    expected_steps = scenario["steps"]
+    if scenario["status"] != "executable":
+        incomplete.append("Specification-only track: external acceptance checks are not ready")
+    if sorted(row["step"] for row in rows) != expected_steps:
+        incomplete.append(
+            f"Expected each step {expected_steps[0]}..{expected_steps[-1]} exactly once"
+        )
+    expected_probes = set(scenario["post_history_probes"])
+    if len(probes) != len(expected_probes) or {row["probe"] for row in probes} != expected_probes:
+        incomplete.append("Expected all post-history probes exactly once")
+    for probe in scenario["inline_probes"]:
+        matching = [row for row in rows if row["step"] == probe["step"]]
+        if len(matching) != 1 or matching[0].get("probe_id") != probe["id"]:
+            incomplete.append(f"Missing inline probe {probe['id']} at step {probe['step']}")
 
     def suite(value, label):
         if not {"returncode", "tests", "passed"} <= value.keys() or not value.get("tests"):
@@ -60,11 +75,15 @@ def verification(rows: list[dict], probes: list[dict]) -> dict:
     measured = []
     for row in rows:
         label = f"step {row['step']}"
-        hidden(row.get("hidden", {}), {f"step_{n:02d}" for n in range(1, row["step"] + 1)}, label)
+        hidden(
+            row.get("hidden", {}),
+            {Path(name).stem for name in scenarios.acceptance_files(scenario, row["step"])},
+            label,
+        )
         suite(row.get("own_suite", {}), label)
         ci = row.get("ci")
         if not ci:
-            if row["step"] == 20:
+            if row["step"] == expected_steps[-1]:
                 incomplete.append("Missing final CI measurement")
             continue
         measured.append(row["step"])
@@ -98,9 +117,9 @@ def verification(rows: list[dict], probes: list[dict]) -> dict:
             )
     for row in probes:
         label = row["probe"]
-        index = label[1:2]
+        index = scenario["post_history_probes"].index(label) + 1 if label in expected_probes else 0
         hidden(row.get("hidden_probe", {}), {f"probe_{index}"}, label)
-        hidden(row.get("hidden_regression", {}), {f"step_{n:02d}" for n in range(1, 21)}, label)
+        hidden(row.get("hidden_regression", {}), {f"step_{n:02d}" for n in expected_steps}, label)
         suite(row.get("own_suite", {}), label)
         if row.get("ci_selected") is None or not row.get("ci_total"):
             incomplete.append(label + ": missing CI selection")
@@ -116,6 +135,7 @@ def chain_summary(chain: Path) -> dict:
     rows = sorted(read_jsonl(chain / "steps.jsonl"), key=lambda r: r["step"])
     probes = read_jsonl(chain / "probes.jsonl")
     meta = json.loads((chain / "chain.json").read_text()) if (chain / "chain.json").exists() else {}
+    scenario = meta.get("scenario") or scenarios.requirements(scenarios.describe())
     regressed = regressions(rows)
     steps = []
     for row in rows:
@@ -194,7 +214,9 @@ def chain_summary(chain: Path) -> dict:
             }
         )
     return {"chain": chain.name, "arm": meta.get("arm", chain.name.rsplit("-r", 1)[0]),
-            "replicate": meta.get("replicate"), "verification": verification(rows, probes),
+            "replicate": meta.get("replicate"), "scenario": scenario,
+            "scenario_identity": meta.get("scenario_identity"),
+            "verification": verification(rows, probes, scenario),
             "steps": steps, "probes": probe_rows}  # fmt: skip
 
 
@@ -212,6 +234,10 @@ def arm_summary(chains: list[dict]) -> dict:
     ]
     return {
         "chains": len(chains),
+        "scenarios": [
+            c.get("scenario") or scenarios.requirements(scenarios.describe()) for c in chains
+        ],
+        "scenario_identities": [c.get("scenario_identity") for c in chains],
         "replicates": [c.get("replicate") for c in chains],
         "ci_measured_steps": {
             str(c.get("replicate")): c.get("verification", {}).get("ci_measured_steps")
@@ -267,7 +293,23 @@ def arm_summary(chains: list[dict]) -> dict:
 def decide(arms: dict, treatment: str = "anaxigraph", control: str = "charter") -> dict:
     """The rule in README.md, fixed before the full run."""
     t, c = arms.get(treatment), arms.get(control)
-    if not t or not c or t["last_step"] != 20 or c["last_step"] != 20:
+    if not t or not c:
+        return {"verdict": "incomplete"}
+    definitions = t.get("scenarios", []) + c.get("scenarios", [])
+    scenario = definitions[0] if definitions else scenarios.requirements(scenarios.describe())
+    identities = t.get("scenario_identities", []) + c.get("scenario_identities", [])
+    if (
+        scenario.get("status") != "executable"
+        or scenario.get("comparison_rule") != "switchboard-v1"
+        or any(value != scenario for value in definitions)
+        or identities
+        and any(value != identities[0] for value in identities)
+    ):
+        return {
+            "verdict": "incomplete",
+            "reason": "Need one executable scenario and matching frozen identities with a registered comparison rule",
+        }
+    if t["last_step"] != scenario["steps"][-1] or c["last_step"] != scenario["steps"][-1]:
         return {"verdict": "incomplete"}
 
     tr, cr = t.get("replicates", []), c.get("replicates", [])
@@ -337,7 +379,15 @@ def decide(arms: dict, treatment: str = "anaxigraph", control: str = "charter") 
 
 def render(summary: dict) -> str:
     arms = summary["arms"]
-    keys = list(next(iter(arms.values())).keys()) if arms else []
+    keys = (
+        [
+            key
+            for key in next(iter(arms.values()))
+            if key not in {"scenarios", "scenario_identities"}
+        ]
+        if arms
+        else []
+    )
     lines = ["| metric | " + " | ".join(arms) + " |", "| --- |" + " ---: |" * len(arms)]
     for key in keys:
         lines.append(f"| {key} | " + " | ".join(str(arms[a][key]) for a in arms) + " |")
