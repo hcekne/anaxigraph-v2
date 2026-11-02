@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anaxigraph"
-version = "1.0.0a1"
+version = "1.0.0"
 description = "A compact code graph helping people and agents make maintainable changes"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,6 +30,12 @@ dev = [
 
 [project.scripts]
 anaxigraph = "anaxigraph.interfaces.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/hcekne/anaxigraph-v2"
+Repository = "https://github.com/hcekne/anaxigraph-v2"
+Documentation = "https://github.com/hcekne/anaxigraph-v2/blob/main/README.md"
+Issues = "https://github.com/hcekne/anaxigraph-v2/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

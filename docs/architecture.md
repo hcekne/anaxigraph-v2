@@ -177,16 +177,15 @@ untouched. The old feature list is not frozen.
 
 ## Packaging destination
 
-Keep the existing PyPI project name `anaxigraph`. Develop V2 here as `1.0.0a1` in its own uv
-environment and standalone GitHub repository. The legacy checkout and release workflow remain
-separate at `hcekne/anaxigraph`. Moving the checkout does not publish a package or replace a service.
+The 1.0 replacement keeps the existing PyPI project name `anaxigraph` and its earlier releases.
+Its source and release workflow live in this standalone `hcekne/anaxigraph-v2` repository, with
+repository-specific trusted publishing. The legacy checkout and services remain separate at
+`hcekne/anaxigraph`; updating the package does not migrate a running service.
 
-When the selected product is ready, update README/metadata/plugin commands, qualify migration and
-installed-package behavior, and configure PyPI trusted publishing for this source repository before
-publishing `anaxigraph==1.0.0`. Preserve the existing PyPI project and earlier releases; do not assume
-its existing repository-bound publisher automatically authorizes a different GitHub repository.
-Optional public prereleases can precede the final transition. See the
-[Python version specification](https://packaging.python.org/en/latest/specifications/version-specifiers/).
+CLI and MCP callers must adopt the new interfaces. Legacy databases and record schemas are not
+automatically imported; compatible V2 portable analyses retain their input-identity checks.
+See the [upgrade guide](usage.md#upgrading-from-09x) and
+[1.0.0 release record](releases/1.0.0.md) for the supported transition and publication evidence.
 
 ## Evidence before adding complexity
 

@@ -5,6 +5,66 @@ right owner, reuse existing behavior, evaluate a smaller public interface, and c
 that belong to that change. Run deeper reviews regularly enough to challenge accumulated design
 choices, then give their findings to the coding agent as concrete work.
 
+## Install and run
+
+The 1.0 package uses the existing `anaxigraph` PyPI project, with Python 3.11 or newer.
+Check the [release record](releases/1.0.0.md) for publication status. With uv installed:
+
+```bash
+uvx --from anaxigraph==1.0.0 anaxigraph scan --repo /absolute/path/to/your/repo
+uvx --from anaxigraph==1.0.0 anaxigraph status --repo /absolute/path/to/your/repo
+uvx --from anaxigraph==1.0.0 anaxigraph serve --repo /absolute/path/to/your/repo
+```
+
+Open `http://127.0.0.1:8766`. Scanning uses no models; Mapping and other model workflows require an
+authenticated, installed Codex or Claude CLI. For a persistent executable:
+
+```bash
+uv tool install 'anaxigraph>=1.0.0'
+anaxigraph scan --repo /absolute/path/to/your/repo
+uv tool upgrade anaxigraph
+```
+
+The installed requirement permits later stable releases. To keep an exact version, use the pinned
+`uvx --from` form instead. Restart dashboard and MCP processes after upgrades. For source development,
+run `uv sync --locked` in this repository and prefix commands with `uv run`; from another directory,
+use `uv run --project /absolute/path/to/anaxigraph-v2 anaxigraph ...`. Always set `--repo`.
+
+## Upgrading from 0.9.x
+
+1.0 is a replacement implementation with breaking CLI, MCP and state boundaries. Existing scripts,
+plugin commands and client configurations need updating. Commands such as `up`, `understand` and
+`plan` are not 1.0 commands; start with `scan`, `serve`, and the current `--help`. Configure stdio MCP
+with `uvx --from anaxigraph==1.0.0 anaxigraph mcp --repo /absolute/path/to/your/repo` and verify an
+actual `scan` or `prepare_change` call. The [README](../README.md#connect-a-coding-agent) shows the JSON.
+
+Before trying 1.0 on an existing checkout, stop the old service and back up its local database,
+configuration and tracked `anaxigraph/` records outside that checkout. Preserve the old records
+before exporting new ones into the same folder. 1.0 uses `.anaxigraph-v2/knowledge.sqlite` locally
+and `anaxigraph/record.json` for portable analyses. It does not import legacy 0.9.x database or record
+schemas automatically. Unsupported portable formats are rejected and preserved; compatible V2
+portable records can be reused when their source and analysis identities match. Scan to build a
+new structural map, then run Mapping or selected reviews to build new understanding.
+
+After backing up state, upgrade an existing uv tool installation with
+`uv tool upgrade 'anaxigraph>=1.0.0'`. The version constraint also replaces an old 0.9.x pin;
+reconfigure and restart services separately.
+
+Python/PYI parsing is supported. JavaScript/TypeScript files are inventoried and fingerprinted,
+without parsed relationships. The replacement selectively implements useful capabilities; it does
+not restore the legacy feature set or promise compatibility with old workflow outputs.
+
+If an existing workflow still needs 0.9.x, temporarily run the old pinned package without replacing
+your installed 1.0 command:
+
+```bash
+uvx --from anaxigraph==0.9.1 anaxigraph --help
+```
+
+Use the [legacy documentation](https://github.com/hcekne/anaxigraph/tree/v0.9.1) for its commands
+and keep its state separate. Previous PyPI releases remain available; a package upgrade does not
+migrate an already running legacy service.
+
 ## Everyday agent loop
 
 1. **Scan** the exact checkout. A structural scan uses no model calls. If current semantic
@@ -130,7 +190,7 @@ references rather than general impressions. Check whether the next change was ea
 required checks stayed useful, and whether CI feedback got faster without missed regressions.
 
 The local evidence ledger distinguishes supplied context, inspected entities, model usage and
-reported outcomes. `anaxigraph evidence` reads it; `anaxigraph evidence --export` saves a local report.
+reported outcomes. `anaxigraph evidence --repo /absolute/path/to/your/repo` reads it; add `--export` to save a local report.
 Retention is bounded and reports dropped history. Missing provider prices stay unknown.
 Use this alongside agent interviews and project outcomes; inspection alone does not show that an
 agent acted on advice.
@@ -169,8 +229,8 @@ For a shared service behind an HTTPS reverse proxy, explicitly trust its public 
 a random token of at least 32 characters:
 
 ```bash
-export ANAXIGRAPH_HTTP_TOKEN="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-uv run anaxigraph serve --repo /path/to/repo --host 0.0.0.0 \
+export ANAXIGRAPH_HTTP_TOKEN="$(uv run --no-project python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+uvx --from anaxigraph==1.0.0 anaxigraph serve --repo /path/to/repo --host 0.0.0.0 \
   --allow-origin https://anaxigraph.example.com
 ```
 

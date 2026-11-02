@@ -1,0 +1,88 @@
+name: Release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Immutable release tag, for example v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build verified replacement artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install locked tooling
+        run: |
+          python -m pip install uv
+          uv sync --locked --extra dev
+      - name: Require a matching tag and successful source CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          uv run python - <<'PY'
+          import json, os, re, subprocess, tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          assert re.fullmatch(r"[1-9][0-9]*\.[0-9]+\.[0-9]+", version), "Use a stable replacement version"
+          assert os.environ["RELEASE_TAG"] == "v" + version, "Tag/version mismatch"
+          sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          assert sha == os.environ["GITHUB_SHA"], "Dispatch from the exact release tag"
+          runs = json.loads(subprocess.check_output([
+              "gh", "run", "list", "--workflow", "ci.yml", "--commit", sha,
+              "--json", "headSha,conclusion,event", "--limit", "30"
+          ], text=True))
+          assert any(r["headSha"] == sha and r["conclusion"] == "success" and r["event"] == "push" for r in runs), "Exact source CI must pass first"
+          with Path(os.environ["GITHUB_ENV"]).open("a") as stream:
+              stream.write("RELEASE_VERSION=" + version + "\nSOURCE_COMMIT=" + sha + "\n")
+          PY
+      - name: Build and inspect the immutable distributions
+        run: |
+          umask 022
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          uv build --out-dir release
+          uvx twine check release/*.whl release/*.tar.gz
+          uv run python scripts/release_artifacts.py --dist release \
+            --source-commit "${SOURCE_COMMIT}" --output release
+      - name: Exercise the exact built wheel
+        run: |
+          uvx --isolated --from release/*.whl anaxigraph --version
+          mkdir -p "${RUNNER_TEMP}/release-fixture"
+          echo 'def invoice_total(amount): return amount' > "${RUNNER_TEMP}/release-fixture/billing.py"
+          uvx --isolated --from release/*.whl anaxigraph scan --repo "${RUNNER_TEMP}/release-fixture"
+          uvx --isolated --from release/*.whl anaxigraph prepare 'Improve invoice totals' --repo "${RUNNER_TEMP}/release-fixture"
+      - name: Attest source artifacts
+        uses: actions/attest@v4
+        with:
+          subject-path: release/*
+      - name: Retain the verified bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: anaxigraph-${{ env.RELEASE_VERSION }}-release
+          path: release/*
+          if-no-files-found: error
+      - name: Publish source release assets awaiting PyPI verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${RELEASE_TAG}" --verify-tag --prerelease \
+            --title "AnaxiGraph ${RELEASE_VERSION}" \
+            --notes-file "docs/releases/${RELEASE_VERSION}.md" release/*
