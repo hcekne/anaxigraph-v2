@@ -42,6 +42,9 @@ cannot force an unrelated agent to obey it.
 ## Coding experiment feedback loop
 
 All arms receive the same deterministic verification and bounded repair budget.
+Before paid treatment sessions, a disposable runtime probe must demonstrate that
+missing required evidence blocks validation with a nonzero exit. Older runtimes
+are rejected before trial state or coding sessions are created.
 After initial coding, collect coverage once, actual combined selection and fault
 observations; publish the current compact report. The treatment also validates
 through AnaxiGraph against its original pre-edit baseline. A fresh coding session

@@ -84,7 +84,8 @@
     "interface_gate_cases": 6,
     "notes_oracle_cases": 7,
     "browser_checks": 28,
-    "javascript_cases": 7
+    "javascript_cases": 7,
+    "runtime_preflight_cases": 2
   },
   "static_checks": {
     "ruff": "passed",
@@ -106,6 +107,7 @@
     "javascript_passed": 7,
     "browser_checks_passed": 28,
     "wheel_and_sdist_build": "passed",
-    "installed_wheel_validation_flags": "passed"
+    "installed_wheel_validation_flags": "passed",
+    "runtime_preflight_scenario_suite_passed": 24
   }
 }

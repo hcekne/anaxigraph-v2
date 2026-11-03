@@ -27,6 +27,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -952,6 +953,43 @@ def run_probes(config, chain: Path, arm_name: str) -> None:
         print(f"[{chain.name}] probe {request.stem}: {row['hidden_probe']['by_file']}", flush=True)
 
 
+def preflight_runtime(config) -> None:
+    """Exercise the required gate before any paid coding session or state publication."""
+    with tempfile.TemporaryDirectory(prefix="anaxigraph-runtime-preflight-") as folder:
+        root = Path(folder)
+        (root / "service.py").write_text("def operation():\n    return 1\n")
+        snapshot = (runtime(config, root, "scan", timeout=30).get("snapshot") or {}).get("id")
+        if not snapshot:
+            raise ValueError("AnaxiGraph runtime could not scan the preflight repository")
+        checked = sh(
+            [
+                str(config.runtime),
+                "--repo",
+                str(root),
+                "validate",
+                "--baseline-id",
+                snapshot,
+                "--require-ci-evidence",
+            ],
+            check=False,
+            timeout=30,
+        )
+        try:
+            value = json.loads(checked.stdout)
+        except ValueError:
+            value = {}
+        if not (
+            checked.returncode == 1
+            and isinstance(value, dict)
+            and value.get("completion_allowed") is False
+            and value.get("validation_status") == "incomplete"
+            and value.get("ci_selection", {}).get("required") is True
+        ):
+            raise ValueError(
+                "Runtime lacks the enforced CI safety gate; use the updated AnaxiGraph checkout before starting paid coding"
+            )
+
+
 def provenance(config) -> dict:
     def out(argv):
         try:
@@ -1156,6 +1194,11 @@ def main() -> None:
         parser.error("--arms must not repeat an arm; each chain needs one writer")
     if not arms or config.replicates < 1 or config.concurrency < 1 or config.ci_every < 1:
         parser.error("Provide nonempty arms and positive replicates, concurrency and CI cadence")
+    if config.agent != "noop" and any(ARMS[arm]["anaxigraph"] for arm in arms):
+        try:
+            preflight_runtime(config)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            parser.error(str(error))
     config.provenance = provenance(config)
     chains = [(arm, r) for r in range(config.replicates) for arm in arms]
     try:

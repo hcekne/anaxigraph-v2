@@ -179,6 +179,34 @@ def test_duplicate_arms_cannot_start_concurrent_writers(monkeypatch, tmp_path):
     assert not (tmp_path / "run").exists()
 
 
+def test_real_runtime_preflight_exercises_fail_closed_validation_without_models():
+    runner.preflight_runtime(SimpleNamespace(runtime=runner.DEFAULT_RUNTIME))
+
+
+def test_old_runtime_is_rejected_before_state_or_paid_sessions(monkeypatch, tmp_path):
+    executable = tmp_path / "old-runtime"
+    executable.write_text(
+        f"#!{sys.executable}\nimport json\nprint(json.dumps({{'snapshot': {{'id': 'old'}}}}))\n"
+    )
+    executable.chmod(0o755)
+    state = tmp_path / "state"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["runner", "--state", str(state), "--arms", "anaxigraph", "--runtime", str(executable)],
+    )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Unsupported runtime reached coding or trial publication")
+
+    monkeypatch.setattr(runner, "provenance", forbidden)
+    monkeypatch.setattr(runner, "run_agent", forbidden)
+    with pytest.raises(SystemExit) as rejected:
+        runner.main()
+    assert rejected.value.code == 2
+    assert not state.exists()
+
+
 @pytest.mark.parametrize(
     "changed", ["requests_sha256", "oracle_sha256", "runtime_version", "missing"]
 )
