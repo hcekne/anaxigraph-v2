@@ -11,16 +11,12 @@ from typing import Any
 
 
 def _location(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--repo", type=Path, default=argparse.SUPPRESS, help="Checkout to analyze")
-    parser.add_argument(
-        "--database", type=Path, default=argparse.SUPPRESS, help="Local SQLite path"
-    )
-    parser.add_argument(
-        "--exclusions",
-        type=Path,
-        default=argparse.SUPPRESS,
-        help="JSON array of repository-relative exclusion patterns",
-    )
+    for name, description in (
+        ("repo", "Checkout to analyze"),
+        ("database", "Local SQLite path"),
+        ("exclusions", "JSON array of repository-relative exclusion patterns"),
+    ):
+        parser.add_argument(f"--{name}", type=Path, default=argparse.SUPPRESS, help=description)
 
 
 def _ci_plan_parser(commands: Any) -> None:
@@ -103,6 +99,14 @@ def parser() -> argparse.ArgumentParser:
         elif name == "validate":
             command.add_argument("--receipts", type=Path, help="JSON array of check receipts")
             command.add_argument("--baseline-id", help="Compare against this retained snapshot")
+            command.add_argument(
+                "--runtime-context", type=Path, help="Current environment fingerprints JSON"
+            )
+            command.add_argument(
+                "--require-ci-evidence",
+                action="store_true",
+                help="Require complete selector verification",
+            )
         elif name == "request":
             command.add_argument(
                 "kind",
@@ -160,20 +164,13 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-def _read_json(path: Path, expected: type) -> Any:
+def _read_json(path: Path | None, expected: type) -> Any:
+    if path is None:
+        return None
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, expected):
         raise ValueError(f"{path} must contain a JSON {expected.__name__}")
     return value
-
-
-def _analysis_options(args: argparse.Namespace) -> dict[str, Any]:
-    options: dict[str, Any] = {}
-    if args.pattern_ids is not None:
-        options["pattern_ids"] = args.pattern_ids
-    if args.lens is not None:
-        options["lens"] = args.lens
-    return options
 
 
 def _check_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
@@ -181,25 +178,16 @@ def _check_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any
         return application.ci_plan(
             base_ref=args.base_ref,
             base_snapshot_id=args.base_snapshot_id,
-            changed_paths=_read_json(args.changed_paths, list) if args.changed_paths else None,
+            changed_paths=_read_json(args.changed_paths, list),
             cadence=args.cadence,
-            runtime_context=_read_json(args.runtime_context, dict)
-            if args.runtime_context
-            else None,
+            runtime_context=_read_json(args.runtime_context, dict),
         )
-    receipts = _read_json(args.receipts, list) if args.receipts else None
-    if args.baseline_id:
-        return application.validate_change(receipts, args.baseline_id)
-    return application.validate_change(receipts)
-
-
-def _plan_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
-    decisions = _read_json(args.decisions, list) if args.decisions else None
-    if args.include_brief:
-        return application.assess_plan(args.task, args.files, decisions, True)
-    if decisions is not None:
-        return application.assess_plan(args.task, args.files, decisions)
-    return application.assess_plan(args.task, args.files)
+    return application.validate_change(
+        _read_json(args.receipts, list),
+        args.baseline_id,
+        runtime_context=_read_json(args.runtime_context, dict),
+        require_ci_evidence=args.require_ci_evidence,
+    )
 
 
 def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
@@ -211,37 +199,38 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "modules":
         return application.modules(args.sort, args.descending, args.limit, args.offset)
     if args.command == "inspect":
-        if args.offset or args.full:
-            return application.inspect(args.entity_id, args.limit, args.offset, args.full)
-        return application.inspect(args.entity_id, args.limit)
+        return application.inspect(args.entity_id, args.limit, args.offset, args.full)
     if args.command == "prepare":
-        if args.continue_task:
-            return application.prepare_change(args.task, args.limit, args.baseline_id, True)
-        if args.baseline_id:
-            return application.prepare_change(args.task, args.limit, args.baseline_id)
-        return application.prepare_change(args.task, args.limit)
+        return application.prepare_change(
+            args.task, args.limit, args.baseline_id, args.continue_task
+        )
     if args.command == "assess":
-        return _plan_dispatch(application, args)
+        return application.assess_plan(
+            args.task, args.files, _read_json(args.decisions, list), args.include_brief
+        )
     if args.command in {"validate", "ci-plan"}:
         return _check_dispatch(application, args)
     if args.command == "request":
-        return application.analysis_request(args.kind, args.scope, **_analysis_options(args))
+        options = {
+            key: getattr(args, key)
+            for key in ("pattern_ids", "lens")
+            if getattr(args, key) is not None
+        }
+        return application.analysis_request(args.kind, args.scope, **options)
     if args.command == "submit":
         return application.submit_analysis(args.request_id, _read_json(args.result, dict))
     if args.command == "reviews":
-        if args.limit != 12 or args.offset:
-            return application.reviews(args.kind, args.limit, args.offset)
-        return application.reviews(args.kind)
+        return application.reviews(args.kind, args.limit, args.offset)
     if args.command == "run":
-        config = _read_json(args.config, dict) if args.config else None
-        return application.workflow_start(args.kind, config, args.scope, True)
+        return application.workflow_start(
+            args.kind, _read_json(args.config, dict), args.scope, True
+        )
     if args.command == "runs":
         return application.workflow_status(args.run_id, args.batch_offset, args.batch_limit)
     if args.command == "resume":
         return application.workflow_resume(args.run_id, True)
     if args.command == "workflow-config":
-        config = _read_json(args.file, dict) if args.file else None
-        return application.workflow_configure(config)
+        return application.workflow_configure(_read_json(args.file, dict))
     if args.command == "evidence":
         return (
             application.export_evidence()
@@ -284,7 +273,13 @@ def main(argv: list[str] | None = None) -> int:
 
             create_mcp(application).run(transport="stdio")
         else:
-            print(json.dumps(dispatch(application, args), ensure_ascii=False, indent=2))
+            result = dispatch(application, args)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            if args.command == "validate" and (
+                result.get("ci_selection", {}).get("required")
+                or result.get("validation_status") == "blocked"
+            ):
+                return 0 if result.get("completion_allowed") else 1
         return 0
     except (ValueError, OSError) as error:
         print(json.dumps({"error": str(error)}), file=sys.stderr)

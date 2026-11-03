@@ -30,7 +30,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         stateless_http=True,
         json_response=True,
         instructions=(
-            "Prepare substantial changes, inspect evidence, assess placement, then scan and validate. "
+            "Prepare, inspect, assess, scan/validate. completion_allowed=False means unqualified work. "
             "Resolve assess_plan decision_required or scope_incomplete before treating a plan as assessed; "
             "adopt, defer or reject each material proposal with a reason. Dispositions do not prove implementation. "
             "Run complete model workflows using workflow_start; inspect progress with workflow_status. "
@@ -68,20 +68,14 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
     @tool
     def inspect(entity_id: str, limit: int = 30, offset: int = 0, full: bool = False) -> dict:
         """Page observed relationships; full=True expands entity metadata and annotations."""
-        if offset or full:
-            return application.inspect(entity_id, limit, offset, full)
-        return application.inspect(entity_id, limit)
+        return application.inspect(entity_id, limit, offset, full)
 
     @tool
     def prepare_change(
         task: str, limit: int = 12, baseline_id: str | None = None, continue_task: bool = False
     ) -> dict:
         """Find existing responsibilities, reuse opportunities and checks before editing."""
-        if continue_task:
-            return application.prepare_change(task, limit, baseline_id, True)
-        if baseline_id:
-            return application.prepare_change(task, limit, baseline_id)
-        return application.prepare_change(task, limit)
+        return application.prepare_change(task, limit, baseline_id, continue_task)
 
     @tool
     def assess_plan(
@@ -91,20 +85,22 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         include_brief: bool = False,
     ) -> dict:
         """Return placement deltas and proposal decisions; include_brief=True repeats preparation."""
-        if include_brief:
-            return application.assess_plan(task, files, decisions, True)
-        if decisions is not None:
-            return application.assess_plan(task, files, decisions)
-        return application.assess_plan(task, files)
+        return application.assess_plan(task, files, decisions, include_brief)
 
     @tool
     def validate_change(
-        receipts: list[CheckReceipt] | None = None, baseline_id: str | None = None
+        receipts: list[CheckReceipt] | None = None,
+        baseline_id: str | None = None,
+        runtime_context: dict[str, Any] | None = None,
+        require_ci_evidence: bool = False,
     ) -> dict:
-        """Compare saved states; supplied checks only count for their exact fingerprint."""
-        if baseline_id:
-            return application.validate_change(receipts, baseline_id)
-        return application.validate_change(receipts)
+        """Validate exact inputs; completion_allowed=False requires resolving the evidence gaps."""
+        return application.validate_change(
+            receipts,
+            baseline_id,
+            runtime_context=runtime_context,
+            require_ci_evidence=require_ci_evidence,
+        )
 
     @tool
     def ci_plan(
@@ -148,9 +144,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
     @tool
     def reviews(kind: str | None = None, limit: int = 12, offset: int = 0) -> dict:
         """Discover saved review metadata; use inspect('review:<id>') for the full result."""
-        if limit != 12 or offset:
-            return application.reviews(kind, limit, offset)
-        return application.reviews(kind)
+        return application.reviews(kind, limit, offset)
 
     @tool
     def workflow_start(

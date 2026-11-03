@@ -38,7 +38,9 @@ def observed(monkeypatch):
     monkeypatch.setattr(metrics, "collect", lambda repo, targets: [TEST])
     monkeypatch.setattr(metrics, "select", lambda repo, paths: (["ALL"], 0.0))
     monkeypatch.setattr(
-        metrics, "coverage_by_test", lambda repo: ({"lib.py": {2: {TEST}}}, {"returncode": 0})
+        metrics,
+        "coverage_by_test",
+        lambda repo: ({"lib.py": {2: {TEST}}}, {"returncode": 0, "tests": 1, "passed": 1}),
     )
 
 
@@ -179,7 +181,7 @@ def test_unknown_coverage_test_id_refuses_report(candidate, monkeypatch):
         collector.report(candidate)
 
 
-def test_change_measurement_flags_require_each_other(candidate):
+def test_optional_timing_requires_changed_paths(candidate):
     output = candidate.parent / "report.json"
     command = [
         sys.executable,
@@ -188,11 +190,10 @@ def test_change_measurement_flags_require_each_other(candidate):
         str(candidate),
         "--output",
         str(output),
-        "--changed",
-        "lib.py",
+        "--measure-diff",
     ]
     result = subprocess.run(command, capture_output=True, text=True, timeout=10)
-    assert result.returncode == 2 and "--measure-diff" in result.stderr
+    assert result.returncode == 2 and "--changed" in result.stderr
     assert not output.exists()
 
 
@@ -201,7 +202,9 @@ def test_long_valid_node_id_survives_complete_producer_pipeline(candidate, monke
     identity = "tests/test_lib.py::test_a[" + "long-parameter" * 400 + "]"
     monkeypatch.setattr(metrics, "collect", lambda repo, targets: [identity])
     monkeypatch.setattr(
-        metrics, "coverage_by_test", lambda repo: ({"lib.py": {2: {identity}}}, {"returncode": 0})
+        metrics,
+        "coverage_by_test",
+        lambda repo: ({"lib.py": {2: {identity}}}, {"returncode": 0, "tests": 1, "passed": 1}),
     )
     output = candidate.parent / "long-id-report.json"
     collector.write_report(candidate, output)

@@ -425,7 +425,12 @@ class Application:
         }
 
     def validate_change(
-        self, receipts: list[dict[str, Any]] | None = None, baseline_id: str | None = None
+        self,
+        receipts: list[dict[str, Any]] | None = None,
+        baseline_id: str | None = None,
+        *,
+        runtime_context: dict[str, Any] | None = None,
+        require_ci_evidence: bool = False,
     ) -> dict[str, Any]:
         graph = self._current()
         if baseline_id is not None and (not isinstance(baseline_id, str) or not baseline_id):
@@ -456,8 +461,10 @@ class Application:
         result["architecture"] = component_architecture.followthrough(
             self, selected, graph, previous, result["checks"]
         )
-        result["ci_selection"] = delivery.selection_evidence(
-            self, graph, changed_paths(graph, previous)
+        result.update(
+            delivery.validation(
+                self, graph, previous, result["checks"], runtime_context, require_ci_evidence
+            )
         )
         result["extension_points"] = _extension_review(graph, previous, self.root)
         result["historical_associations"] = self._history_advice(
@@ -466,10 +473,12 @@ class Application:
             previous.snapshot.revision if previous else None,
         )
         result["ci_plan"] = delivery.advisory(
-            self, base_snapshot_id=baseline_id or stats.get("pinned_snapshot_id")
+            self,
+            base_snapshot_id=selected,
+            runtime_context=runtime_context,
         )
         self.evidence.outcome(
-            "validation_reported",
+            result["validation_status"],
             graph.snapshot.id,
             receipts,
             "Supplied checks and structural comparison; not independent correctness proof.",

@@ -293,7 +293,7 @@ def test_cli_http_and_mcp_forward_architecture_lens_and_explicit_plan_decisions(
             ["assess", "Improve", "--files", "owner.py", "--decisions", str(saved)]
         ),
     )
-    assert assessed["args"] == ["Improve", ["owner.py"], decisions]
+    assert assessed["args"] == ["Improve", ["owner.py"], decisions, False]
     client = TestClient(
         create_app(application), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
     )

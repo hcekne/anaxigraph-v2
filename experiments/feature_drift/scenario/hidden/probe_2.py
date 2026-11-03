@@ -24,11 +24,14 @@ def test_platform_rules(app, hub):
     app.creds("notes", ws=ws)
     assert app.get("/api/integrations/notes", ws).json()["status"] == "ok"
     app.settings(ws, quotas={"notes": 1})
+    before = len(tool_calls(hub, "notes", "search_notes"))
     assert invoke(app, "notes.search", {"q": "a"}, ws).status_code == 200
+    assert len(tool_calls(hub, "notes", "search_notes")) == before + 1
     response = invoke(app, "notes.search", {"q": "a"}, ws)
     assert response.status_code == 429 and error_code(response) == "quota_exceeded"
+    assert len(tool_calls(hub, "notes", "search_notes")) == before + 1
     assert "notes" in {e["integration"] for e in app.audit(ws)}
     app.settings(ws, disabled_integrations=["notes"])
     response = invoke(app, "notes.search", {"q": "a"}, ws)
     assert response.status_code == 403 and error_code(response) == "integration_disabled"
-    assert len(tool_calls(hub, "notes", "search_notes")) == 1
+    assert len(tool_calls(hub, "notes", "search_notes")) == before + 1

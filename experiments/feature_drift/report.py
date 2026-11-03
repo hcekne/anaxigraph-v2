@@ -75,6 +75,11 @@ def verification(rows: list[dict], probes: list[dict], scenario: dict | None = N
     measured = []
     for row in rows:
         label = f"step {row['step']}"
+        gate = row.get("ci_gate", {})
+        if gate.get("status") == "failed":
+            failed.append(label + ": failed external safety/repair qualification")
+        elif gate and gate.get("status") != "passed":
+            incomplete.append(label + ": external safety repair remains incomplete")
         hidden(
             row.get("hidden", {}),
             {Path(name).stem for name in scenarios.acceptance_files(scenario, row["step"])},
@@ -117,6 +122,11 @@ def verification(rows: list[dict], probes: list[dict], scenario: dict | None = N
             )
     for row in probes:
         label = row["probe"]
+        gate = row.get("ci_gate", {})
+        if gate.get("status") == "failed":
+            failed.append(label + ": failed external safety/repair qualification")
+        elif gate and gate.get("status") != "passed":
+            incomplete.append(label + ": external safety repair remains incomplete")
         index = scenario["post_history_probes"].index(label) + 1 if label in expected_probes else 0
         hidden(row.get("hidden_probe", {}), {f"probe_{index}"}, label)
         hidden(row.get("hidden_regression", {}), {f"step_{n:02d}" for n in expected_steps}, label)
@@ -134,6 +144,9 @@ def verification(rows: list[dict], probes: list[dict], scenario: dict | None = N
 def chain_summary(chain: Path) -> dict:
     rows = sorted(read_jsonl(chain / "steps.jsonl"), key=lambda r: r["step"])
     probes = read_jsonl(chain / "probes.jsonl")
+    rows += [json.loads(path.read_text()) for path in sorted(chain.glob("pending-step-*.json"))]
+    rows.sort(key=lambda row: row["step"])
+    probes += [json.loads(path.read_text()) for path in sorted(chain.glob("pending-probe-*.json"))]
     meta = json.loads((chain / "chain.json").read_text()) if (chain / "chain.json").exists() else {}
     scenario = meta.get("scenario") or scenarios.requirements(scenarios.describe())
     regressed = regressions(rows)
@@ -180,8 +193,17 @@ def chain_summary(chain: Path) -> dict:
                 "mutants_missed_by_selection": mutants.get("missed_by_selection"),
                 "agent_status": (row.get("agent") or {}).get("status"),
                 "agent_seconds": (row.get("agent") or {}).get("seconds"),
+                "verification_seconds": row.get("verification_seconds"),
+                "coding_sessions": (row.get("agent") or {}).get("sessions", 1),
+                "initial_ci_gate": row.get("initial_ci_gate"),
+                "final_ci_gate": row.get("ci_gate"),
+                "repair_attempts": max(0, len(row.get("ci_attempts", [])) - 1),
                 "input_tokens": usage.get("input_tokens"),
+                "cached_input_tokens": usage.get("cached_input_tokens"),
                 "output_tokens": usage.get("output_tokens"),
+                "usage_unknown_sessions": (row.get("agent") or {}).get(
+                    "usage_unknown_sessions", int(not usage)
+                ),
                 "anaxigraph_calls": sum(((row.get("agent") or {}).get("mcp_tools") or {}).values()),
                 "analysis_seconds": (row.get("anaxigraph") or {}).get("seconds"),
                 "analysis_model_calls": sum(
@@ -210,7 +232,19 @@ def chain_summary(chain: Path) -> dict:
                 if probe.get("ci_selected") is not None and probe.get("ci_total")
                 else None,
                 "agent_seconds": probe["agent"].get("seconds"),
+                "verification_seconds": probe.get("verification_seconds"),
+                "initial_ci_gate": probe.get("initial_ci_gate"),
+                "final_ci_gate": probe.get("ci_gate"),
+                "repair_attempts": max(0, len(probe.get("ci_attempts", [])) - 1),
                 "input_tokens": (probe["agent"].get("usage") or {}).get("input_tokens"),
+                "cached_input_tokens": (probe["agent"].get("usage") or {}).get(
+                    "cached_input_tokens"
+                ),
+                "output_tokens": (probe["agent"].get("usage") or {}).get("output_tokens"),
+                "coding_sessions": probe["agent"].get("sessions", 1),
+                "usage_unknown_sessions": probe["agent"].get(
+                    "usage_unknown_sessions", int(not probe["agent"].get("usage"))
+                ),
             }
         )
     return {"chain": chain.name, "arm": meta.get("arm", chain.name.rsplit("-r", 1)[0]),
@@ -223,6 +257,16 @@ def chain_summary(chain: Path) -> dict:
 def avg(values):
     values = [v for v in values if v is not None]
     return round(mean(values), 3) if values else None
+
+
+def mean_total(chains: list[dict], key: str, scale: float = 1) -> float | None:
+    totals = []
+    for chain in chains:
+        rows = [*chain["steps"], *chain["probes"]]
+        if any(row.get(key) is None for row in rows):
+            return None
+        totals.append(sum(row[key] for row in rows) / scale)
+    return avg(totals)
 
 
 def arm_summary(chains: list[dict]) -> dict:
@@ -277,13 +321,23 @@ def arm_summary(chains: list[dict]) -> dict:
         "probe_existing_files_edited": avg(p["existing_prod_files_edited"] for p in probes),
         "probe_ci_selected_fraction": avg(p["ci_selected_fraction"] for p in probes),
         "probe_agent_seconds": avg(p["agent_seconds"] for p in probes),
-        "agent_minutes_total": avg(
-            sum(s["agent_seconds"] or 0 for s in c["steps"]) / 60 for c in chains
-        ),
+        "agent_minutes_total": mean_total(chains, "agent_seconds", 60),
         "analysis_minutes_total": avg(
             sum(s["analysis_seconds"] or 0 for s in c["steps"]) / 60 for c in chains
         ),
-        "input_tokens_total": avg(sum(s["input_tokens"] or 0 for s in c["steps"]) for c in chains),
+        "verification_minutes_total": mean_total(chains, "verification_seconds", 60),
+        "repair_sessions_total": sum(
+            s["repair_attempts"] for c in chains for s in [*c["steps"], *c["probes"]]
+        ),
+        "input_tokens_total": mean_total(chains, "input_tokens"),
+        "cached_input_tokens_total": mean_total(chains, "cached_input_tokens"),
+        "output_tokens_total": mean_total(chains, "output_tokens"),
+        "coding_sessions_total": sum(
+            s["coding_sessions"] for c in chains for s in [*c["steps"], *c["probes"]]
+        ),
+        "coding_usage_unknown_sessions": sum(
+            s["usage_unknown_sessions"] for c in chains for s in [*c["steps"], *c["probes"]]
+        ),
         "analysis_model_calls_total": avg(
             sum(s["analysis_model_calls"] or 0 for s in c["steps"]) for c in chains
         ),

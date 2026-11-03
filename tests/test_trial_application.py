@@ -29,7 +29,7 @@ def test_prepare_inspect_validate_and_export_record_the_actual_task(tmp_path):
     assert inspected["payload"]["entity_id"] == "module:billing.py"
     assert (
         next(row for row in rows if row["kind"] == "task_outcome")["payload"]["status"]
-        == "validation_reported"
+        == "unchecked"
     )
     with TestClient(
         create_app(app), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)

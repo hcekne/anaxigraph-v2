@@ -1,0 +1,111 @@
+{
+  "date": "2026-11-03",
+  "basis": "Mechanical safety qualification; no new paid coding-arm comparison",
+  "source_parent": "170be84021ba5e32177940bb886f870ece0f29e2",
+  "fresh_saved_treatment": {
+    "kind": "fresh-final-treatment-selector-qualification",
+    "basis": "Disposable copy of the saved v4 final treatment, independent locked environment, behavior-preserving selector comment; no model repair or coding cycle.",
+    "model_calls": 0,
+    "inventory_context": "Filesystem copy without Git metadata; does not qualify the original runner Git exclusion protocol.",
+    "suite": {
+      "returncode": 0,
+      "tests": 1600,
+      "passed": 1600,
+      "seconds": 539.0
+    },
+    "tests_total": 1600,
+    "production_files_observed": 35,
+    "observed_execution_pairs": 17390,
+    "omitted_execution_pairs": 5466,
+    "executing_recall": 0.685681426106958,
+    "mean_selected_tests": 976.6285714285714,
+    "actual_changed_path_count": 1,
+    "actual_diff_matches_collected_batch": true,
+    "source_inputs_match": true,
+    "collector_check_exit_code": 1,
+    "validation_cli_exit_code": 1,
+    "validation_status": "blocked",
+    "completion_allowed": false,
+    "receipt_status": "passed",
+    "ci_status": "reported_gap",
+    "environment_status": "matched",
+    "suite_status": "reported_passed",
+    "unobserved_paths_total": 0,
+    "archive_inputs_unchanged": true,
+    "limitation": "Passing full-suite reports and observed coverage qualify this mechanical guard only; no behavioral equivalence, future bug prevention or architecture improvement is claimed."
+  },
+  "corrected_notes_oracle": {
+    "kind": "corrected-notes-oracle-recheck",
+    "model_calls": 0,
+    "basis": "Unchanged saved v4 probe implementations, copied into disposable checkouts with independent offline-synced virtual environments. Only the current Notes oracle was rerun; these results do not qualify CI selection.",
+    "oracle_sha256": "f71506566d04b73e0e42fe8e291ddd6cbeacc3ac2c62abc9d223712efe696bb2",
+    "arms": {
+      "anaxigraph": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 2,
+        "seconds": 5.324
+      },
+      "bare": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 2,
+        "seconds": 5.614
+      },
+      "charter": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 2,
+        "seconds": 5.401
+      }
+    },
+    "archive_evidence_unchanged": true
+  },
+  "git_backed_repair_qualification": {
+    "test": "experiments/feature_drift/test_ci_feedback.py::test_real_git_backed_feedback_loop_repairs_consumer_gap_without_models",
+    "status": "passed",
+    "sequence": [
+      "actual consumer gap",
+      "fresh runtime validation blocks completion",
+      "injected coding transport repairs selector",
+      "fresh coverage, mutation and hidden checks",
+      "same original baseline allows reported completion"
+    ],
+    "external_model_calls": 0
+  },
+  "regressions": {
+    "application_gate_cases": 20,
+    "interface_gate_cases": 6,
+    "notes_oracle_cases": 7,
+    "browser_checks": 28,
+    "javascript_cases": 7
+  },
+  "static_checks": {
+    "ruff": "passed",
+    "format": "passed",
+    "mypy": "passed",
+    "source_budget": "passed"
+  },
+  "runtime_size": {
+    "before": 13346,
+    "after": 13500,
+    "unchanged_limit": 13500,
+    "new_dependencies": 0
+  },
+  "new_coding_arm_replicates": 0,
+  "interpretation": "The guard rejects the reproduced unsafe selector and permits a mechanically qualified fixture repair. This does not establish better architecture, lower total cost, or future bug prevention. New trials use a changed feedback protocol in all arms.",
+  "local_checks": {
+    "core_pytest_passed": 780,
+    "experiments_pytest_passed": 244,
+    "javascript_passed": 7,
+    "browser_checks_passed": 28,
+    "wheel_and_sdist_build": "passed",
+    "installed_wheel_validation_flags": "passed"
+  }
+}

@@ -167,12 +167,27 @@ environment needs pytest-cov. The AnaxiGraph service never runs project tests. T
 refreshes atomically after success; other output paths must be new. Add `--measure-diff --changed path`
 (repeat `--changed` for the complete diff) to time full and selected checks on the same source.
 
+To make selector safety a required CI check, include the complete changed-path set:
+
+```bash
+uv run python experiments/feature_drift/collect_evidence.py \
+  --repo /path/to/repo --output /path/to/repo/anaxigraph/ci-evidence.json \
+  --changed src/payments.py --changed tests/test_payments.py --check
+```
+
+This performs coverage collection once; timing comparisons remain optional. A current gap report
+is preserved for diagnosis and the command exits nonzero. `validate_change` also returns
+`completion_allowed=False` when required CI safety is blocked or incomplete, despite passing local
+receipts. Supply current external `runtime_context` with validation; CLI supports
+`--runtime-context FILE --require-ci-evidence` and fails the CI gate unless completion is allowed.
+See the [selector safety contract](change-request-ci-selector-safety.md) for scope and limitations.
+
 After scanning, CI review, `ci_plan` and change validation expose omissions from this versioned
 report. It contains exact input fingerprints, environment fingerprints, one test-ID inventory,
 and per-source executing/selected inventory indices. It excludes itself from input identity.
-Pass matching `runtime_context` to `ci_plan` when comparing environments. Stale/invalid reports,
+Pass current `runtime_context` to `ci_plan` or `validate_change` when comparing environments. Stale/invalid reports,
 unobserved inputs, omitted consumers and environment uncertainty require review before using that
-report to narrow checks. Declared policies without reports keep their separate policy basis.
+report to narrow checks. A declared policy alone does not qualify a selector's consumer coverage.
 Contract substitutions remain supplied claims; sampled fault success does not erase coverage gaps.
 
 Commit `anaxigraph/record.json` after full workflows or explicit export. A nightly cloud job can

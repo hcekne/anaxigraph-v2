@@ -28,13 +28,12 @@ def attribute_checks(
             raise ValueError("Check command must be nonempty")
         if type(receipt.get("exit_code")) is not int:
             raise ValueError("Each check needs an integer exit_code")
-        matched = receipt.get("snapshot_id") == snapshot_id
         checks.append(
             {
                 "command": receipt["command"][:1000],
                 "origin": "agent-or-CI-reported",
                 "status": "stale"
-                if not matched
+                if receipt.get("snapshot_id") != snapshot_id
                 else "passed"
                 if receipt["exit_code"] == 0
                 else "failed",
@@ -71,22 +70,12 @@ def change_review(
     graph: Graph, previous: Graph | None, receipts: list[dict[str, Any]] | None
 ) -> dict[str, Any]:
     changed = changed_paths(graph, previous)
-    checks = attribute_checks(receipts, graph.snapshot.id)
-    findings = findings_delta(graph, previous)
     return {
         "base_snapshot_id": previous.snapshot.id if previous else None,
         "candidate_snapshot_id": graph.snapshot.id,
-        "comparison": "previous scan" if previous else "no saved baseline",
         "changed_paths": changed[:100],
         "changed_total": len(changed),
-        "findings": findings[:50],
-        "checks": checks,
-        "behavioral_status": "unchecked"
-        if not checks
-        else "failed"
-        if any(c["status"] == "failed" for c in checks)
-        else "reported-passed"
-        if all(c["status"] == "passed" for c in checks)
-        else "unresolved",
+        "findings": findings_delta(graph, previous)[:50],
+        "checks": attribute_checks(receipts, graph.snapshot.id),
         "uncertainty": "Supplied checks are attributed reports. AnaxiGraph did not run target code; static facts do not prove behavior.",
     }

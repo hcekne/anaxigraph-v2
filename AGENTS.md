@@ -45,6 +45,8 @@ assess its plan, then scan/check/validate against the original baseline. Run Pat
 meaningful changes, Fresh Eyes at milestones and regularly on active projects, and CI review
 when component or pipeline assumptions change. Judge usefulness through actual coding outcomes
 and feedback from agents. Keep the README introductory and link deeper operational details.
+Respect `completion_allowed`: resolve blocked or incomplete CI evidence before reporting a change
+complete. Keep consumer obligations when narrowing checks; passing local tests alone is insufficient.
 
 Work within the current source budget. Simplify duplicated machinery before adding layers;
 do not silently raise limits or pack code to game the count. Report measured size changes.

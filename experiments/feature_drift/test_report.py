@@ -211,11 +211,26 @@ def test_chain_and_arm_summary_preserve_unknown_mutants_and_incomplete_individua
             ("prod_modified_files", "prod_added_files", "prod_lines_added", "prod_lines_deleted"), 1
         )
         row["own_suite"]["seconds"] = 1
+        row["verification_seconds"] = 2
+        row["agent"] = {
+            "seconds": 1,
+            "usage": {"input_tokens": 2, "cached_input_tokens": 1, "output_tokens": 1},
+        }
+    rows[0]["agent"] = {
+        "seconds": 3,
+        "sessions": 3,
+        "usage": {"input_tokens": 6, "cached_input_tokens": 3, "output_tokens": 3},
+    }
+    rows[0]["ci_attempts"] = [{}, {}, {}]
     for row in probes:
         row["diff"] = dict.fromkeys(
             ("prod_modified_files", "prod_added_files", "prod_lines_added", "prod_lines_deleted"), 1
         )
-        row["agent"] = {}
+        row["agent"] = {
+            "seconds": 2,
+            "usage": {"input_tokens": 4, "cached_input_tokens": 2, "output_tokens": 2},
+        }
+        row["verification_seconds"] = 3
     (tmp_path / "chain.json").write_text(json.dumps({"arm": "anaxigraph", "replicate": 0}))
     (tmp_path / "steps.jsonl").write_text("\n".join(map(json.dumps, rows)))
     (tmp_path / "probes.jsonl").write_text("\n".join(map(json.dumps, probes)))
@@ -225,6 +240,27 @@ def test_chain_and_arm_summary_preserve_unknown_mutants_and_incomplete_individua
     assert summary["verification_status"] == "incomplete"
     assert summary["mutants_missed_by_selection"] is None
     assert summary["final_ci_selected_fraction"] == 0.3
+    assert summary["verification_minutes_total"] == round(47 / 60, 3)
+    assert summary["agent_minutes_total"] == 0.45
+    assert summary["input_tokens_total"] == 54
+    assert summary["cached_input_tokens_total"] == summary["output_tokens_total"] == 27
+    assert summary["repair_sessions_total"] == 2
+    assert summary["coding_sessions_total"] == 24
+
+
+def test_failed_last_probe_safety_cannot_be_hidden_by_passing_acceptance():
+    rows, probes = records()
+    probes[-1]["ci_gate"] = {"status": "failed"}
+    assert report.verification(rows, probes)["status"] == "failed"
+
+
+def test_missing_retry_usage_does_not_become_a_zero_token_or_time_total():
+    chains = [
+        {"steps": [{"input_tokens": 10, "agent_seconds": 2}], "probes": []},
+        {"steps": [{"input_tokens": None, "agent_seconds": None}], "probes": []},
+    ]
+    assert report.mean_total(chains, "input_tokens") is None
+    assert report.mean_total(chains, "agent_seconds", 60) is None
 
 
 def test_specification_only_tracks_never_qualify_even_with_fabricated_passing_rows():

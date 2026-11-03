@@ -270,6 +270,7 @@ def test_unparsed_inputs_are_fingerprinted_and_unowned_changes_retain_fallback(
     assert plan["changed_paths"] == [path]
     assert plan["uncovered_paths"] == [path]
     assert [row["id"] for row in plan["selected_targets"]] == ["full"]
-    assert plan["status"] == "incomplete" and plan["execution_ready"] is False
+    assert plan["status"] == "selection_review_required" and plan["execution_ready"] is False
+    assert plan["selection_evidence"]["status"] == "not_supplied"
     assert plan["checks_executed"] is False
     assert plan["savings_seconds"] is None

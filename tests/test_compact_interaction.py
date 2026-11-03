@@ -188,7 +188,7 @@ def test_real_mcp_schema_rejects_malformed_inputs_before_application_work():
         assert not result.get("isError")
         assert app.calls[-1] == (
             "validate_change",
-            ([{"command": "pytest", "exit_code": 0, "snapshot_id": "current"}],),
+            ([{"command": "pytest", "exit_code": 0, "snapshot_id": "current"}], None),
         )
 
 

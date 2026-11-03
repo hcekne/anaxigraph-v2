@@ -19,7 +19,7 @@ class RecordingApplication:
         self.calls: list[tuple[str, tuple]] = []
 
     def __getattr__(self, name: str):
-        def operation(*args):
+        def operation(*args, **kwargs):
             self.calls.append((name, args))
             return {"operation": name, "arguments": list(args)}
 
@@ -42,16 +42,16 @@ def test_checkout_options_work_before_or_after_command(position: str, tmp_path: 
         (["scan"], "scan", ()),
         (["status"], "status", ()),
         (["modules", "--sort", "loc", "--descending"], "modules", ("loc", True, 50, 0)),
-        (["inspect", "module:x.py", "--limit", "7"], "inspect", ("module:x.py", 7)),
-        (["prepare", "Add export"], "prepare_change", ("Add export", 12)),
+        (["inspect", "module:x.py", "--limit", "7"], "inspect", ("module:x.py", 7, 0, False)),
+        (["prepare", "Add export"], "prepare_change", ("Add export", 12, None, False)),
         (
             ["assess", "Add export", "--files", "export.py"],
             "assess_plan",
-            ("Add export", ["export.py"]),
+            ("Add export", ["export.py"], None, False),
         ),
-        (["validate"], "validate_change", (None,)),
+        (["validate"], "validate_change", (None, None)),
         (["request", "fresh-eyes"], "analysis_request", ("fresh-eyes", None)),
-        (["reviews", "--kind", "patterns"], "reviews", ("patterns",)),
+        (["reviews", "--kind", "patterns"], "reviews", ("patterns", 12, 0)),
         (["run", "mapping"], "workflow_start", ("mapping", None, None, True)),
         (["runs"], "workflow_status", (None, 0, 10)),
         (["resume", "r"], "workflow_resume", ("r", True)),
@@ -61,7 +61,7 @@ def test_checkout_options_work_before_or_after_command(position: str, tmp_path: 
         (
             ["prepare", "Add export", "--baseline-id", "base"],
             "prepare_change",
-            ("Add export", 12, "base"),
+            ("Add export", 12, "base", False),
         ),
         (["validate", "--baseline-id", "base"], "validate_change", (None, "base")),
     ],
@@ -83,7 +83,7 @@ def test_cli_reads_submission_and_receipts_without_reinterpreting_them(tmp_path:
     receipts = [{"command": "pytest", "exit_status": 0, "fingerprint": "current"}]
     receipts_path.write_text(json.dumps(receipts))
     dispatch(application, parser().parse_args(["validate", "--receipts", str(receipts_path)]))
-    assert application.calls[-1] == ("validate_change", (receipts,))
+    assert application.calls[-1] == ("validate_change", (receipts, None))
     with pytest.raises(ValueError, match="JSON list"):
         dispatch(application, parser().parse_args(["validate", "--receipts", str(result_path)]))
 
@@ -104,29 +104,31 @@ def test_dashboard_assets_and_bounded_http_dispatch() -> None:
     assert client.get("/api/entity?entity_id=module:x.py&limit=4").json()["arguments"] == [
         "module:x.py",
         4,
+        0,
+        False,
     ]
     assert client.get("/api/status").json()["operation"] == "status"
-    assert client.get("/api/reviews?kind=patterns").json()["arguments"] == ["patterns"]
+    assert client.get("/api/reviews?kind=patterns").json()["arguments"] == ["patterns", 12, 0]
 
 
 @pytest.mark.parametrize(
     ("path", "body", "operation", "expected"),
     [
         ("scan", {}, "scan", []),
-        ("prepare", {"task": "Add export"}, "prepare_change", ["Add export", 12]),
+        ("prepare", {"task": "Add export"}, "prepare_change", ["Add export", 12, None, False]),
         (
             "assess",
             {"task": "Add export", "files": ["export.py"]},
             "assess_plan",
-            ["Add export", ["export.py"]],
+            ["Add export", ["export.py"], None, False],
         ),
-        ("validate", {}, "validate_change", [None]),
+        ("validate", {}, "validate_change", [None, None]),
         ("validate", {"baseline_id": "base"}, "validate_change", [None, "base"]),
         (
             "prepare",
             {"task": "Add export", "baseline_id": "base"},
             "prepare_change",
-            ["Add export", 12, "base"],
+            ["Add export", 12, "base", False],
         ),
         ("workflows/start", {"kind": "mapping"}, "workflow_start", ["mapping", None, None]),
         ("workflows/r/resume", {}, "workflow_resume", ["r"]),
@@ -209,11 +211,11 @@ def test_mcp_tools_dispatch_the_same_arguments() -> None:
 
     asyncio.run(exercise())
     assert application.calls == [
-        ("prepare_change", ("Add export", 3)),
+        ("prepare_change", ("Add export", 3, None, False)),
         ("analysis_request", ("fresh-eyes", None)),
         ("submit_analysis", ("r", {"alternatives": []})),
         ("modules", ("functions", False, 7, 2)),
-        ("reviews", ("fresh-eyes",)),
+        ("reviews", ("fresh-eyes", 12, 0)),
     ]
 
 

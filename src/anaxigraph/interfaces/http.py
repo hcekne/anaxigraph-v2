@@ -124,6 +124,8 @@ class PlanInput(Input):
 class ValidationInput(Input):
     receipts: list[CheckReceipt] | None = Field(default=None, max_length=50)
     baseline_id: str | None = Field(default=None, max_length=200)
+    runtime_context: dict[str, Any] | None = None
+    require_ci_evidence: bool = False
 
 
 class CIPlanInput(Input):
@@ -257,9 +259,7 @@ def create_app(
         limit: int = Query(default=12, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> dict:
-        if limit != 12 or offset:
-            return application.reviews(kind, limit, offset)
-        return application.reviews(kind)
+        return application.reviews(kind, limit, offset)
 
     @server.get("/api/workflows")
     def workflows(

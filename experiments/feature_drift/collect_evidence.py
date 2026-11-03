@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 import metrics
@@ -71,6 +72,7 @@ def measure_diff(repo: Path, paths: list[str], tests: list[str]) -> dict:
         "selected_passed": selected_passed,
         "tests_selected": len(selected),
         "tests_total": len(tests),
+        "selected_tests": selected,
         "basis": "Observed sequential runs in the same repository and environment; supplied change paths, not a universal or causal speed claim. Empty selection executes no assertions.",
     }
 
@@ -88,7 +90,7 @@ def validate_shape(value: dict) -> None:
         raise ValueError(f"Collected evidence is incomplete: {audited}")
 
 
-def report(repo: Path, changed: list[str] | None = None) -> dict:
+def report(repo: Path, changed: list[str] | None = None, *, measure_timings: bool = True) -> dict:
     inputs, runtime = inventory(repo), environment(repo)
     tests, paths = collect(repo, ["ALL"]), metrics.production_files(repo)
     if not tests or not paths:
@@ -108,11 +110,19 @@ def report(repo: Path, changed: list[str] | None = None) -> dict:
     if not tests or outcome.get("returncode") != 0 or not covered:
         raise ValueError("A successful nonempty suite and per-test coverage data are required")
     rows, indices = [], {test: index for index, test in enumerate(tests)}
+    collected = {("ALL",): tests}
+
+    def selected_ids(targets):
+        key = tuple(targets)
+        if key not in collected:
+            collected[key] = collect(repo, targets)
+        return collected[key]
+
     for path in paths:
         targets, _ = metrics.select(repo, [path])
         if targets is None or path not in inputs:
             raise ValueError(f"Selector or fingerprint missing for {path}")
-        selected = tests if targets == ["ALL"] else collect(repo, targets)
+        selected = selected_ids(targets)
         executing = sorted(set().union(*covered.get(path, {}).values()))
         rows.append(
             {
@@ -121,7 +131,17 @@ def report(repo: Path, changed: list[str] | None = None) -> dict:
                 "selected": references(selected, indices),
             }
         )
-    measurement = measure_diff(repo, changed, tests) if changed else None
+    measurement = measure_diff(repo, changed, tests) if changed and measure_timings else None
+    batch = None
+    if changed:
+        if measurement is not None:
+            selected = measurement.pop("selected_tests")
+        else:
+            targets, _ = metrics.select(repo, changed)
+            if targets is None:
+                raise ValueError("Selector failed for the actual changed paths")
+            selected = selected_ids(targets)
+        batch = {"changed_paths": changed, "selected_tests": references(selected, indices)}
     if inputs != inventory(repo) or runtime != environment(repo):
         raise ValueError("Candidate inputs or environment changed during evidence collection")
     value = {
@@ -131,14 +151,29 @@ def report(repo: Path, changed: list[str] | None = None) -> dict:
         "tests": tests,
         "files": rows,
         "faults": [],
+        "suite": outcome,
     }
     if measurement is not None:
         value["measurement"] = measurement
+    if batch is not None:
+        value["change_selection"] = batch
     validate_shape(value)
     return value
 
 
-def write_report(repo: Path, output: Path, changed: list[str] | None = None) -> dict:
+def write_report(
+    repo: Path, output: Path, changed: list[str] | None = None, *, measure_timings: bool = True
+) -> dict:
+    _output(repo, output)
+    _validate_changed(changed)
+    value = (
+        report(repo, changed) if measure_timings else report(repo, changed, measure_timings=False)
+    )
+    publish(repo, output, value)
+    return value
+
+
+def _output(repo: Path, output: Path) -> tuple[Path, Path, bool]:
     repo, output = safe_path(repo), safe_path(output)
     if not repo.is_dir():
         raise ValueError("Candidate repository must be a directory")
@@ -149,11 +184,12 @@ def write_report(repo: Path, output: Path, changed: list[str] | None = None) -> 
         raise FileExistsError(f"Refusing to overwrite {output}")
     if output.exists() and not output.is_file():
         raise ValueError("Output must name a regular file")
-    if any(
-        Path(path).is_absolute() or ".." in Path(path).parts or not path for path in changed or []
-    ):
-        raise ValueError("Changed paths must be repository-relative")
-    value = report(repo, changed)
+    return repo, output, canonical
+
+
+def publish(repo: Path, output: Path, value: dict) -> None:
+    """Atomically publish independently collected observations, never stale fallback data."""
+    repo, output, canonical = _output(repo, output)
     encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
     if len(encoded) > MAX_BYTES:
         raise ValueError("CI evidence exceeds the 1 MB report limit")
@@ -170,13 +206,97 @@ def write_report(repo: Path, output: Path, changed: list[str] | None = None) -> 
             os.fsync(f.fileno())
         safe_path(output)
         if canonical:
-            os.replace(temporary, output)  # Keep the last valid report until publication.
+            os.replace(temporary, output)
         else:
-            os.link(temporary, output, follow_symlinks=False)  # Exclusive publication.
+            os.link(temporary, output, follow_symlinks=False)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-    return value
+
+
+def quality_report(
+    repo: Path, output: Path, *, seed: int, mutants: int, changed: list[str]
+) -> dict:
+    """Use the benchmark's one coverage/selection/mutation execution for live feedback."""
+    started = time.monotonic()
+    quality, value, error = {}, None, None
+    observed = {}
+    try:
+        repo, output, _ = _output(repo, output)
+        _validate_changed(changed)
+        inputs, context = inventory(repo), environment(repo)
+        quality = metrics.ci_quality(
+            repo, seed, mutants, changed_paths=changed, include_observations=True
+        )
+        observed = quality.pop("observations", {})
+        suite = quality.get("coverage_run", {})
+        if (
+            not quality.get("collection_complete")
+            or not observed.get("coverage_present")
+            or suite.get("returncode") != 0
+            or not suite.get("tests")
+            or suite.get("passed") != suite.get("tests")
+            or suite.get("tests") != len(observed.get("tests", []))
+            or quality.get("selector") != "ok"
+            or quality.get("selector_failures")
+        ):
+            raise ValueError(
+                "Complete successful coverage, selector and nonempty suite evidence required"
+            )
+        tests = observed["tests"]
+        indices = {test: n for n, test in enumerate(tests)}
+        value = {
+            "version": 1,
+            "inputs": inputs,
+            "environment": context,
+            "tests": tests,
+            "files": [
+                {
+                    "path": row["path"],
+                    "executing": references(row["executing"], indices),
+                    "selected": references(row["selected"], indices),
+                }
+                for row in observed["files"]
+            ],
+            "faults": [
+                {
+                    "path": row["file"],
+                    "reference_detected": row["caught_by_suite"],
+                    "selection_detected": row.get("caught_by_selection") is True,
+                }
+                for row in quality.get("mutants", {}).get("details", [])
+                if not row.get("verification_error")
+            ],
+            "suite": suite,
+            "change_selection": {
+                "changed_paths": changed,
+                "selected_tests": references(
+                    quality["change_selection"]["selected_tests"], indices
+                ),
+            },
+        }
+        if inputs != inventory(repo) or context != environment(repo):
+            raise ValueError("Candidate inputs or environment changed during evidence collection")
+        audited = audit_selection(value, inputs, context)
+        if audited["status"] not in {"reported_passed", "reported_gap", "reported_fault_miss"}:
+            raise ValueError(f"Incomplete collected evidence: {audited}")
+        publish(repo, output, value)
+    except (OSError, ValueError, KeyError, TypeError) as failure:
+        value, error = None, str(failure)
+    return {
+        "ci": quality,
+        "report": value,
+        "error": error,
+        "seconds": time.monotonic() - started,
+        "test_inventory": observed.get("tests", []),
+    }
+
+
+def _validate_changed(changed: list[str] | None) -> None:
+    if any(
+        Path(path).is_absolute() or ".." in Path(path).parts or not path for path in changed or []
+    ):
+        raise ValueError("Changed paths must be repository-relative")
 
 
 def main() -> None:
@@ -199,15 +319,28 @@ def main() -> None:
         action="store_true",
         help="Also time full and selected tests without coverage",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit nonzero unless fresh suite, global consumers and actual batch selection qualify; requires --changed",
+    )
     args = parser.parse_args()
-    if args.measure_diff != bool(args.changed):
-        parser.error(
-            "--measure-diff requires --changed paths, and --changed requires --measure-diff"
-        )
+    if (args.measure_diff or args.check) and not args.changed:
+        parser.error("--measure-diff and --check require complete --changed paths")
     try:
-        value = write_report(args.repo, args.output, args.changed)
+        value = write_report(
+            args.repo, args.output, args.changed, measure_timings=args.measure_diff
+        )
     except (OSError, ValueError) as error:
         parser.exit(1, f"Evidence collection failed: {error}\n")
+    qualified = audit_selection(
+        value,
+        inventory(args.repo),
+        environment(args.repo),
+        metrics.production_files(args.repo),
+        require_suite=True,
+        actual_changed_paths=args.changed if args.changed else None,
+    )
     print(
         json.dumps(
             {
@@ -215,9 +348,12 @@ def main() -> None:
                 "tests": len(value["tests"]),
                 "files": len(value["files"]),
                 "faults_sampled": 0,
+                "qualification": qualified,
             }
         )
     )
+    if args.check and qualified["status"] != "reported_passed":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

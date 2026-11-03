@@ -196,6 +196,9 @@ def test_resume_requires_exact_frozen_scenario_and_runtime_inputs(changed, tmp_p
             "review_steps",
             "review_kinds",
             "workflow_config_sha256",
+            "ci_repair_attempts",
+            "ci_gate_protocol",
+            "measurement_settings",
         ),
         "frozen",
     )

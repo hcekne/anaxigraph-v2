@@ -67,10 +67,10 @@ def _file(row: Any, tests: list[str], inputs: dict) -> dict:
     }
 
 
-def _faults(value: Any, inputs: dict) -> dict:
+def _faults(value: Any, inputs: dict, paths: list | None = None) -> dict:
     if not isinstance(value, list) or len(value) > 1000:
         raise ValueError("CI faults must be a bounded list")
-    detected, missed = 0, []
+    detected, missed, sampled, outside = 0, [], 0, 0
     for row in value:
         if not isinstance(row, dict) or row.get("path") not in inputs:
             raise ValueError("CI faults must name a fingerprinted input")
@@ -78,11 +78,16 @@ def _faults(value: Any, inputs: dict) -> dict:
             type(row.get(key)) is not bool for key in ("reference_detected", "selection_detected")
         ):
             raise ValueError("CI fault detection results must be explicit booleans")
+        if paths is not None and row["path"] not in paths:
+            outside += row["reference_detected"] and not row["selection_detected"]
+            continue
+        sampled += 1
         detected += row["reference_detected"]
         if row["reference_detected"] and not row["selection_detected"]:
             missed.append(row["path"])
     return {
-        "sampled": len(value),
+        "sampled": sampled,
+        "outside_scope_missed": outside,
         "reference_detected": detected,
         "missed": len(missed),
         "missed_paths": sorted(set(missed))[:10],
@@ -95,12 +100,17 @@ def audit_selection(
     fingerprints: dict[str, str],
     runtime_context: dict | None = None,
     changed_paths: list[str] | None = None,
+    *,
+    require_suite: bool = False,
+    actual_changed_paths: list[str] | None = None,
 ) -> dict:
     """A report supplies observations, not permission to omit known consumers."""
     if value is None:
         return {"status": "not_supplied", "checks_executed": False, "path": REPORT_PATH}
     try:
-        return _audit(value, fingerprints, runtime_context, changed_paths)
+        return _audit(
+            value, fingerprints, runtime_context, changed_paths, require_suite, actual_changed_paths
+        )
     except (TypeError, ValueError, KeyError) as error:
         return {"status": "invalid", "reason": str(error)[:300], "checks_executed": False}
 
@@ -144,16 +154,70 @@ def _status(faults: dict, omitted: int, uncovered: list, matched: bool) -> str:
     return "reported_passed" if matched and not uncovered else "unverified"
 
 
-def _scoped_faults(value: dict, paths: list | None) -> dict:
-    raw = value.get("faults", [])
-    total = _faults(raw, value["inputs"])
-    if paths is None:
-        return total
-    scoped = _faults([row for row in raw if row["path"] in paths], value["inputs"])
-    return scoped | {"outside_scope_missed": total["missed"] - scoped["missed"]}
+def _suite(value: dict, required: bool) -> str:
+    suite = value.get("suite")
+    if suite is None:
+        return "not_supplied" if required else "not_required"
+    if not isinstance(suite, dict):
+        raise ValueError("CI suite outcome must be an object")
+    if any(type(suite.get(key)) is not int for key in ("returncode", "tests", "passed")):
+        raise ValueError("CI suite outcome needs integer returncode, tests and passed")
+    if not 0 <= suite["passed"] <= suite["tests"] or suite["tests"] < 1:
+        raise ValueError("CI suite outcome needs a nonempty valid test count")
+    if suite["returncode"] != 0 or suite["passed"] != suite["tests"]:
+        return "failed"
+    if suite["tests"] != len(value["tests"]):
+        raise ValueError("CI suite test count differs from the collected inventory")
+    return "reported_passed"
 
 
-def _audit(value: dict, fingerprints: dict, runtime: dict | None, paths: list | None) -> dict:
+def _change_selection(value: dict, paths: list[str]) -> dict:
+    batch = value.get("change_selection")
+    if batch is None:
+        return {"status": "not_supplied"}
+    if not isinstance(batch, dict):
+        raise ValueError("Actual change selection must be an object")
+    changed = set(paths) - {REPORT_PATH}
+    if _ids(batch.get("changed_paths")) - {REPORT_PATH} != changed:
+        return {
+            "status": "stale",
+            "reason": "Actual changed paths differ; recollect batch selection.",
+        }
+    inventory = _ids(value["tests"])
+    selected = _references(batch.get("selected_tests"), value["tests"])
+    if not selected <= inventory:
+        raise ValueError("Actual selection contains tests outside the collected inventory")
+    observed = {
+        row["path"]: _references(row["executing"], value["tests"]) for row in value["files"]
+    }
+    test_paths: dict[str, set[str]] = {}
+    for test in inventory:
+        test_paths.setdefault(test.partition("::")[0], set()).add(test)
+    required = set()
+    relevant = [
+        p for p in changed if not (p.startswith("docs/") or p.lower().endswith((".md", ".rst")))
+    ]
+    for path in relevant:
+        required.update(observed.get(path) or test_paths.get(path) or inventory)
+    omitted = required - selected
+    return {
+        "status": "reported_gap" if omitted else "reported_passed",
+        "changed_paths": sorted(changed),
+        "required_tests": len(required),
+        "selected_tests": len(selected),
+        "omitted_tests": sorted(omitted)[:8],
+        "omitted_count": len(omitted),
+    }
+
+
+def _audit(
+    value: dict,
+    fingerprints: dict,
+    runtime: dict | None,
+    paths: list | None,
+    require_suite: bool,
+    actual_paths: list[str] | None,
+) -> dict:
     if (
         not isinstance(value, dict)
         or type(value.get("version")) is not int
@@ -168,7 +232,20 @@ def _audit(value: dict, fingerprints: dict, runtime: dict | None, paths: list | 
         }
     environment = _environment(value.get("environment"))
     rows = _observations(value)
-    return _summary(rows, value, paths, runtime, environment)
+    result = _summary(rows, value, paths, runtime, environment)
+    if actual_paths is not None:
+        batch = _change_selection(value, actual_paths)
+        result["change_selection"] = batch
+        if result["status"] == "reported_passed" or (
+            batch["status"] == "reported_gap" and result["status"] != "reported_fault_miss"
+        ):
+            result["status"] = batch["status"]
+    suite = _suite(value, require_suite)
+    if suite == "failed":
+        result["status"] = "reported_failed_suite"
+    elif suite == "not_supplied" and result["status"] == "reported_passed":
+        result["status"] = "unverified"
+    return result | {"suite_status": suite}
 
 
 def _summary(
@@ -177,7 +254,7 @@ def _summary(
     matched = runtime is not None and environment == runtime
     selected = [row for row in rows if paths is None or row["path"] in paths]
     uncovered = sorted(set(paths or []) - {row["path"] for row in rows})
-    faults = _scoped_faults(value, paths)
+    faults = _faults(value.get("faults", []), value["inputs"], paths)
     omitted = sum(row["omitted_count"] for row in selected)
     gaps = [row for row in selected if row["omitted_count"]]
     return {

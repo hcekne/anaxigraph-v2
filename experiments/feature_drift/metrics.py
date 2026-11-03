@@ -14,10 +14,12 @@ import hashlib
 import json
 import os
 import random
+import shlex
 import sqlite3
 import subprocess
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path, PurePosixPath
 
@@ -371,6 +373,7 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
     """Run the candidate suite once with per-test contexts: file → line → covering test ids."""
     with tempfile.TemporaryDirectory(prefix="drift-cov-") as tmp:
         data = Path(tmp) / ".coverage"
+        junit = Path(tmp) / "suite.xml"
         started = time.monotonic()
         result = run(
             [
@@ -378,6 +381,7 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
                 f"--cov={repo}",
                 "--cov-context=test",
                 "--cov-report=",
+                f"--junitxml={junit}",
                 "-o",
                 "addopts=",
             ],
@@ -385,7 +389,22 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
             1800,
             {**candidate_env(repo), "COVERAGE_FILE": str(data)},
         )
-        info = {"returncode": result.returncode, "seconds": round(time.monotonic() - started, 1)}
+        info = {
+            "returncode": result.returncode,
+            "seconds": round(time.monotonic() - started, 1),
+            "command": shlex.join(result.args),
+        }
+        if junit.exists():
+            cases = list(ET.parse(junit).getroot().iter("testcase"))
+            info.update(
+                tests=len(cases),
+                passed=sum(
+                    case.find("failure") is None
+                    and case.find("error") is None
+                    and case.find("skipped") is None
+                    for case in cases
+                ),
+            )
         if not data.exists():
             info["error"] = (result.stdout + result.stderr)[-1500:]
             return {}, info
@@ -488,26 +507,47 @@ def candidate_mutants(source: str) -> list[tuple[int, int]]:
     return [(index, line) for index, line in enumerate(recorder.sites) if line in body_lines]
 
 
-def run_tests(repo: Path, targets: list[str], timeout: float = 900) -> tuple[bool, float]:
+def run_tests(repo: Path, targets: list[str], timeout: float = 900) -> tuple[bool | None, float]:
     """True when every selected test passed."""
+    if not targets:
+        return True, 0.0  # No assertions; never substitute pytest's default full suite.
     started = time.monotonic()
     args = [] if targets == ["ALL"] else targets
     result = run(
         [*pytest_argv(repo), "-x", "-o", "addopts=", *args], repo, timeout, candidate_env(repo)
     )
-    return result.returncode in (0, 5), time.monotonic() - started
+    return (
+        result.returncode == 0 if result.returncode in (0, 1) else None
+    ), time.monotonic() - started
 
 
-def ci_quality(repo: Path, seed: int, mutants: int = 10) -> dict:
+def ci_quality(
+    repo: Path,
+    seed: int,
+    mutants: int = 10,
+    *,
+    changed_paths: list[str] | None = None,
+    include_observations: bool = False,
+) -> dict:
     """Selector cost per file and safety against planted bugs the suite itself catches."""
     report: dict = {"selector": "missing"}
-    all_tests = collect(repo, ["ALL"]) or []
+    collected = collect(repo, ["ALL"])
+    all_tests = collected or []
+    report["collection_complete"] = collected is not None and bool(all_tests)
     report["tests_total"] = len(all_tests)
     if not (repo / "ci.json").exists():
         return report
     covered, info = coverage_by_test(repo)
     report["coverage_run"] = info
-    per_file, selections = [], {}
+    per_file, selections, observations = [], {}, []
+    collection_cache = {("ALL",): all_tests}
+
+    def test_ids(targets):
+        key = tuple(targets)
+        if key not in collection_cache:
+            collection_cache[key] = collect(repo, targets)
+        return collection_cache[key]
+
     selector_seconds = []
     for path in production_files(repo):
         targets, seconds = select(repo, [path])
@@ -515,9 +555,15 @@ def ci_quality(repo: Path, seed: int, mutants: int = 10) -> dict:
         if targets is None:
             per_file.append({"file": path, "selector_failed": True})
             continue
-        ids = all_tests if targets == ["ALL"] else (collect(repo, targets) or [])
+        ids = test_ids(targets)
+        if ids is None or not set(ids) <= set(all_tests):
+            per_file.append({"file": path, "selector_failed": True})
+            continue
         selections[path] = (targets, set(ids))
         executing = set().union(*covered.get(path, {}).values()) if covered.get(path) else set()
+        if not executing <= set(all_tests):
+            report["collection_complete"] = False
+        observations.append({"path": path, "executing": sorted(executing), "selected": sorted(ids)})
         per_file.append(
             {
                 "file": path,
@@ -566,6 +612,39 @@ def ci_quality(repo: Path, seed: int, mutants: int = 10) -> dict:
         }
     )
     report["mutants"] = plant_bugs(repo, covered, selections, seed, mutants)
+    if changed_paths is not None:
+        targets, seconds = select(repo, changed_paths)
+        ids = test_ids(targets) if targets is not None else None
+        required = set().union(
+            *(set(row["executing"]) for row in observations if row["path"] in changed_paths)
+        )
+        observed_paths = {row["path"] for row in observations if row["executing"]}
+        for path in changed_paths:
+            if path.startswith("docs/") or path.endswith((".md", ".rst")):
+                continue
+            if is_test_path(path):
+                required.update(test for test in all_tests if test.split("::")[0] == path)
+            elif path not in observed_paths and not path.endswith((".md", ".rst")):
+                required.update(all_tests)  # Shared/configuration/unresolved inputs widen.
+        omitted = required - set(ids or [])
+        report["change_selection"] = {
+            "changed_paths": changed_paths,
+            "selected_tests": sorted(ids or []),
+            "required_tests": sorted(required),
+            "omitted_tests": sorted(omitted),
+            "status": "incomplete"
+            if ids is None or not set(ids) <= set(all_tests)
+            else "failed"
+            if omitted
+            else "passed",
+            "selector_seconds": seconds,
+        }
+    if include_observations:
+        report["observations"] = {
+            "tests": all_tests,
+            "files": observations,
+            "coverage_present": bool(covered),
+        }
     return report
 
 
@@ -583,7 +662,13 @@ def plant_bugs(repo, covered, selections, seed: int, count: int) -> dict:
         except SyntaxError:
             continue
     rng.shuffle(sites)
-    results = {"planted": 0, "caught_by_suite": 0, "missed_by_selection": 0, "details": []}
+    results = {
+        "planted": 0,
+        "caught_by_suite": 0,
+        "missed_by_selection": 0,
+        "unverified": 0,
+        "details": [],
+    }
     for path, index, line in sites[: count * 3]:
         if results["planted"] >= count:
             break
@@ -596,15 +681,25 @@ def plant_bugs(repo, covered, selections, seed: int, count: int) -> dict:
         try:
             file.write_text(mutated[0], encoding="utf-8")
             passed, _ = run_tests(repo, executing)
-            row = {"file": path, "line": line, "kind": mutated[1][0], "caught_by_suite": not passed}
-            if not passed:
+            row = {
+                "file": path,
+                "line": line,
+                "kind": mutated[1][0],
+                "caught_by_suite": passed is False,
+            }
+            if passed is None:
+                row["verification_error"] = True
+            if passed is False:
                 targets, _ = selections[path]
                 selected_pass, _ = run_tests(repo, targets)
-                row["caught_by_selection"] = not selected_pass
+                row["caught_by_selection"] = None if selected_pass is None else not selected_pass
+                if selected_pass is None:
+                    row["verification_error"] = True
         finally:
             file.write_text(original, encoding="utf-8")
         results["planted"] += 1
         results["caught_by_suite"] += row["caught_by_suite"]
         results["missed_by_selection"] += row.get("caught_by_selection") is False
+        results["unverified"] += bool(row.get("verification_error"))
         results["details"].append(row)
     return results

@@ -99,7 +99,7 @@ def git(root, *args):
     ).stdout.strip()
 
 
-def test_declared_payment_body_check_is_narrow_sixteen_seconds_and_never_executes(application):
+def test_declared_payment_plan_is_narrow_but_requires_selection_evidence(application):
     plan = application.ci_plan(
         changed_paths=["payments/charge.py"], runtime_context={"python": "3.12"}
     )
@@ -108,7 +108,8 @@ def test_declared_payment_body_check_is_narrow_sixteen_seconds_and_never_execute
     assert plan["critical_path_seconds"] == 16
     assert plan["comparison"]["basis"] == "caller-supplied-paths"
     assert plan["comparison"]["completeness"] == "caller-reported"
-    assert plan["execution_ready"] and not plan["checks_executed"]
+    assert not plan["execution_ready"] and not plan["checks_executed"]
+    assert plan["selection_evidence"]["status"] == "not_supplied"
     assert all(item["cache_eligible"] for item in plan["selected_targets"])
     assert not (application.root / "SHOULD_NOT_EXECUTE").exists()
 
@@ -152,7 +153,8 @@ def test_ci_comparison_requires_a_pin_and_does_not_drift_after_repeated_scans(ap
         application.ci_plan()
     unpinned = application.validate_change()
     assert unpinned["baseline_basis"] == "previous-scan"
-    assert unpinned["ci_plan"]["status"] == "unresolved"
+    assert unpinned["ci_plan"]["status"] == "selection_review_required"
+    assert unpinned["ci_plan"]["comparison"]["base_snapshot_id"] == unpinned["baseline_id"]
     assert not unpinned["ci_plan"]["execution_ready"]
     baseline = application.prepare_change("change payment calculation")["baseline_id"]
     path.write_text(path.read_text().replace("+ 2", "+ 3"))
@@ -235,7 +237,7 @@ def test_explicit_git_base_includes_deletions_untracked_and_unindexed_tracked_fi
         "payments/obsolete.py",
     ]
     assert result["comparison"]["base_commit"] == base
-    assert result["status"] == "incomplete"
+    assert result["status"] == "selection_review_required"
     assert result["uncovered_paths"] == ["opaque.bin"]
     assert "full" in selected(result) and not result["execution_ready"]
 

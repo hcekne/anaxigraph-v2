@@ -30,10 +30,12 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from inspect import getfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import collect_evidence as collector  # noqa: E402
 import metrics  # noqa: E402
 
 try:
@@ -57,7 +59,7 @@ ARMS = {
 }
 DISABLED_FEATURES = ("memories", "apps", "plugins", "hooks", "multi_agent", "daemon_auto_start")
 EXCLUDE = [".venv/", "__pycache__/", ".pytest_cache/", ".coverage", "data/", ".anaxigraph-v2/",
-           "anaxigraph/", ".ruff_cache/", ".uv-cache/", "pytest-of-*/"]  # fmt: skip
+           "anaxigraph/record.json", "anaxigraph/config.json", ".ruff_cache/", ".uv-cache/", "pytest-of-*/"]  # fmt: skip
 
 BASE_PROMPT = """You are the engineer maintaining this repository (Switchboard). A new product
 request has arrived. It is saved at `{path}`; earlier requests are in `docs/requests/`.
@@ -70,10 +72,13 @@ must keep working.
 - There is no network access. The locked virtualenv in `.venv` is all there is; do not add
   dependencies. Run tests with `.venv/bin/python -m pytest`.
 - Keep `run.json` working: the service is started from it.
-- Do not commit; your work is committed when you finish. There will be no follow-up session on
-  this request, so finish it now.
+- Do not commit; the coordinator commits your work. Independent CI-safety feedback may request
+  a bounded repair in a fresh session. Complete the request and your checks now.
 
-When done, reply with a short summary of what you changed."""
+Your final response submits a candidate for the coordinator's external verification; it does not
+certify completion. If AnaxiGraph requests fresh CI evidence, report that unqualified status and
+hand off. The coordinator collects the evidence and accepts the task only after its safety gate.
+Reply with a short summary of your changes and any outstanding validation."""
 
 ANAXIGRAPH_PROMPT = """## AnaxiGraph
 
@@ -333,7 +338,8 @@ def hidden_tests(repo: Path, files: list[str], era: int, out: Path) -> dict:
         "by_file": by_file,
         "failed": sorted(n for n, o in outcomes.items() if o == "failed"),
         "passed": sorted(n for n, o in outcomes.items() if o == "passed"),
-        "collection_error": result.returncode not in (0, 1) and not outcomes,
+        "collection_error": result.returncode not in (0, 1),
+        "returncode": result.returncode,
         "tail": result.stdout[-1500:] if result.returncode not in (0, 1) else "",
     }
 
@@ -371,6 +377,344 @@ def evaluate(config, chain: Path, repo: Path, step: int, base: str, head: str) -
     return row
 
 
+def ci_gate(collected: dict) -> dict:
+    """The same conservative external qualification is required in every coding arm."""
+    quality, report = collected["ci"], collected.get("report")
+    failures, incomplete = [], []
+    if report is None:
+        incomplete.append(collected.get("error") or "Missing fresh external CI evidence")
+    else:
+        audited = collector.audit_selection(report, report["inputs"], report["environment"])
+        if audited["status"] in {"reported_gap", "reported_fault_miss"}:
+            failures.append("Observed consumers or reference-detected faults omitted")
+        elif audited["status"] != "reported_passed":
+            incomplete.append("Fresh complete consumer evidence required")
+    changes = quality.get("change_selection", {})
+    if changes.get("status") == "failed":
+        failures.append("Actual multi-file change omits observed obligations")
+    elif changes.get("status") != "passed":
+        incomplete.append("Actual multi-file selection is unverified")
+    mutations = quality.get("mutants", {})
+    if mutations.get("missed_by_selection"):
+        failures.append("Selected checks missed a reference-detected fault")
+    if not mutations.get("caught_by_suite") or mutations.get("unverified"):
+        incomplete.append("Positive fully verified caught-mutant evidence required")
+    return {
+        "status": "failed" if failures else "incomplete" if incomplete else "passed",
+        "failures": failures,
+        "incomplete": incomplete,
+    }
+
+
+def aggregate_agents(attempts: list[dict]) -> dict:
+    agents = [attempt["agent"] for attempt in attempts]
+    result = {
+        **agents[-1],
+        "seconds": sum(agent.get("seconds", 0) for agent in agents),
+        "sessions": len(agents),
+        "usage_unknown_sessions": sum(not agent.get("usage") for agent in agents),
+    }
+    result["usage"] = {
+        key: sum(agent["usage"][key] for agent in agents)
+        if all(type((agent.get("usage") or {}).get(key)) is int for agent in agents)
+        else None
+        for key in ("input_tokens", "cached_input_tokens", "output_tokens")
+    }
+    for field in ("items", "mcp_tools"):
+        names = {name for agent in agents for name in (agent.get(field) or {})}
+        result[field] = {
+            name: sum((agent.get(field) or {}).get(name, 0) for agent in agents) for name in names
+        }
+    result["mcp_failures"] = sum(agent.get("mcp_failures", 0) for agent in agents)
+    result["contaminated"] = any(agent.get("contaminated", False) for agent in agents)
+    return result
+
+
+def fresh_validation(config, repo, out, baseline_id, collected):
+    """Only supply observed receipts; the Application never executes candidate checks."""
+    scan = runtime(config, repo, "scan")
+    snapshot = (scan.get("snapshot") or {}).get("id")
+    report = collected.get("report")
+    if not snapshot or not baseline_id or report is None:
+        return {
+            "completion_allowed": False,
+            "validation_status": "incomplete",
+            "error": "Missing original baseline, current scan or fresh evidence",
+        }
+    context, receipts = out / "runtime-context.json", out / "receipts.json"
+    write_json(context, report["environment"])
+    write_json(
+        receipts,
+        [
+            {
+                "command": report["suite"].get(
+                    "command", ".venv/bin/python -m pytest --cov --cov-context=test"
+                ),
+                "exit_code": report["suite"]["returncode"],
+                "snapshot_id": snapshot,
+            }
+        ],
+    )
+    result = runtime(
+        config,
+        repo,
+        "validate",
+        "--baseline-id",
+        baseline_id,
+        "--runtime-context",
+        str(context),
+        "--require-ci-evidence",
+        "--receipts",
+        str(receipts),
+    )
+    write_json(out / "validation.json", result)
+    return result
+
+
+def safety_feedback(
+    config,
+    repo,
+    out,
+    step,
+    base,
+    head,
+    *,
+    baseline_id=None,
+    baseline_inputs=None,
+    treatment=False,
+    acceptance_files=None,
+):
+    """Collect once, publish fresh evidence, then expose the same measured gap to each arm."""
+    started = time.monotonic()
+    out.mkdir(parents=True, exist_ok=True)
+    diff = metrics.diff_stats(repo, base, head)
+    current = collector.inventory(repo)
+    changed = (
+        sorted(
+            path
+            for path in set(baseline_inputs) | set(current)
+            if baseline_inputs.get(path) != current.get(path)
+        )
+        if baseline_inputs is not None
+        else diff["changed_files"]
+    )
+    collected = collector.quality_report(
+        repo,
+        repo / collector.REPORT_PATH,
+        seed=step,
+        mutants=config.mutants,
+        changed=changed,
+    )
+    quality = collected["ci"]
+    write_json(out / "ci.json", quality)
+    if collected.get("report") is not None:
+        write_json(out / "ci-evidence.json", collected["report"])
+    gate = ci_gate(collected)
+    files = acceptance_files or scenarios.acceptance_files(config.scenario, step)
+    hidden = hidden_tests(repo, files, step, out / "hidden.xml")
+    if collected.get("report") is not None and (
+        collected["report"]["inputs"] != collector.inventory(repo)
+        or collected["report"]["environment"] != collector.environment(repo)
+    ):
+        collected["report"] = None
+        collected["error"] = (
+            "Candidate inputs or environment changed after verification; evidence is stale"
+        )
+        gate = {
+            **gate,
+            "status": "incomplete",
+            "incomplete": gate["incomplete"] + [collected["error"]],
+        }
+    expected_hidden = {Path(name).stem for name in files}
+    if (
+        hidden.get("collection_error")
+        or set(hidden.get("by_file", {})) != expected_hidden
+        or any(
+            not row.get("total") or row.get("passed") != row["total"]
+            for row in hidden.get("by_file", {}).values()
+        )
+    ):
+        gate = {
+            **gate,
+            "status": "failed",
+            "failures": gate["failures"]
+            + [
+                "Cumulative behavioral acceptance is incomplete or failed; preserve the public requirements"
+            ],
+        }
+    suite = quality.get("coverage_run") or {}
+    own = {
+        key: suite.get(key, 0 if key in {"tests", "passed"} else None)
+        for key in ("returncode", "tests", "passed", "seconds")
+    }
+    evaluation = {
+        "hidden": hidden,
+        "own_suite": own,
+        "static": metrics.static_metrics(repo),
+        "diff": diff,
+        "ci": {key: value for key, value in quality.items() if key != "per_file"},
+    }
+    verification_seconds = time.monotonic() - started
+    validation, tool_seconds = None, 0.0
+    if treatment:
+        started = time.monotonic()
+        validation = fresh_validation(config, repo, out, baseline_id, collected)
+        tool_seconds = time.monotonic() - started
+        if validation.get("completion_allowed") is not True:
+            gate = {
+                **gate,
+                "status": "incomplete" if gate["status"] == "passed" else gate["status"],
+                "incomplete": gate["incomplete"]
+                + ["Fresh AnaxiGraph validation did not qualify completion"],
+            }
+    feedback = {
+        "gate": gate,
+        "collector_error": collected.get("error"),
+        "consumer_evidence": collector.audit_selection(
+            collected["report"], collected["report"]["inputs"], collected["report"]["environment"]
+        )
+        if collected.get("report")
+        else None,
+        "actual_change": quality.get("change_selection"),
+        "sampled_faults": quality.get("mutants"),
+        "validation": validation,
+    }
+    write_json(out / "feedback.json", feedback)
+    return {
+        "evaluation": evaluation,
+        "gate": gate,
+        "feedback": feedback,
+        "verification_seconds": verification_seconds,
+        "anaxigraph_seconds": tool_seconds,
+        "test_inventory": collected.get("test_inventory", []),
+    }
+
+
+def repair_ci(
+    config,
+    repo,
+    log,
+    prompt,
+    initial_agent,
+    step,
+    base,
+    head,
+    *,
+    baseline_id=None,
+    baseline_inputs=None,
+    treatment=False,
+    acceptance_files=None,
+):
+    """Bounded fresh sessions; retain original baseline, every attempt and all resource use."""
+    attempts = []
+    agent = initial_agent
+    frozen_tests = {
+        path: fingerprint
+        for path, fingerprint in collector.inventory(repo).items()
+        if metrics.is_test_path(path)
+    }
+    retained_ids = set()
+    write_json(log / "test-obligations.json", frozen_tests)
+    for number in range(config.ci_repair_attempts + 1):
+        checked = safety_feedback(
+            config,
+            repo,
+            log / f"attempt-{number}",
+            step,
+            base,
+            head,
+            baseline_id=baseline_id,
+            baseline_inputs=baseline_inputs,
+            treatment=treatment,
+            acceptance_files=acceptance_files,
+        )
+        inventory = set(checked.pop("test_inventory", []))
+        if not retained_ids:
+            retained_ids = inventory
+        current = collector.inventory(repo)
+        changed_tests = [
+            path for path, fingerprint in frozen_tests.items() if current.get(path) != fingerprint
+        ]
+        missing_ids = sorted(retained_ids - inventory)
+        if changed_tests or missing_ids:
+            checked["gate"] = {
+                **checked["gate"],
+                "status": "failed",
+                "failures": checked["gate"].get("failures", [])
+                + [
+                    "CI-only repair must retain existing test/conftest bytes and execute original test IDs"
+                ],
+            }
+            checked["feedback"]["gate"] = checked["gate"]
+            checked["feedback"]["changed_verification_paths"] = changed_tests[:20]
+            checked["feedback"]["missing_test_ids"] = missing_ids[:20]
+        checked["feedback"]["gate"] = checked["gate"]
+        write_json(log / f"attempt-{number}" / "final-feedback.json", checked["feedback"])
+        attempts.append({"number": number, "agent": agent, "commit": head, **checked})
+        write_json(log / f"attempt-{number}.json", attempts[-1])
+        if (
+            checked["gate"]["status"] == "passed"
+            or number == config.ci_repair_attempts
+            or config.agent == "noop"
+        ):
+            break
+        feedback = checked["feedback"]
+        compact = {
+            **feedback,
+            "actual_change": {
+                key: value
+                for key, value in (feedback.get("actual_change") or {}).items()
+                if key not in {"selected_tests", "required_tests"}
+            },
+        }
+        actual = compact["actual_change"]
+        omitted = actual.get("omitted_tests", [])
+        actual["omitted_tests"] = omitted[:20]
+        actual["omitted_tests_total"] = len(omitted)
+        if compact.get("validation"):
+            compact["validation"] = {
+                key: compact["validation"].get(key)
+                for key in (
+                    "baseline_id",
+                    "validation_status",
+                    "completion_allowed",
+                    "ci_selection",
+                    "checks",
+                    "error",
+                )
+            }
+        instruction = (
+            "\n\nIndependent CI safety verification requires repair. Preserve all original requirements "
+            "and the original change baseline. Repair the selector or ownership/tests so all observed "
+            "consumer obligations are retained for single-file AND multi-file changes. Use focused "
+            "contracts when justified; unknown/shared inputs need conservative fallback. Do not delete "
+            "tests, fake receipts, edit the external evaluator, or claim safety from an empty selection. "
+            "The coordinator will rerun independent verification on your changed source.\n"
+            + json.dumps(compact, default=str)
+        )
+        if treatment:
+            instruction += (
+                f"\nOriginal baseline_id={baseline_id}. Inspect fresh anaxigraph/ci-evidence.json, "
+                "scan, then validate_change with this explicit original baseline. Do not prepare "
+                "a new baseline or rerun model workflows. Fix deterministic blocked/incomplete findings."
+            )
+        agent = run_agent(
+            config, repo, log / f"repair-{number + 1}.jsonl", prompt + instruction, treatment
+        )
+        head = commit(repo, f"CI safety repair {number + 1}, request {step}")
+    final = attempts[-1]
+    return {
+        **final["evaluation"],
+        "commit": head,
+        "agent": aggregate_agents(attempts),
+        "ci_attempts": attempts,
+        "ci_gate": final["gate"],
+        "initial_ci_gate": attempts[0]["gate"],
+        "verification_seconds": sum(attempt["verification_seconds"] for attempt in attempts),
+        "ci_validation_seconds": sum(attempt["anaxigraph_seconds"] for attempt in attempts),
+    }
+
+
 # -- chains ---------------------------------------------------------------------------------
 
 
@@ -388,6 +732,13 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
     chain = config.state / f"{arm_name}-r{replicate}"
     repo, results = chain / "repo", chain / "steps.jsonl"
     validate_resume(config, chain)
+    pending = sorted(chain.glob("pending-step-*.json"))
+    if pending:
+        return {
+            "chain": chain.name,
+            "status": "blocked",
+            "pending": [str(path) for path in pending],
+        }
     if not repo.exists():
         prepare_repo(repo, SEED)
         commit(repo, "Seed")
@@ -399,11 +750,19 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
         step = int(request.name[:2])
         if step < config.first_step or step > config.last_step or step in done:
             continue
+        if (chain / "logs" / f"step-{step:02d}.prompt.md").exists():
+            return {
+                "chain": chain.name,
+                "status": "blocked",
+                "step": step,
+                "reason": "Interrupted request retained; refusing to overwrite original sessions or reset the repair budget",
+            }
         saved_as = f"docs/requests/{request.name}"
         (repo / "docs" / "requests").mkdir(parents=True, exist_ok=True)
         shutil.copy2(request, repo / saved_as)
         base = commit(repo, f"Request {step}")
         row = {"step": step, "arm": arm_name, "replicate": replicate, "started": now()}
+        row["baseline_inputs"] = collector.inventory(repo)
         inline = next(
             (probe for probe in config.scenario["inline_probes"] if probe["step"] == step), None
         )
@@ -411,14 +770,64 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
             row["probe_id"] = inline["id"]
         if arm["anaxigraph"] and config.agent not in ("noop",):
             row["anaxigraph"] = refresh_anaxigraph(config, repo, step)
+        if arm["anaxigraph"]:
+            started = time.monotonic()
+            scan = runtime(config, repo, "scan")
+            snapshot = (scan.get("snapshot") or {}).get("id")
+            prepared = (
+                runtime(
+                    config, repo, "prepare", request.read_text()[:4000], "--baseline-id", snapshot
+                )
+                if snapshot
+                else {}
+            )
+            row["baseline_id"] = prepared.get("baseline_id")
+            row.setdefault("anaxigraph", {"seconds": 0.0})["preparation"] = prepared
+            row["anaxigraph"]["seconds"] += time.monotonic() - started
+            write_json(chain / "eval" / f"step-{step:02d}" / "preparation.json", row["anaxigraph"])
+            if not row["baseline_id"]:
+                raise RuntimeError("Cannot start coding without the original pinned baseline")
+        prompt = prompt_for(arm, request, saved_as)
+        if row.get("baseline_id"):
+            prompt += f"\nOriginal pinned baseline_id={row['baseline_id']}; preserve it explicitly through validation."
         row["agent"] = run_agent(
             config, repo, chain / "logs" / f"step-{step:02d}.jsonl",
-            prompt_for(arm, request, saved_as), arm["anaxigraph"],
+            prompt, arm["anaxigraph"],
         )  # fmt: skip
         head = commit(repo, f"Step {step}: {request.stem}")
         row["commit"] = head
-        row.update(evaluate(config, chain, repo, step, base, head))
+        row["base_commit"] = base
+        if step >= 6:
+            row.update(
+                repair_ci(
+                    config,
+                    repo,
+                    chain / "eval" / f"step-{step:02d}" / "safety",
+                    prompt,
+                    row["agent"],
+                    step,
+                    base,
+                    head,
+                    baseline_id=row.get("baseline_id"),
+                    baseline_inputs=row["baseline_inputs"],
+                    treatment=arm["anaxigraph"],
+                )
+            )
+            if arm["anaxigraph"]:
+                row["anaxigraph"]["seconds"] += row["ci_validation_seconds"]
+        else:
+            started = time.monotonic()
+            row.update(evaluate(config, chain, repo, step, base, head))
+            row["verification_seconds"] = time.monotonic() - started
         row["finished"] = now()
+        if row.get("ci_gate", {}).get("status", "passed") != "passed":
+            write_json(chain / f"pending-step-{step:02d}.json", row)
+            return {
+                "chain": chain.name,
+                "status": "blocked",
+                "step": step,
+                "reason": "CI safety remains unqualified after bounded repair; no later request started",
+            }
         append_jsonl(results, row)
         hidden = row["hidden"]["by_file"]
         new = hidden.get(f"step_{step:02d}", {})
@@ -432,7 +841,7 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
         )
     if config.probes and config.last_step == config.scenario["steps"][-1]:
         run_probes(config, chain, arm_name)
-    return {"chain": chain.name, "steps": len(read_jsonl(results))}
+    return {"chain": chain.name, "status": "completed", "steps": len(read_jsonl(results))}
 
 
 def selection_size(repo: Path, changed: list[str]) -> tuple[int | None, int]:
@@ -446,12 +855,37 @@ def selection_size(repo: Path, changed: list[str]) -> tuple[int | None, int]:
     return len(metrics.collect(repo, targets) or []), total
 
 
+def hidden_subset(value: dict, files: list[str]) -> dict:
+    stems = {Path(name).stem for name in files}
+    return {
+        **value,
+        "by_file": {key: row for key, row in value["by_file"].items() if key in stems},
+        **{
+            key: [
+                name
+                for name in value.get(key, [])
+                if name.split("::")[0].rsplit(".", 1)[-1] in stems
+            ]
+            for key in ("passed", "failed")
+        },
+    }
+
+
 def run_probes(config, chain: Path, arm_name: str) -> None:
     results = chain / "probes.jsonl"
     done = {row["probe"] for row in read_jsonl(results)}
     for number, request in enumerate(PROBES, 1):
+        pending = chain / f"pending-probe-{request.stem}.json"
+        if pending.exists():
+            raise RuntimeError(
+                f"Probe {request.stem} remains blocked; refusing additional automatic sessions"
+            )
         if request.stem in done:
             continue
+        if (chain / "logs" / f"probe-{request.stem}.prompt.md").exists():
+            raise RuntimeError(
+                f"Interrupted probe {request.stem} retained; no automatic session replay"
+            )
         repo = chain / "probes" / request.stem / "repo"
         if repo.exists():
             shutil.rmtree(repo.parent)
@@ -462,12 +896,30 @@ def run_probes(config, chain: Path, arm_name: str) -> None:
         saved_as = f"docs/requests/probe-{request.name}"
         shutil.copy2(request, repo / saved_as)
         base = commit(repo, f"Probe {request.stem}")
+        baseline_inputs = collector.inventory(repo)
         agent = run_agent(
             config, repo, chain / "logs" / f"probe-{request.stem}.jsonl",
             prompt_for(ARMS["bare"], request, saved_as), False,
         )  # fmt: skip
         head = commit(repo, f"Probe {request.stem} done")
         out = chain / "eval" / f"probe-{request.stem}"
+        checked = repair_ci(
+            config,
+            repo,
+            out / "safety",
+            prompt_for(ARMS["bare"], request, saved_as),
+            agent,
+            config.last_step,
+            base,
+            head,
+            baseline_inputs=baseline_inputs,
+            acceptance_files=[
+                *scenarios.acceptance_files(config.scenario, config.last_step),
+                f"probe_{number}.py",
+            ],
+        )
+        head, agent = checked["commit"], checked["agent"]
+        postcheck_started = time.monotonic()
         diff = metrics.diff_stats(repo, base, head)
         changed_prod = [
             p for p in diff["changed_files"] if p.endswith(".py") and not metrics.is_test_path(p)
@@ -477,21 +929,25 @@ def run_probes(config, chain: Path, arm_name: str) -> None:
             "probe": request.stem,
             "arm": arm_name,
             "agent": agent,
-            "hidden_probe": hidden_tests(
-                repo, [f"probe_{number}.py"], config.last_step, out / "probe.xml"
+            "hidden_probe": hidden_subset(checked["hidden"], [f"probe_{number}.py"]),
+            "hidden_regression": hidden_subset(
+                checked["hidden"], scenarios.acceptance_files(config.scenario, config.last_step)
             ),
-            "hidden_regression": hidden_tests(
-                repo,
-                scenarios.acceptance_files(config.scenario, config.last_step),
-                config.last_step,
-                out / "steps.xml",
-            ),
-            "own_suite": own_suite(repo, out / "own.xml"),
+            "own_suite": checked["own_suite"],
             "diff": diff,
             "changed_prod": changed_prod,
             "ci_selected": selected,
             "ci_total": total,
+            "ci": checked["ci"],
+            "ci_gate": checked["ci_gate"],
+            "initial_ci_gate": checked["initial_ci_gate"],
+            "ci_attempts": checked["ci_attempts"],
+            "verification_seconds": checked["verification_seconds"],
         }
+        row["verification_seconds"] += time.monotonic() - postcheck_started
+        if checked["ci_gate"]["status"] != "passed":
+            write_json(pending, row)
+            raise RuntimeError(f"Probe {request.stem} failed bounded CI safety repair")
         append_jsonl(results, row)
         print(f"[{chain.name}] probe {request.stem}: {row['hidden_probe']['by_file']}", flush=True)
 
@@ -513,6 +969,8 @@ def provenance(config) -> dict:
                     HERE / "metrics.py",
                     HERE / "scenarios.py",
                     HERE / "charter.md",
+                    HERE / "collect_evidence.py",
+                    Path(getfile(collector.audit_selection)),
                 )
             }
         ),
@@ -531,6 +989,13 @@ def provenance(config) -> dict:
         "workflow_config_sha256": scenarios.digest(config.workflow_config.read_text())
         if config.workflow_config
         else None,
+        "ci_repair_attempts": config.ci_repair_attempts,
+        "ci_gate_protocol": "coverage-consumers-and-actual-diff-v1",
+        "measurement_settings": {
+            "mutants": config.mutants,
+            "ci_every": config.ci_every,
+            "agent_timeout": config.agent_timeout,
+        },
     }
 
 
@@ -555,6 +1020,9 @@ def validate_resume(config, chain: Path) -> None:
         "review_steps",
         "review_kinds",
         "workflow_config_sha256",
+        "ci_repair_attempts",
+        "ci_gate_protocol",
+        "measurement_settings",
     )
     changed = [
         key for key in keys if key not in previous or previous[key] != config.provenance[key]
@@ -614,7 +1082,19 @@ def main() -> None:
     )
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--mutants", type=int, default=10)
-    parser.add_argument("--ci-every", type=int, default=1)
+    parser.add_argument(
+        "--ci-every",
+        type=int,
+        default=1,
+        help="Legacy measurement cadence; required safety verification runs every request from step 6",
+    )
+    parser.add_argument(
+        "--ci-repair-attempts",
+        type=int,
+        choices=range(4),
+        default=2,
+        help="Maximum fresh repair sessions per failed external CI safety gate (0..3)",
+    )
     parser.add_argument("--no-probes", dest="probes", action="store_false")
     config = parser.parse_args()
     if config.list_tracks:
@@ -687,13 +1167,19 @@ def main() -> None:
         config.state / f"run-{int(time.time())}.json", {"argv": sys.argv, **config.provenance}
     )
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.concurrency) as pool:
+        failed = False
         futures = {pool.submit(run_chain, config, arm, r): (arm, r) for arm, r in chains}
         for future in concurrent.futures.as_completed(futures):
             arm, r = futures[future]
             try:
-                print(f"chain {arm}-r{r} finished: {future.result()}", flush=True)
+                result = future.result()
+                failed |= result.get("status") != "completed"
+                print(f"chain {arm}-r{r} finished: {result}", flush=True)
             except Exception as error:  # keep other chains running
+                failed = True
                 print(f"chain {arm}-r{r} FAILED: {error!r}", flush=True)
+    if failed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

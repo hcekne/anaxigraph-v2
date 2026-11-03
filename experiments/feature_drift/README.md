@@ -191,6 +191,20 @@ selector to produce a compact `anaxigraph/ci-evidence.json` report. Optional `--
 repeated `--changed PATH` times full and selected checks on identical inputs. Use disposable copies
 to collect additional observations from historical code. Keep original trial results intact.
 
+The current protocol requires CI safety inside the coding loop. From request 6 onward, every arm
+gets the same external consumer/combined-change/fault verification and up to two fresh repair
+sessions (`--ci-repair-attempts 0..3`). The treatment also runs strict AnaxiGraph validation against
+its original pre-edit baseline. Accepted work retains all original test obligations during CI-only
+repair. Failed or incomplete chains retain pending attempts and stop; a resume cannot reset the
+repair budget. Probes use the same qualification loop, including their own hidden acceptance.
+Every attempt's coding usage, analysis and mechanical verification time is recorded separately.
+See [selector safety](../../docs/change-request-ci-selector-safety.md). These runs must not be
+pooled with the earlier advisory-only v4 protocol.
+
+Standalone `collect_evidence.py --check --changed PATH` is a strict CI command. It saves fresh
+diagnostic observations even when consumer selection fails, then exits nonzero; optional timing
+measurements do not run unless requested. Test detection from an empty selection is never credited.
+
 ## Limits
 
 - One product, one language and one model. The scenario rewards one architectural idea, plug-in
