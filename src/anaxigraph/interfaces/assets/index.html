@@ -4,34 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <title>AnaxiGraph · V2</title>
+  <title>AnaxiGraph</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/workspace.js" defer></script>
   <script src="/assets/ci.js" defer></script>
   <script src="/assets/app.js" defer></script>
-  <script src="/assets/evals.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="AnaxiGraph home"><span class="brand-mark">A</span> AnaxiGraph <span class="pill">1.0</span></a>
+    <a class="brand" href="/" aria-label="AnaxiGraph home"><img class="brand-mark" src="/assets/favicon.svg" alt=""> AnaxiGraph <span class="pill">1.0</span></a>
     <nav aria-label="Workspace">
       <button class="nav-item active" data-page="map" aria-current="page">Explore</button>
       <button class="nav-item" data-page="workflows">Workflows</button>
       <button class="nav-item" data-page="change">Make a change</button>
-      <button class="nav-item" data-page="evals">Evals &amp; Benchmarks</button>
+      <button class="nav-item" data-page="evals" hidden>Evals &amp; Benchmarks</button>
     </nav>
     <button id="refresh" class="quiet">↻ Refresh</button>
   </header>
   <main>
+    <section class="panel repository-picker" aria-label="Repository workspace">
+      <label>Repository<select id="repository-select" aria-label="Repository"><option>Loading repositories…</option></select></label>
+      <form id="repository-open"><label for="repository-path">Open another local checkout</label><div class="repository-path"><input id="repository-path" placeholder="/absolute/path/to/repository" required><button class="secondary" type="submit">Open repository</button></div></form>
+    </section>
     <section class="workspace-heading">
       <div><p class="eyebrow">YOUR CODE, WITH CONTEXT</p><h1 id="repository-name">Understand what belongs where.</h1>
         <p id="checkout" class="muted">Loading checkout…</p></div>
       <button id="scan" class="primary">Refresh structural map <span aria-hidden="true">↗</span></button>
     </section>
+    <p id="scan-progress" class="section-note" role="status" aria-live="polite" hidden></p>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
     <section class="metrics" aria-label="Map readiness">
       <article><span class="metric-label">STRUCTURAL SNAPSHOT</span><strong id="map-state">—</strong><small id="snapshot-state">No saved snapshot</small></article>
       <article><span class="metric-label">MODULES / SYMBOLS</span><strong id="entity-count">—</strong><small>Source facts, available before reviews</small></article>
       <article><span class="metric-label">SEMANTIC UNDERSTANDING</span><strong id="annotation-count">—</strong><small id="annotation-state">Agent annotations are separate</small></article>
+      <article><span class="metric-label">SOURCE LINES</span><strong id="source-loc">—</strong><small>Mapped Python/PYI, excluding blank and comment lines</small></article>
       <article><span class="metric-label">LOCAL STORAGE</span><strong id="storage-size">—</strong><small>Current understanding, bounded history</small></article>
     </section>
     <aside id="coverage-note" class="coverage-note" aria-label="Analysis coverage">
@@ -94,23 +101,6 @@
       </section>
       <section class="panel"><div class="panel-heading"><h2>Workflow progress</h2><button id="load-workflows" class="quiet">Refresh progress</button></div><div id="workflow-runs" class="empty" aria-live="polite">No workflows started.</div></section>
       <section class="panel"><div class="panel-heading"><div><h2>Portable understanding</h2><p class="section-note">Current analyses travel with your repository in <code>anaxigraph/</code>. Commit and push that folder through your normal Git workflow.</p></div></div><div class="record-actions"><button id="export-record" class="secondary">Save portable record</button><button id="import-record" class="secondary">Reuse record from this repo</button></div><p id="portable-state" class="section-note">Mapped locally, exported, and committed/pushed are reported separately.</p></section>
-      <details class="panel manual-analysis"><summary>Advanced: prepare and submit an individual agent task</summary>
-        <div class="record-actions"><button class="secondary" data-kind="annotate">Prepare annotation task</button><button class="secondary" data-kind="patterns">Prepare exhaustive pattern task</button><button class="secondary" data-kind="architecture">Prepare component scout task</button><button class="secondary" data-kind="delivery">Prepare CI/CD task</button><button class="secondary" data-kind="fresh-eyes">Prepare blind design task</button></div>
-      <section class="panel analysis-workspace">
-        <div class="panel-heading"><div><p class="eyebrow">AGENT REVIEW</p><h2 id="analysis-title">Prepare a task to begin</h2></div><span id="analysis-state" class="pill">No task selected</span></div>
-        <p class="section-note">Use these packets with an independent agent when you want direct control. Full workflows above run and save their batches automatically.</p>
-        <label for="analysis-scope">Scope <span class="muted">optional module paths or IDs, or CI/CD configuration paths; one per line. Blank uses the default batch.</span></label>
-        <textarea id="analysis-scope" rows="2" placeholder="module:src/example.py"></textarea>
-        <div class="analysis-columns">
-          <div><div class="subheading"><h3>1. Give this task to an agent</h3><button id="copy-task" class="quiet" disabled>Copy task</button></div>
-            <pre id="analysis-packet">Choose an analysis above.</pre>
-            <p id="blind-note" class="section-note" hidden>Use a separate worker that has not inspected the implementation. Keep this task free of source and current architecture context.</p></div>
-          <div><h3>2. Save the agent's result</h3><label for="analysis-result">Result JSON matching the task's response schema</label>
-            <textarea id="analysis-result" rows="13" spellcheck="false" placeholder='Paste the agent result JSON here'></textarea>
-            <button id="submit-analysis" class="primary" disabled>Validate and save result</button></div>
-        </div>
-      </section>
-      </details>
       <section class="panel"><div class="panel-heading"><h2>Saved reviews</h2><button id="load-reviews" class="quiet">Refresh reviews</button></div><div id="saved-reviews" class="empty">No reviews loaded.</div><button id="more-reviews" class="secondary" hidden>Load more reviews</button></section>
     </section>
 
@@ -125,28 +115,6 @@
           <p class="section-note">Run project tests through your agent or CI. Supplied results are attributed to their exact source fingerprint.</p><pre id="change-validation">No assessment or comparison yet.</pre>
         </section>
       </div>
-    </section>
-    <section id="page-evals" class="page" hidden>
-      <section class="panel eval-hero"><div class="panel-heading"><div><p class="eyebrow">MEASURE OUTCOMES, INSPECT THE EVIDENCE</p><h2>Evals &amp; Benchmarks</h2></div><span class="pill">Local evidence · no model calls</span></div>
-        <p class="section-note">Follow recorded work in this checkout or inspect a feature-drift campaign report. Missing measurements remain unknown. Supplied reports retain their own provenance.</p>
-        <div class="eval-track-grid"><article><h3>Checkout trial ledger</h3><p>Recorded tasks, inspected context, provider usage and outcomes. Provider reports are separate from independently verified correctness.</p></article><article><h3>Switchboard · feature drift</h3><p>Twenty sequential requests and three fault probes across isolated coding arms. Compare behavior, change amplification and CI selection.</p><a href="https://github.com/hcekne/anaxigraph-v2/blob/main/experiments/feature_drift/README.md" target="_blank" rel="noopener noreferrer">Read the campaign protocol ↗</a></article></div>
-        <div class="eval-track-grid eval-drafts"><article><h3>ChronoWeave</h3><p>Draft scenario specification · bitemporal ledgers and speculative histories. No measured outcomes.</p></article><article><h3>AetherLoom</h3><p>Draft scenario specification · discrete hexagonal fields, framed telemetry and flux conservation. No measured outcomes.</p></article></div><a class="section-note" href="https://github.com/hcekne/anaxigraph-v2/tree/main/experiments/feature_drift/tracks" target="_blank" rel="noopener noreferrer">Inspect draft track specifications ↗</a>
-      </section>
-      <div class="panel-heading eval-heading"><div><p class="eyebrow">THIS CHECKOUT</p><h2>Recorded trial evidence</h2></div><div class="record-actions"><button id="eval-load" class="secondary">Refresh evidence</button><button id="eval-export" class="quiet">Export ledger JSON</button></div></div>
-      <section id="eval-ledger-metrics" class="metrics" aria-label="Retained ledger summary"></section>
-      <p id="eval-export-state" class="section-note" role="status"></p>
-      <div class="eval-main-grid"><section class="panel"><div class="panel-heading"><h3>Event timeline</h3><span id="eval-total" class="pill">Not loaded</span></div>
-        <div class="model-settings"><label>Experiment<select id="eval-experiment"><option value="">All experiments</option></select></label><label>Arm<select id="eval-arm"><option value="">All arms</option></select></label><label>Task<select id="eval-task"><option value="">All tasks</option></select></label></div>
-        <p id="eval-loaded" class="section-note">Open this workspace to load the first 50 retained events.</p><div id="eval-event-list" class="eval-events"></div><button id="eval-more" class="secondary" hidden>Load next 50 events</button>
-      </section><aside class="panel eval-inspector"><p class="eyebrow">KEEP CLAIMS CLOSE TO THEIR SOURCE</p><h3>Evidence inspector</h3><p class="section-note">Select an event, arm or step to inspect its supplied fields and qualification.</p><pre id="eval-inspection" tabindex="0">No evidence selected.</pre></aside></div>
-      <section class="panel eval-report"><div class="panel-heading"><div><p class="eyebrow">LONGITUDINAL COMPARISON</p><h2>Feature-drift campaign</h2></div><label class="secondary eval-file">Load report JSON<input id="eval-import" type="file" accept="application/json,.json"></label></div>
-        <p class="section-note">Generate a report with <code>uv run python experiments/feature_drift/report.py --state PATH --json report.json</code>, then select that file (up to 2 MB). Loading a report does not execute the benchmark.</p><p id="eval-report-state" class="section-note" role="status">No report loaded. No comparative result is claimed.</p>
-        <div id="eval-report-view" hidden><div id="eval-arm-cards" class="eval-arm-grid"></div><div id="eval-chain-view">
-          <div class="model-settings"><label>Measured chain<select id="eval-chain"></select></label><label>Trajectory metric<select id="eval-metric"><option value="existing_prod_files_edited">Existing files edited</option><option value="agent_seconds">Coding time (seconds)</option><option value="cumulative_rate">Cumulative acceptance rate</option></select></label></div>
-          <p id="eval-chain-state" class="section-note"></p><div id="eval-chart" class="eval-chart"></div>
-          <div class="table-scroll"><table aria-label="Measured campaign steps"><thead><tr><th>Step</th><th>New tests passed/total</th><th>Acceptance rate</th><th>Files edited</th><th>Regressions</th><th>CI selected fraction</th><th>Coding seconds</th></tr></thead><tbody id="eval-step-rows"></tbody></table></div>
-        </div></div>
-      </section>
     </section>
     <footer class="workspace-footer"><span>AnaxiGraph 1.0</span><span>Source facts → concise meaning → better changes</span></footer>
   </main>

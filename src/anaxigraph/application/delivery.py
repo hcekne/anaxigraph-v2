@@ -298,11 +298,11 @@ def _changed(app, graph, base_ref, base_snapshot_id, changed_paths) -> tuple[lis
 def plan(
     app: Any,
     *,
-    base_ref=None,
-    base_snapshot_id=None,
-    changed_paths=None,
-    cadence="change",
-    runtime_context=None,
+    base_ref: str | None = None,
+    base_snapshot_id: str | None = None,
+    changed_paths: list[str] | None = None,
+    cadence: str = "change",
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict:
     graph = app._current()
     app._require_live(graph)

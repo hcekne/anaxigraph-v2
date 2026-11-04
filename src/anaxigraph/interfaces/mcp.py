@@ -8,6 +8,12 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import ConfigDict, Field, with_config
 from typing_extensions import NotRequired, TypedDict
 
+PageSize = Annotated[int, Field(ge=1, le=100)]
+PageOffset = Annotated[int, Field(ge=0)]
+BatchSize = Annotated[int, Field(ge=1, le=50)]
+BatchOffset = Annotated[int, Field(ge=0, le=100_000)]
+EvidenceSize = Annotated[int, Field(ge=1, le=1000)]
+
 
 @with_config(ConfigDict(extra="forbid"))
 class CheckReceipt(TypedDict):
@@ -26,7 +32,7 @@ class PlanDecision(TypedDict):
 
 def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
     server = FastMCP(
-        "AnaxiGraph V2",
+        "AnaxiGraph",
         stateless_http=True,
         json_response=True,
         instructions=(
@@ -48,25 +54,37 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
             operations[function.__name__] = function
         return server.tool()(function)
 
-    @tool
-    def status() -> dict:
-        """Show the exact checkout and independent map/annotation readiness."""
-        return application.status()
+    def action(name, description):
+        def invoke() -> dict:
+            return getattr(application, name)()
 
-    @tool
-    def scan() -> dict:
-        """Refresh source facts without executing the analyzed code."""
-        return application.scan()
+        invoke.__name__, invoke.__doc__ = name, description
+        tool(invoke)
+
+    for name, description in (
+        ("status", "Show checkout identity and independent map/annotation readiness."),
+        ("scan", "Refresh source facts without executing analyzed code."),
+        ("export_record", "Save portable analyses in anaxigraph/; commit and push separately."),
+        (
+            "import_record",
+            "Reuse Git-carried analyses matching this checkout's content and context.",
+        ),
+        ("portable_status", "Distinguish local map, portable record and commit/push state."),
+        ("export_evidence", "Export bounded trial evidence without source or model transcripts."),
+    ):
+        action(name, description)
 
     @tool
     def modules(
-        sort: str = "path", descending: bool = False, limit: int = 50, offset: int = 0
+        sort: str = "path", descending: bool = False, limit: PageSize = 50, offset: PageOffset = 0
     ) -> dict:
         """Discover modules in bounded pages, sortable by path, lines or function count."""
         return application.modules(sort, descending, limit, offset)
 
     @tool
-    def inspect(entity_id: str, limit: int = 30, offset: int = 0, full: bool = False) -> dict:
+    def inspect(
+        entity_id: str, limit: PageSize = 30, offset: PageOffset = 0, full: bool = False
+    ) -> dict:
         """Page observed relationships; full=True expands entity metadata and annotations."""
         return application.inspect(entity_id, limit, offset, full)
 
@@ -142,7 +160,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         return application.submit_analysis(request_id, result)
 
     @tool
-    def reviews(kind: str | None = None, limit: int = 12, offset: int = 0) -> dict:
+    def reviews(kind: str | None = None, limit: PageSize = 12, offset: PageOffset = 0) -> dict:
         """Discover saved review metadata; use inspect('review:<id>') for the full result."""
         return application.reviews(kind, limit, offset)
 
@@ -159,7 +177,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
 
     @tool
     def workflow_status(
-        run_id: str | None = None, batch_offset: int = 0, batch_limit: int = 10
+        run_id: str | None = None, batch_offset: BatchOffset = 0, batch_limit: BatchSize = 10
     ) -> dict:
         """Show progress; select a run and page its measured batch timings with batch_offset."""
         return application.workflow_status(run_id, batch_offset, batch_limit)
@@ -175,28 +193,8 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         return application.workflow_configure(config)
 
     @tool
-    def export_record() -> dict:
-        """Save current portable analyses in anaxigraph/; committing and pushing is separate."""
-        return application.export_record()
-
-    @tool
-    def import_record() -> dict:
-        """Reuse Git-carried analyses whose content and context match this checkout."""
-        return application.import_record()
-
-    @tool
-    def portable_status() -> dict:
-        """Distinguish local map, exported portable record and commit/push state."""
-        return application.portable_status()
-
-    @tool
-    def trial_evidence(limit: int = 50, offset: int = 0) -> dict:
+    def trial_evidence(limit: EvidenceSize = 50, offset: PageOffset = 0) -> dict:
         """Read local task/context/usage evidence; unknown costs remain unknown."""
         return application.trial_evidence(limit, offset)
-
-    @tool
-    def export_evidence() -> dict:
-        """Export bounded local trial evidence without source or model transcripts."""
-        return application.export_evidence()
 
     return server

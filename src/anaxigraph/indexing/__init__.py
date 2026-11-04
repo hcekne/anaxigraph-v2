@@ -30,6 +30,11 @@ class IndexSession:
     def scan(self) -> Graph:
         return index(self.root, excluded=self.excluded, session=self)
 
+    def restore(self, graph: Graph | None) -> None:
+        """Seed saved facts; scan still verifies the complete current input identity."""
+        if graph is not None and self.last_graph is None and graph.snapshot.root == str(self.root):
+            self.last_graph = graph
+
     def snapshot(self) -> Snapshot:
         return discover(self.root, self.excluded, self.sources)[0]
 

@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const state = { sort: "path", descending: false, offset: 0, limit: 25, selected: null, request: null };
+const state = { sort: "path", descending: false, offset: 0, limit: 25, selected: null };
 let moduleGeneration = 0;
 let entityGeneration = 0;
 let reviewOffset = 0;
@@ -19,7 +19,7 @@ async function api(path, body, timeout = 20000) {
   try {
     const response = await fetch(path, {
       method: body === undefined ? "GET" : "POST",
-      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      headers: { ...AnaxiGraphWorkspace.headers(path), ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
@@ -90,6 +90,7 @@ function renderCoverage(data) {
 }
 
 function renderMetrics(data) {
+  $("#source-loc").textContent = data.snapshot && Number.isFinite(data.source_loc) ? data.source_loc.toLocaleString() : "—";
   $("#entity-count").textContent = `${data.modules || 0} / ${data.symbols || 0}`;
   const annotations = data.semantic_scope || data.annotations || {};
   $("#annotation-count").textContent = `${annotations.current || 0} / ${annotations.eligible_modules ?? data.modules ?? 0}`;
@@ -103,6 +104,7 @@ async function refreshStatus() {
   renderCheckout(data.snapshot, data.snapshot?.root || data.root || data.repository || "Checkout");
   renderCoverage(data);
   renderMetrics(data);
+  await AnaxiGraphWorkspace.development(data.developer_tools);
   if (data.baseline_id) $("#change-baseline").textContent = `Pinned baseline ${data.baseline_id} · preserved across scans until you start another change.`;
   return data;
 }
@@ -158,15 +160,11 @@ async function refreshModules() {
 }
 
 function addLinkGroup(name, edges, direction, nodes) {
-  const section = document.createElement("section");
-  section.className = "link-group";
-  const heading = document.createElement("h3");
-  heading.textContent = `${name} (${edges.length})`;
-  section.append(heading);
+  const section = textElement("section", "", "link-group");
+  section.append(textElement("h3", `${name} (${edges.length})`));
   for (const edge of edges.slice(0, 12)) {
     const id = direction === "incoming" ? edge.source : edge.target;
-    const button = document.createElement("button");
-    button.textContent = `${edge.kind} · ${short(nodes.get(id)?.name || id, 55)}${edge.resolution !== "resolved" ? ` · ${edge.resolution}` : ""}`;
+    const button = textElement("button", `${edge.kind} · ${short(nodes.get(id)?.name || id, 55)}${edge.resolution !== "resolved" ? ` · ${edge.resolution}` : ""}`);
     button.addEventListener("click", () => selectEntity(id).catch((error) => notice(error.message, true)));
     section.append(button);
   }
@@ -185,9 +183,7 @@ async function selectEntity(id) {
   $("#entity-detail").textContent = annotation.detail || "";
   $("#entity-facts").replaceChildren();
   for (const value of [entity.kind, entity.data?.loc === undefined ? null : `${entity.data.loc} lines`, `line ${entity.line || 1}`, entity.data?.annotation_status, entity.data?.parse_status].filter(Boolean)) {
-    const chip = document.createElement("span");
-    chip.textContent = value;
-    $("#entity-facts").append(chip);
+    $("#entity-facts").append(textElement("span", value));
   }
   $("#entity-json").textContent = formatJSON(result);
   const nodes = new Map((result.neighbors || []).map((node) => [node.id, node]));
@@ -199,9 +195,10 @@ async function selectEntity(id) {
   await refreshModules();
 }
 
-function svgElement(name, attributes = {}) {
+function svgElement(name, attributes = {}, text) {
   const element = document.createElementNS("http://www.w3.org/2000/svg", name);
   for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
+  if (text !== undefined) element.textContent = text;
   return element;
 }
 
@@ -220,11 +217,7 @@ function drawGraph(entity, incoming, outgoing, nodes) {
     const node = nodes.get(id);
     const group = svgElement("g", { class: `graph-node${central ? " center" : ""}`, transform: `translate(${point.x - 116},${point.y - 18})`, tabindex: "0", role: "button", "aria-label": node?.name || id });
     group.append(svgElement("rect", { width: 232, height: 36 }));
-    const label = svgElement("text", { x: 116, y: 23, "text-anchor": "middle" });
-    label.textContent = short(node?.name || id, 29);
-    const full = svgElement("title");
-    full.textContent = node ? title(node) : id;
-    group.append(label, full);
+    group.append(svgElement("text", { x: 116, y: 23, "text-anchor": "middle" }, short(node?.name || id, 29)), svgElement("title", {}, node ? title(node) : id));
     const activate = () => selectEntity(id).catch((error) => notice(error.message, true));
     group.addEventListener("click", activate);
     group.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); } });
@@ -236,9 +229,7 @@ function drawGraph(entity, incoming, outgoing, nodes) {
       const start = isLeft ? { x: point.x + 116, y: point.y } : { x: center.x + 116, y: center.y };
       const end = isLeft ? { x: center.x - 116, y: center.y } : { x: point.x - 116, y: point.y };
       const path = svgElement("path", { d: `M ${start.x} ${start.y} C ${(start.x + end.x) / 2} ${start.y}, ${(start.x + end.x) / 2} ${end.y}, ${end.x} ${end.y}`, class: `graph-edge ${edge.resolution !== "resolved" ? "uncertain" : ""}`, "marker-end": "url(#arrow)" });
-      const label = svgElement("title");
-      label.textContent = `${edge.kind} · ${edge.resolution}`;
-      path.append(label);
+      path.append(svgElement("title", {}, `${edge.kind} · ${edge.resolution}`));
       svg.append(path);
       addNode(isLeft ? edge.source : edge.target, point);
     });
@@ -246,23 +237,6 @@ function drawGraph(entity, incoming, outgoing, nodes) {
   addNode(entity.id, center, true);
   $("#graph").classList.remove("graph-empty");
   $("#graph").replaceChildren(svg);
-}
-
-async function requestAnalysis(kind) {
-  const scope = lines($("#analysis-scope").value);
-  const packet = await api("/api/analysis/request", { kind, scope: scope.length ? scope : null });
-  state.request = packet;
-  $("#analysis-title").textContent = { annotate: "Module annotation", patterns: "Exhaustive pattern task", architecture: "Component boundary scout", delivery: "CI/CD pipeline review", "fresh-eyes": "Blind Fresh Eyes design" }[kind];
-  $("#analysis-state").textContent = "Awaiting agent result";
-  $("#analysis-packet").textContent = formatJSON(packet);
-  $("#blind-note").hidden = kind !== "fresh-eyes";
-  $("#submit-analysis").disabled = false;
-  $("#copy-task").disabled = false;
-  $("#analysis-result").value = "";
-  switchPage("workflows");
-  notice(kind === "patterns"
-    ? "Exhaustive task prepared: every catalogue pattern needs detailed evaluation. Run pattern analysis uses fast screening by default."
-    : "Task prepared. Give its packet and response schema to your agent.");
 }
 
 async function refreshReviews(append = false) {
@@ -275,13 +249,9 @@ async function refreshReviews(append = false) {
   reviewOffset += items.length;
   $("#more-reviews").hidden = data.next_offset == null;
   for (const item of items) {
-    const section = document.createElement("details");
-    section.className = "review-card";
-    const summary = document.createElement("summary");
-    summary.textContent = `${item.kind === "delivery" ? "CI/CD" : item.kind || "Review"} · ${item.status || "saved"} · ${item.producer || "producer unspecified"}`;
-    const content = document.createElement("div");
-    content.className = "review-content";
-    content.textContent = item.summary || "Expand to load the full saved review.";
+    const section = textElement("details", "", "review-card");
+    const summary = textElement("summary", `${item.kind === "delivery" ? "CI/CD" : item.kind || "Review"} · ${item.status || "saved"} · ${item.producer || "producer unspecified"}`);
+    const content = textElement("div", item.summary || "Expand to load the full saved review.", "review-content");
     section.append(summary, content);
     let loaded = false;
     let loading = false;
@@ -319,8 +289,7 @@ function reviewTradeoffs(parent, label, items) {
 }
 
 function alternativeCard(alternative, index) {
-  const card = document.createElement("article");
-  card.className = "design-alternative";
+  const card = textElement("article", "", "design-alternative");
   card.append(textElement("h3", `${index + 1}. ${alternative.name}`));
   card.append(textElement("p", alternative.design));
   reviewTradeoffs(card, "Pros", alternative.pros);
@@ -332,8 +301,7 @@ function alternativeCard(alternative, index) {
 }
 
 function patternCard(evaluation) {
-  const card = document.createElement("details");
-  card.className = "pattern-evaluation";
+  const card = textElement("details", "", "pattern-evaluation");
   const rating = evaluation.opportunity === null ? "insufficient evidence" : `opportunity ${evaluation.opportunity}/3`;
   card.append(textElement("summary", `${evaluation.pattern_id} · ${rating} · ${evaluation.module_id}`));
   if (evaluation.current_fit) card.append(textElement("p", `Current fit: ${evaluation.current_fit}`));
@@ -418,6 +386,17 @@ let workflowSettings = null;
 let workflowTimer = null;
 const workflowStatuses = new Map();
 
+function modelField(tag, id, label, value, choices, placeholder) {
+  const input = document.createElement(tag);
+  input.id = id;
+  if (choices) input.append(...choices.map(([value, text]) => new Option(text, value)));
+  input.value = value;
+  if (placeholder) input.placeholder = placeholder;
+  const wrapper = textElement("label", label);
+  wrapper.append(input);
+  return [wrapper, input];
+}
+
 function renderModelSettings(config) {
   workflowSettings = config;
   $("#finding-review-policy").textContent = config.effective_finding_review || "Review the configured stage and ordered review models below.";
@@ -428,40 +407,14 @@ function renderModelSettings(config) {
   parent.replaceChildren();
   for (const [kind, label] of Object.entries(stageLabels)) {
     const group = document.createElement("div");
-    const providerLabel = textElement("label", `${label} provider`);
-    const provider = document.createElement("select");
-    provider.id = `provider-${kind}`;
-    for (const name of ["codex", "claude"]) {
-      const option = textElement("option", name === "codex" ? "OpenAI / Codex" : "Claude");
-      option.value = name;
-      provider.append(option);
-    }
-    provider.value = config.stages[kind].provider;
-    providerLabel.append(provider);
-    const modelLabel = textElement("label", `${label} model`);
-    const model = document.createElement("input");
-    model.id = `model-${kind}`;
-    model.value = config.stages[kind].model || "";
-    model.placeholder = "CLI configured default";
-    modelLabel.append(model);
-    const effortLabel = textElement("label", `${label} Codex reasoning`);
-    const effort = document.createElement("select");
-    effort.id = `effort-${kind}`;
-    for (const value of ["", "low", "medium", "high", "xhigh"]) {
-      const option = textElement("option", value || "Provider default (unverified)");
-      option.value = value;
-      effort.append(option);
-    }
-    effort.value = config.stages[kind].reasoning_effort || "";
+    const [providerLabel, provider] = modelField("select", `provider-${kind}`, `${label} provider`, config.stages[kind].provider, [["codex", "OpenAI / Codex"], ["claude", "Claude"]]);
+    const [modelLabel] = modelField("input", `model-${kind}`, `${label} model`, config.stages[kind].model || "", null, "CLI configured default");
+    const efforts = ["", "low", "medium", "high", "xhigh"].map((value) => [value, value || "Provider default (unverified)"]);
+    const [effortLabel, effort] = modelField("select", `effort-${kind}`, `${label} Codex reasoning`, config.stages[kind].reasoning_effort || "", efforts);
     effort.disabled = provider.value !== "codex";
     provider.addEventListener("change", () => { effort.disabled = provider.value !== "codex"; });
-    effortLabel.append(effort);
-    const fallbackLabel = textElement("label", "Stronger fallback models, in order");
-    const fallback = document.createElement("input");
-    fallback.id = `fallback-${kind}`;
-    fallback.value = (config.stages[kind].fallbacks || []).map((x) => x.provider === config.stages[kind].provider ? x.model : `${x.provider}:${x.model}`).join(", ");
-    fallback.placeholder = "model, claude:other-model";
-    fallbackLabel.append(fallback);
+    const fallbacks = (config.stages[kind].fallbacks || []).map((x) => x.provider === config.stages[kind].provider ? x.model : `${x.provider}:${x.model}`).join(", ");
+    const [fallbackLabel] = modelField("input", `fallback-${kind}`, "Stronger fallback models, in order", fallbacks, null, "model, claude:other-model");
     fallbackLabel.hidden = kind.endsWith("-review");
     group.append(providerLabel, modelLabel, effortLabel, fallbackLabel);
     parent.append(group);
@@ -644,7 +597,6 @@ for (const operation of ["export", "import"]) {
 }
 
 document.querySelectorAll("[data-page]").forEach((button) => button.addEventListener("click", () => switchPage(button.dataset.page)));
-document.querySelectorAll("[data-kind]").forEach((button) => button.addEventListener("click", () => action(button, () => requestAnalysis(button.dataset.kind))));
 document.querySelectorAll("[data-sort]").forEach((button) => button.addEventListener("click", () => {
   state.descending = state.sort === button.dataset.sort ? !state.descending : button.dataset.sort !== "path";
   state.sort = button.dataset.sort;
@@ -652,26 +604,8 @@ document.querySelectorAll("[data-sort]").forEach((button) => button.addEventList
   action(button, refreshModules);
 }));
 $("#refresh").addEventListener("click", () => action($("#refresh"), refresh));
-$("#scan").addEventListener("click", () => action($("#scan"), async () => {
-  await api("/api/scan", {}, 120000);
-  state.offset = 0;
-  await refresh();
-  notice("Structural map saved. Semantic annotations and architectural reviews have separate readiness.");
-}));
 $("#previous").addEventListener("click", () => { state.offset = Math.max(0, state.offset - state.limit); refreshModules().catch((error) => notice(error.message, true)); });
 $("#next").addEventListener("click", () => { state.offset += state.limit; refreshModules().catch((error) => notice(error.message, true)); });
-$("#copy-task").addEventListener("click", () => action($("#copy-task"), async () => {
-  await navigator.clipboard.writeText(formatJSON(state.request));
-  notice("Task copied.");
-}));
-$("#submit-analysis").addEventListener("click", () => action($("#submit-analysis"), async () => {
-  if (!state.request) throw new Error("Prepare a task first.");
-  const result = JSON.parse($("#analysis-result").value);
-  await api("/api/analysis/submit", { request_id: state.request.request_id, result });
-  $("#analysis-state").textContent = "Validated and saved";
-  await Promise.all([refresh(), refreshReviews()]);
-  notice("Agent result validated and saved for its requested snapshot.");
-}));
 $("#load-reviews").addEventListener("click", () => action($("#load-reviews"), refreshReviews));
 $("#more-reviews").addEventListener("click", () => action($("#more-reviews"), () => refreshReviews(true)));
 $("#new-change-baseline").addEventListener("click", () => action($("#new-change-baseline"), async () => {
@@ -703,6 +637,6 @@ $("#validate-change").addEventListener("click", () => action($("#validate-change
   $("#change-validation").textContent = formatJSON(await api("/api/validate", { receipts }));
 }));
 AnaxiGraphCI.bindPlanForm({ $, api, action, textElement, formatJSON, lines, notice, reviewTradeoffs });
-refresh().catch((error) => notice(error.message, true));
-api("/api/workflows/config").then(renderModelSettings).catch((error) => notice(error.message, true));
-refreshWorkflows().catch((error) => notice(error.message, true));
+AnaxiGraphWorkspace.bind().then(() => Promise.all([
+  refresh(), api("/api/workflows/config").then(renderModelSettings), refreshWorkflows(), AnaxiGraphWorkspace.scan(),
+])).catch((error) => notice(error.message, true));

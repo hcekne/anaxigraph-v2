@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { validateReport, display } = require('../../src/anaxigraph/interfaces/assets/evals.js');
+const { validateReport, display } = require('./assets/evals.js');
 const fixture = () => ({
   arms: { charter: { verification_status: 'incomplete', final_cumulative_rate: 0.75 } },
   decision: { verdict: 'incomplete' },

@@ -38,7 +38,7 @@ def _ci_plan_parser(commands: Any) -> None:
 def parser() -> argparse.ArgumentParser:
     from anaxigraph import __version__
 
-    result = argparse.ArgumentParser(description="AnaxiGraph V2 — understand and improve code")
+    result = argparse.ArgumentParser(description="AnaxiGraph — understand and improve code")
     result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     _location(result)
     commands = result.add_subparsers(dest="command", required=True)

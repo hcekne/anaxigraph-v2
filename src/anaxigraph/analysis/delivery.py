@@ -171,34 +171,6 @@ def validate_delivery(request: dict, result: dict, graph: Graph) -> None:
     _strings(result.get("uncertainty"), "uncertainty", required="unknown" in outcomes.values())
 
 
-def _project(value: Any, fields: set[str]) -> Any:
-    return (
-        {key: item for key, item in value.items() if key in fields}
-        if isinstance(value, dict)
-        else value
-    )
-
-
-def canonical_delivery(result: dict) -> dict:
-    canonical = _project(result, {"producer", "assessments", "recommendations", "uncertainty"})
-    if isinstance(canonical.get("assessments"), list):
-        canonical["assessments"] = [
-            _project(item, {"pipeline_id", "outcome"}) for item in canonical["assessments"]
-        ]
-    if isinstance(canonical.get("recommendations"), list):
-        canonical["recommendations"] = [
-            _canonical_recommendation(item) for item in canonical["recommendations"]
-        ]
-    return canonical
-
-
-def _canonical_recommendation(value: Any) -> Any:
-    result = _project(value, RECOMMENDATION_FIELDS)
-    if isinstance(result, dict) and isinstance(result.get("evidence"), list):
-        result["evidence"] = [_project(item, {"path", "line"}) for item in result["evidence"]]
-    return result
-
-
 def capture_coverage(context: dict) -> dict:
     """Application-owned capture facts, never a model's assertion of completeness."""
     pipelines = context.get("pipelines", [])

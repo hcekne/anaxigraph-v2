@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">AnaxiGraph brand V4 map mark</title>
+  <desc id="desc">A bright, sharp letter A formed by four connected graph nodes and a raised centre node.</desc>
+  <defs>
+    <linearGradient id="left" x1="256" y1="70" x2="98" y2="370" gradientUnits="userSpaceOnUse"><stop stop-color="#31ecff"/><stop offset=".48" stop-color="#38caff"/><stop offset="1" stop-color="#bd4fff"/></linearGradient>
+    <linearGradient id="right" x1="256" y1="70" x2="414" y2="370" gradientUnits="userSpaceOnUse"><stop stop-color="#31ecff"/><stop offset=".48" stop-color="#a64dff"/><stop offset="1" stop-color="#ffad24"/></linearGradient>
+    <linearGradient id="bridge" x1="98" y1="370" x2="414" y2="370" gradientUnits="userSpaceOnUse"><stop stop-color="#c859ff"/><stop offset=".5" stop-color="#f13eff"/><stop offset="1" stop-color="#ffad24"/></linearGradient>
+    <radialGradient id="cyan" cx="34%" cy="28%"><stop stop-color="#8cf4ff"/><stop offset=".42" stop-color="#00d1ff"/><stop offset="1" stop-color="#008dff"/></radialGradient>
+    <radialGradient id="purple" cx="34%" cy="28%"><stop stop-color="#f0a0ff"/><stop offset=".42" stop-color="#c13dff"/><stop offset="1" stop-color="#7c18da"/></radialGradient>
+    <radialGradient id="orange" cx="34%" cy="28%"><stop stop-color="#ffe0a0"/><stop offset=".42" stop-color="#ff9500"/><stop offset="1" stop-color="#f05a15"/></radialGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 72 98 370" stroke="url(#left)" stroke-width="52"/>
+    <path d="M256 72 414 370" stroke="url(#right)" stroke-width="52"/>
+    <path d="M98 370Q256 140 414 370" stroke="url(#bridge)" stroke-width="52"/>
+  </g>
+  <g stroke="rgba(255,255,255,.42)" stroke-width="3"><circle cx="256" cy="72" r="38" fill="url(#cyan)"/><circle cx="98" cy="370" r="38" fill="url(#purple)"/><circle cx="256" cy="255" r="35" fill="url(#purple)"/><circle cx="414" cy="370" r="38" fill="url(#orange)"/></g>
+</svg>

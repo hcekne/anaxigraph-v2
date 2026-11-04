@@ -88,8 +88,8 @@ see the [upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs
 
 ## Read further
 
-Source checkouts also include an **Evals & Benchmarks** dashboard for task evidence and measured
-campaign reports. The [prototype integration notes](https://github.com/hcekne/anaxigraph-v2/blob/main/docs/google-prototype-integration.md)
+Maintainer source installations include an **Evals & Benchmarks** dashboard when working on
+AnaxiGraph itself. It displays task evidence and measured campaign reports. The [prototype integration notes](https://github.com/hcekne/anaxigraph-v2/blob/main/docs/google-prototype-integration.md)
 describe the new scenario catalog, regression tests and their qualification status.
 
 - [Usage and upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/usage.md)

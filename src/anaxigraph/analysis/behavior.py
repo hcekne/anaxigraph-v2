@@ -80,7 +80,7 @@ def _annotation_fields(annotation: dict[str, Any]) -> list[tuple[str, Any]]:
 def annotation_behavior_problems(
     graph: Graph, annotations: list[dict[str, Any]] | None = None
 ) -> dict[str, str]:
-    matches = behavior_matcher(graph)
+    matches: Matcher | None = None
     entries = (
         [(node.id, node.data.get("annotation")) for node in graph.nodes if node.kind == "module"]
         if annotations is None
@@ -90,6 +90,7 @@ def annotation_behavior_problems(
     for identity, annotation in entries:
         if not annotation:
             continue
+        matches = matches or behavior_matcher(graph)
         field = next(
             (
                 name

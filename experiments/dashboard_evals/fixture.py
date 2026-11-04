@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 import uvicorn
@@ -20,6 +21,10 @@ from test_workflows import answer  # noqa: E402
 
 
 def fixture(root: Path) -> Application:
+    (root / "pyproject.toml").write_text('[project]\nname = "anaxigraph"\n')
+    package = root / "src" / "anaxigraph"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text('__version__ = "synthetic-ui-fixture"\n')
     (root / "billing.py").write_text("def invoice():\n    return {'total': 12}\n")
     (root / "client.py").write_text(
         "from billing import invoice\n\ndef total():\n    return invoice()['total']\n"
@@ -39,6 +44,13 @@ def fixture(root: Path) -> Application:
         application.evidence.record(
             "browser_fixture", {"notes": f"Synthetic UI event {number}", "status": "fixture"}
         )
+    original_scan = application.scan
+
+    def delayed_scan(*args, **kwargs):
+        time.sleep(1.5)  # Keep the real background job observable across a browser reload.
+        return original_scan(*args, **kwargs)
+
+    application.scan = delayed_scan
     return application
 
 

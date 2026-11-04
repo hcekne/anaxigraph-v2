@@ -5,6 +5,17 @@ from __future__ import annotations
 from typing import Any
 
 
+def project(value: Any, fields: set[str], children: dict[str, Any] | None = None) -> Any:
+    """Retain malformed required values for validation; discard unsupported stored fields."""
+    if not isinstance(value, dict):
+        return value
+    result = {key: item for key, item in value.items() if key in fields}
+    for key, projection in (children or {}).items():
+        if key in result and isinstance(result[key], list):
+            result[key] = [projection(item) for item in result[key]]
+    return result
+
+
 def text(value: Any, field: str, limit: int = 1000) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
         raise ValueError(f"{field} must be nonempty text of at most {limit} characters")

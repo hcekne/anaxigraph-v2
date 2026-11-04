@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
@@ -113,8 +115,13 @@ class Application:
         self._graph_cache: tuple[tuple[int, ...], Graph] | None = None
         self._export_cache: tuple[tuple[Any, ...], dict[str, Any]] | None = None
         self._import_cache: tuple[Any, ...] | None = None
+        self._graph_lock, self._scan_lock = threading.RLock(), threading.Lock()
 
     def _current(self) -> Graph:
+        with self._graph_lock:
+            return self._load_current()
+
+    def _load_current(self) -> Graph:
         token = self.store.knowledge_token(str(self.root))
         if self._graph_cache is not None and self._graph_cache[0] == token:
             return self._graph_cache[1]
@@ -163,10 +170,26 @@ class Application:
             self._history_cache = cached
         return cochange_advice(cached[1], paths)
 
-    def scan(self, publish: bool = False) -> dict[str, Any]:
+    def scan(
+        self, publish: bool = False, *, progress: Callable[[str], None] | None = None
+    ) -> dict[str, Any]:
         if type(publish) is not bool:
             raise ValueError("publish must be a boolean")
+        with self._scan_lock:
+            return self._scan(publish, progress or (lambda phase: None))
+
+    def _scan(self, publish: bool, progress: Callable[[str], None]) -> dict[str, Any]:
         started = time.monotonic()
+        progress("Reading source and resolving references")
+        if self.indexer.last_graph is None:
+            cached = self._graph_cache
+            token = self.store.knowledge_token(str(self.root))
+            graph = (
+                cached[1]
+                if cached and cached[0] == token
+                else self.store.load_graph(str(self.root))
+            )
+            self.indexer.restore(graph)
         graph = self.indexer.scan()
         # Avoid publishing a captured graph after a concurrent edit.
         self._require_live(graph)
@@ -174,7 +197,9 @@ class Application:
             not self.indexer.unchanged
             or self.store.stats(str(self.root))["snapshot_id"] != graph.snapshot.id
         ):
+            progress("Saving the structural map")
             self.store.save_graph(graph)
+        progress("Reusing saved understanding")
         try:
             imported = self.import_record()
         except ValueError as error:
@@ -185,6 +210,7 @@ class Application:
             self._require_live(graph)
             imported = {"record_found": True, "compatible": False, "issue": str(error)}
         exported = self.export_record() if publish else None
+        progress("Refreshing map readiness")
         status = self.status()
         portable = status["portable"]
         return {
@@ -203,8 +229,8 @@ class Application:
     def status(self) -> dict[str, Any]:
         stats = self.store.stats(str(self.root))
         graph = self._current() if stats["snapshot_id"] is not None else None
-        nodes = graph.nodes if graph else ()
-        edges = graph.edges if graph else ()
+        nodes = getattr(graph, "nodes", ())
+        edges = getattr(graph, "edges", ())
         modules = [node for node in nodes if node.kind == "module"]
         coverage = Counter(node.data.get("annotation_status", "missing") for node in modules)
         return {
@@ -217,6 +243,7 @@ class Application:
             if graph
             else None,
             "modules": len(modules),
+            "source_loc": sum(node.data.get("loc", 0) for node in modules) if graph else None,
             "symbols": sum(node.kind in {"function", "class", "interface"} for node in nodes),
             "relationships": len(edges),
             "unresolved_relationships": sum(edge.resolution != "resolved" for edge in edges),
@@ -485,30 +512,13 @@ class Application:
         )
         return result
 
-    def ci_plan(
-        self,
-        *,
-        base_ref: str | None = None,
-        base_snapshot_id: str | None = None,
-        changed_paths: list[str] | None = None,
-        cadence: str = "change",
-        runtime_context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return delivery.plan(
-            self,
-            base_ref=base_ref,
-            base_snapshot_id=base_snapshot_id,
-            changed_paths=changed_paths,
-            cadence=cadence,
-            runtime_context=runtime_context,
-        )
-
     def trial_evidence(self, limit: int = 50, offset: int = 0) -> dict[str, Any]:
         return {"summary": self.evidence.summary(), "events": self.evidence.events(limit, offset)}
 
     def export_evidence(self) -> dict[str, Any]:
         return self.evidence.export()
 
+    ci_plan = delivery.plan
     analysis_request = review_operations.analysis_request
     submit_analysis = review_operations.submit_analysis
     reviews = review_operations.reviews

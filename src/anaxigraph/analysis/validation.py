@@ -10,7 +10,8 @@ from anaxigraph.contracts import Graph
 
 from .architecture import FINDING_FIELDS, validate_architecture
 from .behavior import check_annotation_behaviors
-from .delivery import canonical_delivery, validate_delivery
+from .delivery import RECOMMENDATION_FIELDS, validate_delivery
+from .fields import project as _project
 from .fields import text, texts
 from .packets import DEFAULT_RESULT_BYTES, _check_behavior
 
@@ -35,17 +36,6 @@ def _model_output(operation: _Validator) -> _Validator:
             raise failure from error
 
     return cast(_Validator, checked)
-
-
-def _project(value: Any, fields: set[str], children: dict[str, Any] | None = None) -> Any:
-    """Keep malformed required values intact for the normal validator to reject."""
-    if not isinstance(value, dict):
-        return value
-    result = {key: item for key, item in value.items() if key in fields}
-    for key, projection in (children or {}).items():
-        if key in result and isinstance(result[key], list):
-            result[key] = [projection(item) for item in result[key]]
-    return result
 
 
 def _execution_worker(value: Any, *, fallbacks: bool = False) -> dict[str, Any]:
@@ -131,11 +121,6 @@ def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[st
         return projected
 
     kind = request["kind"]
-    if kind == "delivery":
-        canonical = canonical_delivery(result)
-        if result.get("execution") is not None:
-            canonical["execution"] = _execution(result["execution"])
-        return canonical
     fields, children = {
         "annotate": ({"producer", "annotations"}, {"annotations": annotation}),
         "pattern-screen": (
@@ -175,6 +160,15 @@ def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[st
                             option, {"placement", "benefit", "cost"}
                         ),
                     },
+                ),
+            },
+        ),
+        "delivery": (
+            {"producer", "assessments", "recommendations", "uncertainty"},
+            {
+                "assessments": lambda item: _project(item, {"pipeline_id", "outcome"}),
+                "recommendations": lambda item: _project(
+                    item, RECOMMENDATION_FIELDS, {"evidence": reference}
                 ),
             },
         ),

@@ -41,7 +41,7 @@ Issues = "https://github.com/hcekne/anaxigraph-v2/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-anaxigraph = ["analysis/catalog/*.json", "interfaces/assets/*.html", "interfaces/assets/*.css", "interfaces/assets/*.js"]
+anaxigraph = ["analysis/catalog/*.json", "interfaces/assets/*.html", "interfaces/assets/*.css", "interfaces/assets/*.js", "interfaces/assets/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

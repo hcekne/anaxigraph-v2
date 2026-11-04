@@ -10,13 +10,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, ConfigDict, Field
 
 from anaxigraph.interfaces.mcp import CheckReceipt, PlanDecision, create_mcp
+from anaxigraph.interfaces.repositories import Repositories, RepositorySelection, development_assets
+from anaxigraph.interfaces.scan_jobs import _scan_routes
 
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
@@ -160,6 +162,10 @@ class ConfigurationInput(Input):
     config: dict[str, Any]
 
 
+class RepositoryInput(Input):
+    path: str = Field(min_length=1, max_length=4096)
+
+
 def _body_routes(server, operations):
     def body_route(path, model, name, operation):
         def action(body) -> dict:
@@ -182,8 +188,83 @@ def _body_routes(server, operations):
         body_route(path, model, name, operation)
 
 
+def _invalid_request(_request: Request, error: ValueError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(error)})
+
+
+def _api_app(application):
+    operations: dict[str, Any] = {}
+    create_mcp(application, operations=operations)
+    server = FastAPI()
+    server.exception_handler(ValueError)(_invalid_request)
+    _api_routes(server, application, operations)
+    return server
+
+
+def _api_routes(server, application, operations):
+    server.get("/api/modules")(operations["modules"])
+    server.get("/api/entity")(operations["inspect"])
+    server.get("/api/reviews")(operations["reviews"])
+    server.get("/api/workflows")(operations["workflow_status"])
+    server.get("/api/evidence")(operations["trial_evidence"])
+    server.post("/api/workflows/{run_id}/resume")(operations["workflow_resume"])
+
+    @server.get("/api/workflows/config")
+    def workflow_config() -> dict:
+        return application.workflow_configure()
+
+    @server.get("/api/status")
+    def status() -> dict:
+        result = operations["status"]()
+        if isinstance(getattr(application, "root", None), Path) and hasattr(application, "store"):
+            result["developer_tools"] = development_assets(application.root) is not None
+        return result
+
+    server.post("/api/scan")(operations["scan"])
+    server.get("/api/record", name="record_status")(operations["portable_status"])
+    server.post("/api/record/export")(operations["export_record"])
+    server.post("/api/record/import")(operations["import_record"])
+    server.post("/api/evidence/export")(operations["export_evidence"])
+
+    _body_routes(server, operations)
+
+    _scan_routes(server, application)
+
+
+def _repository_routes(server, application, roots, paths, state):
+    if isinstance(getattr(application, "root", None), Path):
+        registry = Repositories(application, roots=roots, paths=paths, state=state)
+        server.state.repositories = registry
+        server.add_middleware(RepositorySelection, registry=registry, factory=_api_app)
+
+        @server.get("/api/repositories")
+        def connected_repositories() -> dict:
+            return registry.catalog()
+
+        @server.post("/api/repositories")
+        def connect_repository(body: RepositoryInput) -> dict:
+            try:
+                identity = registry.add(body.path)
+            except OSError as error:
+                raise HTTPException(400, str(error)) from error
+            return registry.catalog() | {"selected_repository_id": identity}
+
+        @server.get("/api/repositories/{repository_id}/development/{asset}")
+        def developer_asset(repository_id: str, asset: str) -> FileResponse:
+            directory = development_assets(registry.root(repository_id))
+            if directory is None or asset not in {"evals.html", "evals.js", "evals.css"}:
+                raise HTTPException(404, "Developer tools are unavailable for this repository")
+            return FileResponse(directory / asset)
+
+
 def create_app(
-    application: Any, *, allowed_origins: list[str] | None = None, auth_token: str | None = None
+    application: Any,
+    *,
+    allowed_origins: list[str] | None = None,
+    auth_token: str | None = None,
+    repository_roots: list[Path] | None = None,
+    repositories: list[Path] | None = None,
+    repository_state: Path | None = None,
 ) -> FastAPI:
     origins = {_origin(value) for value in allowed_origins or []}
     if auth_token is not None and len(auth_token) < 32:
@@ -219,78 +300,22 @@ def create_app(
             yield
 
     server = FastAPI(
-        title="AnaxiGraph V2",
+        title="AnaxiGraph",
         description="One shared map for humans and coding agents",
         lifespan=lifespan,
     )
+    _repository_routes(server, application, repository_roots, repositories, repository_state)
     server.add_middleware(_HTTPGuard, origins=origins, token=auth_token)
     assets = Path(__file__).parent / "assets"
     server.mount("/assets", StaticFiles(directory=assets), name="assets")
 
-    @server.exception_handler(ValueError)
-    async def invalid_request(_request: Request, error: ValueError) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": str(error)})
+    server.exception_handler(ValueError)(_invalid_request)
 
     @server.get("/", include_in_schema=False)
     def dashboard() -> FileResponse:
         return FileResponse(assets / "index.html")
 
-    @server.get("/api/modules")
-    def modules(
-        sort: str = "path",
-        descending: bool = False,
-        limit: int = Query(default=50, ge=1, le=100),
-        offset: int = Query(default=0, ge=0),
-    ) -> dict:
-        return application.modules(sort, descending, limit, offset)
-
-    @server.get("/api/entity")
-    def entity(
-        entity_id: str,
-        limit: int = Query(default=30, ge=1, le=100),
-        offset: int = Query(default=0, ge=0),
-        full: bool = False,
-    ) -> dict:
-        return operations["inspect"](entity_id, limit, offset, full)
-
-    @server.get("/api/reviews")
-    def reviews(
-        kind: str | None = None,
-        limit: int = Query(default=12, ge=1, le=100),
-        offset: int = Query(default=0, ge=0),
-    ) -> dict:
-        return application.reviews(kind, limit, offset)
-
-    @server.get("/api/workflows")
-    def workflows(
-        run_id: str | None = None,
-        batch_offset: int = Query(default=0, ge=0, le=100_000),
-        batch_limit: int = Query(default=10, ge=1, le=50),
-    ) -> dict:
-        return application.workflow_status(run_id, batch_offset, batch_limit)
-
-    @server.get("/api/workflows/config")
-    def workflow_config() -> dict:
-        return application.workflow_configure()
-
-    @server.post("/api/workflows/{run_id}/resume")
-    def workflow_resume(run_id: str) -> dict:
-        return application.workflow_resume(run_id)
-
-    @server.get("/api/evidence")
-    def trial_evidence(
-        limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)
-    ) -> dict:
-        return application.trial_evidence(limit, offset)
-
-    server.get("/api/status")(operations["status"])
-    server.post("/api/scan")(operations["scan"])
-    server.get("/api/record", name="record_status")(operations["portable_status"])
-    server.post("/api/record/export")(operations["export_record"])
-    server.post("/api/record/import")(operations["import_record"])
-    server.post("/api/evidence/export")(operations["export_evidence"])
-
-    _body_routes(server, operations)
+    _api_routes(server, application, operations)
 
     # Existing REST/assets routes win; the transport handles /mcp unchanged.
     server.mount("/", transport)

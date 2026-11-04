@@ -51,6 +51,37 @@ const AnaxiGraphEvals = (() => {
     return numeric(value) ? `${Number(value.toFixed(3)).toLocaleString()}${suffix}` : "Unknown";
   }
   function bind() {
+    let request = null;
+    async function requestAnalysis(kind) {
+      const scope = lines($("#analysis-scope").value);
+      const packet = await api("/api/analysis/request", { kind, scope: scope.length ? scope : null });
+      request = packet;
+      $("#analysis-title").textContent = { annotate: "Module annotation", patterns: "Exhaustive pattern task", architecture: "Component boundary scout", delivery: "CI/CD pipeline review", "fresh-eyes": "Blind Fresh Eyes design" }[kind];
+      $("#analysis-state").textContent = "Awaiting agent result";
+      $("#analysis-packet").textContent = formatJSON(packet);
+      $("#blind-note").hidden = kind !== "fresh-eyes";
+      $("#submit-analysis").disabled = false;
+      $("#copy-task").disabled = false;
+      $("#analysis-result").value = "";
+      switchPage("evals");
+      notice(kind === "patterns"
+        ? "Exhaustive task prepared: every catalogue pattern needs detailed evaluation. Run pattern analysis uses fast screening by default."
+        : "Task prepared. Give its packet and response schema to your agent.");
+    }
+
+    document.querySelectorAll("[data-kind]").forEach((button) => button.addEventListener("click", () => action(button, () => requestAnalysis(button.dataset.kind))));
+    $("#copy-task").addEventListener("click", () => action($("#copy-task"), async () => {
+      await navigator.clipboard.writeText(formatJSON(request));
+      notice("Task copied.");
+    }));
+    $("#submit-analysis").addEventListener("click", () => action($("#submit-analysis"), async () => {
+      if (!request) throw new Error("Prepare a task first.");
+      const result = JSON.parse($("#analysis-result").value);
+      await api("/api/analysis/submit", { request_id: request.request_id, result });
+      $("#analysis-state").textContent = "Validated and saved";
+      await Promise.all([refresh(), refreshReviews()]);
+      notice("Agent result validated and saved for its requested snapshot.");
+    }));
     let loading = false, importGeneration = 0, events = [], next = 0, report = null;
     const node = (tag, text, className) => textElement(tag, text, className);
     const evidence = (value) => { $("#eval-inspection").textContent = formatJSON(value); };
