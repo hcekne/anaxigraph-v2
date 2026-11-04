@@ -1134,7 +1134,11 @@ def main() -> None:
         default="codex",
         help="codex, noop, copy:<dir> or ref:<git repo with step-NN tags> (harness tests)",
     )
-    parser.add_argument("--agent-timeout", type=float, default=5400)
+    parser.add_argument(
+        "--agent-timeout",
+        type=float,
+        help="Seconds per coding session; defaults to the track's limit (Switchboard 5400)",
+    )
     parser.add_argument("--runtime", type=Path, default=DEFAULT_RUNTIME)
     parser.add_argument("--workflow-config", type=Path)
     parser.add_argument(
@@ -1196,6 +1200,7 @@ def main() -> None:
         parser.error("--state is required for benchmark execution")
     config.state = config.state.resolve()
     configure_track(track)
+    config.agent_timeout = float(config.agent_timeout or scenarios.layout(track)["agent_timeout"])
     config.scenario = scenarios.requirements(track)
     config.scenario_identity = scenarios.identity(track)
     config.steps = config.steps or f"{config.scenario['steps'][0]}-{config.scenario['steps'][-1]}"

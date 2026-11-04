@@ -311,3 +311,14 @@ def test_reference_agent_checks_out_the_tagged_step_and_keeps_requests(tmp_path)
     assert (repo / "app.py").read_text() == "step = 3\n"
     assert not (repo / "stale.py").exists() and (repo / "docs" / "requests" / "03.md").exists()
     assert runner.checkout_reference(source, "repair-1", repo, 0.0)["status"] == "noop"
+
+
+def test_agent_timeout_defaults_to_the_track_limit():
+    limits = {
+        track: scenarios.layout(scenarios.describe(track))["agent_timeout"]
+        for track in scenarios.TRACK_IDS
+    }
+    assert limits["switchboard"] == 5400
+    for track in scenarios.TRACK_IDS[1:]:
+        if scenarios.describe(track)["status"] == "executable":
+            assert limits[track] == 7200

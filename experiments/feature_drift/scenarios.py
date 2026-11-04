@@ -195,7 +195,10 @@ def requirements(track: dict) -> dict:
 def layout(track: dict) -> dict:
     """Runtime inputs: where the seed, requests and checks live, and how prompts name it."""
     base = root(track["id"])
+    meta = base / "track.json"
+    limit = json.loads(meta.read_text()).get("agent_timeout", 5400) if meta.is_file() else 5400
     return {
+        "agent_timeout": limit,
         "seed": base / "seed",
         "hidden": base / "hidden",
         "requests": sorted((base / "requests").glob("*.md")),

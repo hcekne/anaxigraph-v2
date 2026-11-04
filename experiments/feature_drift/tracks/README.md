@@ -38,6 +38,31 @@ uv run python experiments/feature_drift/runner.py --track aetherloom --state <ne
 Exports contain the specification and its digest, not arm results. Use a new state
 directory whenever frozen scenario, oracle, runtime or harness inputs change.
 
+## Running a paid campaign
+
+Earlier Switchboard campaigns used the runner defaults: Codex CLI, model `gpt-6.1-sol`,
+reasoning effort `high`, three arms at concurrency 3, and scheduled AnaxiGraph
+Patterns reviews at steps 6, 11 and 16. Only `--state`, `--arms`, `--replicates`
+and `--concurrency` were passed. Runs since the CI safety gate also use its default
+of 2 repair attempts. Keep those defaults for comparability. The agent
+timeout defaults to the track's limit: 90 minutes for Switchboard, 2 hours for
+the new tracks, whose requests are about twice as long.
+
+```bash
+# from the repository root, with `codex` logged in and `uv sync` done
+.venv/bin/python experiments/feature_drift/runner.py --track chronoweave \
+  --state <new state dir> --arms bare,charter,anaxigraph --replicates 3 --concurrency 3 \
+  > <state dir>.log 2>&1
+.venv/bin/python experiments/feature_drift/report.py --state <state dir>
+```
+
+- Use a new state directory outside the repository. Rerunning the same command
+  resumes unfinished chains; changed inputs are refused rather than mixed.
+- Do not edit or pull this checkout while a run is going: the anaxigraph arm uses
+  its editable install as the runtime.
+- The decision rule needs three matched replicates per arm; one replicate is a pilot.
+- Do not commit raw run results; report the summary table and verdict.
+
 ## Qualification without models
 
 `--agent ref:<git repo>` replays a reference implementation tagged `step-00`…`step-20`

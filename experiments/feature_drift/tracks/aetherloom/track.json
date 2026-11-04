@@ -37,5 +37,6 @@
     "Request 20 (P3): 'mid-tick' injection is made deterministic with a scheduled-faults API keyed by (tick, sub_tick) whose effects still apply at the next tick boundary; the cross-cutting change is that quarantining a bridged transducer now flushes its residuals into its cells (request 11 had kept them forever); an operator quarantine endpoint is added.",
     "No network and no new dependencies: AetherLoom needs no fake external services (the seed README defines only AETHERLOOM_DATA_DIR); the dependency set equals Switchboard's seed (fastapi, uvicorn, httpx; dev pytest, pytest-cov, ruff) with the same locked versions.",
     "Inline probe requests 7, 14 and 20 drop the draft's 'Fault Probe Pn:' title prefix and 'PROBE Pn:' prompt prefix so agents are not told which requests are measured; the rest of each title and prompt is verbatim."
-  ]
+  ],
+  "agent_timeout": 7200
 }

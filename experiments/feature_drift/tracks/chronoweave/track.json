@@ -35,5 +35,6 @@
     "Request 20 (P3): a diamond is explicitly valid; the injected invalid cycle is an assertion listing its own id as a parent (previously 422 unknown_parent, now 422 causal_cycle) and any parent cycle inside an imported or verified bundle (422 causal_cycle, checked right after the digest). A lineage endpoint was added so that silent loss of compacted lineage is observable; the diamond/compaction/retraction race is exercised end to end (taint once per retraction, one grant.invalidated per grant, quarantine of the late branch, compaction summaries and seal verification untouched).",
     "Hidden tests are black-box: HTTP against the service launched from the candidate's run.json with a fresh CHRONOWEAVE_DATA_DIR per app fixture, plus subprocess stdio/CLI for request 19; DRIFT_STEP only selects the P1/P2/P3 era expectations.",
     "Inline probe requests 7, 14 and 20 drop the draft's 'Fault Probe Pn:' title prefix and 'PROBE Pn:' prompt prefix so agents are not told which requests are measured; the rest of each title and prompt is verbatim."
-  ]
+  ],
+  "agent_timeout": 7200
 }
