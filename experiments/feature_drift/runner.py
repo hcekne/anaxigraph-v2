@@ -49,6 +49,7 @@ SCENARIO = HERE / "scenario"
 SEED, HIDDEN = SCENARIO / "seed", SCENARIO / "hidden"
 REQUESTS = sorted((SCENARIO / "requests").glob("*.md"))
 PROBES = sorted((SCENARIO / "probes").glob("*.md"))
+PRODUCT, CI_FROM = "Switchboard", 6
 CHARTER = (HERE / "charter.md").read_text()
 DEFAULT_RUNTIME = HERE.parent.parent / ".venv" / "bin" / "anaxigraph"
 
@@ -62,7 +63,7 @@ DISABLED_FEATURES = ("memories", "apps", "plugins", "hooks", "multi_agent", "dae
 EXCLUDE = [".venv/", "__pycache__/", ".pytest_cache/", ".coverage", "data/", ".anaxigraph-v2/",
            "anaxigraph/record.json", "anaxigraph/config.json", ".ruff_cache/", ".uv-cache/", "pytest-of-*/"]  # fmt: skip
 
-BASE_PROMPT = """You are the engineer maintaining this repository (Switchboard). A new product
+BASE_PROMPT = """You are the engineer maintaining this repository ({product}). A new product
 request has arrived. It is saved at `{path}`; earlier requests are in `docs/requests/`.
 
 {request}
@@ -135,7 +136,7 @@ def commit(repo: Path, message: str) -> str:
 
 
 def prompt_for(arm: dict, request: Path, saved_as: str) -> str:
-    text = BASE_PROMPT.format(path=saved_as, request=request.read_text().strip())
+    text = BASE_PROMPT.format(product=PRODUCT, path=saved_as, request=request.read_text().strip())
     if arm["charter"]:
         text += "\n\n" + CHARTER.strip()
     if arm["anaxigraph"]:
@@ -219,6 +220,8 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
     started = time.monotonic()
     if config.agent == "noop":
         return {"status": "noop", "seconds": 0.0}
+    if config.agent.startswith("ref:"):
+        return checkout_reference(Path(config.agent[4:]), log.stem, repo, started)
     if config.agent.startswith("copy:"):
         source = Path(config.agent[5:])
         for path in source.rglob("*"):
@@ -253,6 +256,30 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
         "contaminated": "feature_drift" in raw or "scenario/hidden" in raw,
         **summarize_events(raw),
     }
+
+
+def checkout_reference(source: Path, label: str, repo: Path, started: float) -> dict:
+    """Replace the candidate tree with a reference repository's `step-NN` tag (harness tests)."""
+    if not label.startswith("step-"):
+        return {"status": "noop", "seconds": 0.0}
+    keep = {".git", ".venv", "docs"}
+    for path in repo.iterdir():
+        if path.name not in keep:
+            shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink()
+    tar = subprocess.run(
+        ["git", "-C", str(source), "archive", label], capture_output=True, check=True
+    ).stdout
+    subprocess.run(["tar", "-x", "-C", str(repo)], input=tar, check=True)
+    return {"status": "reference", "seconds": round(time.monotonic() - started, 1)}
+
+
+def configure_track(track: dict) -> None:
+    """Point the module-level scenario inputs at the selected executable track."""
+    global SEED, HIDDEN, REQUESTS, PROBES, PRODUCT, CI_FROM
+    paths = scenarios.layout(track)
+    SEED, HIDDEN = paths["seed"], paths["hidden"]
+    REQUESTS, PROBES = paths["requests"], paths["probes"]
+    PRODUCT, CI_FROM = paths["product"], paths["ci_from_step"]
 
 
 # -- AnaxiGraph refresh -----------------------------------------------------------------------
@@ -371,7 +398,7 @@ def evaluate(config, chain: Path, repo: Path, step: int, base: str, head: str) -
         "static": metrics.static_metrics(repo),
         "diff": metrics.diff_stats(repo, base, head),
     }
-    if step >= 6 and (step - 6) % config.ci_every == 0 or step == config.last_step:
+    if step >= CI_FROM and (step - CI_FROM) % config.ci_every == 0 or step == config.last_step:
         row["ci"] = metrics.ci_quality(repo, seed=step, mutants=config.mutants)
         write_json(out / "ci.json", row["ci"])
         row["ci"] = {k: v for k, v in row["ci"].items() if k != "per_file"}
@@ -798,7 +825,7 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
         head = commit(repo, f"Step {step}: {request.stem}")
         row["commit"] = head
         row["base_commit"] = base
-        if step >= 6:
+        if step >= CI_FROM:
             row.update(
                 repair_ci(
                     config,
@@ -1103,7 +1130,9 @@ def main() -> None:
     parser.add_argument("--model", default="gpt-6.1-sol")
     parser.add_argument("--effort", default="high")
     parser.add_argument(
-        "--agent", default="codex", help="codex, noop or copy:<dir> (harness tests)"
+        "--agent",
+        default="codex",
+        help="codex, noop, copy:<dir> or ref:<git repo with step-NN tags> (harness tests)",
     )
     parser.add_argument("--agent-timeout", type=float, default=5400)
     parser.add_argument("--runtime", type=Path, default=DEFAULT_RUNTIME)
@@ -1124,7 +1153,7 @@ def main() -> None:
         "--ci-every",
         type=int,
         default=1,
-        help="Legacy measurement cadence; required safety verification runs every request from step 6",
+        help="Legacy measurement cadence; required safety verification runs every request from the track's CI request",
     )
     parser.add_argument(
         "--ci-repair-attempts",
@@ -1166,6 +1195,7 @@ def main() -> None:
     if config.state is None:
         parser.error("--state is required for benchmark execution")
     config.state = config.state.resolve()
+    configure_track(track)
     config.scenario = scenarios.requirements(track)
     config.scenario_identity = scenarios.identity(track)
     config.steps = config.steps or f"{config.scenario['steps'][0]}-{config.scenario['steps'][-1]}"

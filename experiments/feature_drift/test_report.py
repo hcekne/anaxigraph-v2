@@ -264,7 +264,7 @@ def test_missing_retry_usage_does_not_become_a_zero_token_or_time_total():
 
 
 def test_specification_only_tracks_never_qualify_even_with_fabricated_passing_rows():
-    scenario = report.scenarios.requirements(report.scenarios.describe("chronoweave"))
+    scenario = report.scenarios.requirements(report.scenarios.draft("chronoweave"))
     rows, _ = records()
     initial = copy.deepcopy(rows[0])
     initial.update(step=0, hidden=hidden(["step_00"]))

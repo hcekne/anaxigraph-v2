@@ -1,7 +1,8 @@
 """Frozen task specifications; a proposed track is not an executed benchmark.
 
-Only Switchboard currently has a seed, public behavior contracts and cumulative
-external acceptance checks. The two imported proposals deliberately remain drafts.
+Switchboard lives in `scenario/`. An imported track becomes executable only when
+`tracks/<id>/` holds its seed, all 21 public requests and a hidden acceptance file per
+request; until then it remains the draft specification in `tracks/<id>.json`.
 """
 
 from __future__ import annotations
@@ -12,6 +13,23 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TRACK_IDS = ("switchboard", "chronoweave", "aetherloom")
+COMPARISON_RULES = {track: f"{track}-v1" for track in TRACK_IDS}
+
+
+def root(track_id: str) -> Path:
+    """Directory holding the track's seed, requests and hidden acceptance checks."""
+    return HERE / "scenario" if track_id == "switchboard" else HERE / "tracks" / track_id
+
+
+def _complete(track_id: str) -> bool:
+    base = root(track_id)
+    requests = sorted((base / "requests").glob("*.md"))
+    return (
+        (base / "track.json").is_file()
+        and (base / "seed" / "run.json").is_file()
+        and [int(path.name[:2]) for path in requests] == list(range(21))
+        and all((base / "hidden" / f"step_{n:02d}.py").is_file() for n in range(21))
+    )
 
 
 def digest(value) -> str:
@@ -85,17 +103,52 @@ def validate_specification(value: dict) -> dict:
     return value
 
 
+def draft(track_id: str) -> dict:
+    """The imported prose specification, kept as the origin of an executable track."""
+    value = validate_specification(json.loads((HERE / "tracks" / f"{track_id}.json").read_text()))
+    if value["id"] != track_id:
+        raise ValueError("Track file identity does not match the requested track")
+    return value
+
+
+def _executable(track_id: str) -> dict:
+    base = root(track_id)
+    meta = json.loads((base / "track.json").read_text())
+    probes = {int(step): name for step, name in meta["inline_probes"].items()}
+    if meta.get("id") != track_id or probes != {7: "P1", 14: "P2", 20: "P3"}:
+        raise ValueError("Executable track metadata must keep its identity and P1/P2/P3 at 7/14/20")
+    steps = []
+    for path in sorted((base / "requests").glob("*.md")):
+        number = int(path.name[:2])
+        step = {"number": number, "title": path.stem, "prompt": path.read_text(),
+                "acceptance_file": f"step_{number:02d}.py"}  # fmt: skip
+        if number in probes:
+            step["probe_id"] = probes[number]
+        steps.append(step)
+    return {
+        "schema_version": 1,
+        "id": track_id,
+        "version": meta["version"],
+        "name": meta["name"],
+        "product": meta["product"],
+        "status": "executable",
+        "evidence_kind": "scenario_definition",
+        "readiness_note": "Executable external acceptance checks exist; adapted from the draft "
+        "specification as listed in adaptations. This catalog is not a run result.",
+        "ci_from_step": meta["ci_from_step"],
+        "adaptations": meta.get("adaptations", []),
+        "draft_sha256": digest(draft(track_id)),
+        "steps": steps,
+        "post_history_probes": [],
+    }
+
+
 def describe(track_id: str = "switchboard") -> dict:
     if track_id not in TRACK_IDS:
         raise ValueError(f"Unknown track: {track_id}")
     if track_id != "switchboard":
-        value = validate_specification(
-            json.loads((HERE / "tracks" / f"{track_id}.json").read_text())
-        )
-        if value["id"] != track_id:
-            raise ValueError("Track file identity does not match the requested track")
-        return value
-    root = HERE / "scenario"
+        return _executable(track_id) if _complete(track_id) else draft(track_id)
+    base = root(track_id)
     return {
         "schema_version": 1,
         "id": track_id,
@@ -111,11 +164,11 @@ def describe(track_id: str = "switchboard") -> dict:
                 "prompt": path.read_text(),
                 "acceptance_file": f"step_{int(path.name[:2]):02d}.py",
             }
-            for path in sorted((root / "requests").glob("*.md"))
+            for path in sorted((base / "requests").glob("*.md"))
         ],
         "post_history_probes": [
             {"id": path.stem, "prompt": path.read_text(), "acceptance_file": f"probe_{n}.py"}
-            for n, path in enumerate(sorted((root / "probes").glob("*.md")), 1)
+            for n, path in enumerate(sorted((base / "probes").glob("*.md")), 1)
         ],
     }
 
@@ -133,7 +186,22 @@ def requirements(track: dict) -> dict:
             if "probe_id" in step
         ],
         "post_history_probes": [probe["id"] for probe in track["post_history_probes"]],
-        "comparison_rule": "switchboard-v1" if track["id"] == "switchboard" else None,
+        "comparison_rule": COMPARISON_RULES[track["id"]]
+        if track["status"] == "executable"
+        else None,
+    }
+
+
+def layout(track: dict) -> dict:
+    """Runtime inputs: where the seed, requests and checks live, and how prompts name it."""
+    base = root(track["id"])
+    return {
+        "seed": base / "seed",
+        "hidden": base / "hidden",
+        "requests": sorted((base / "requests").glob("*.md")),
+        "probes": sorted((base / "probes").glob("*.md")),
+        "product": track.get("product", track["name"]),
+        "ci_from_step": track.get("ci_from_step", 6),
     }
 
 
@@ -153,12 +221,13 @@ def file_hashes(root: Path) -> dict:
 def identity(track: dict) -> dict:
     seed, oracle = {}, None
     if track["status"] == "executable":
-        root = HERE / "scenario"
-        seed = file_hashes(root / "seed")
+        base = root(track["id"])
+        seed = file_hashes(base / "seed")
+        hub = base / "hub.py"
         oracle = digest(
             {
-                "hidden": file_hashes(root / "hidden"),
-                "hub": hashlib.sha256((root / "hub.py").read_bytes()).hexdigest(),
+                "hidden": file_hashes(base / "hidden"),
+                "hub": hashlib.sha256(hub.read_bytes()).hexdigest() if hub.exists() else None,
             }
         )
     return {

@@ -160,6 +160,7 @@ def chain_summary(chain: Path) -> dict:
         steps.append(
             {
                 "step": row["step"],
+                "probe_id": row.get("probe_id"),
                 "new_pass": f"{new['passed']}/{new['total']}",
                 "new_rate": new["passed"] / new["total"] if new["total"] else None,
                 "cumulative_rate": sum(v["passed"] for v in hidden.values())
@@ -273,6 +274,20 @@ def arm_summary(chains: list[dict]) -> dict:
     final = [c["steps"][-1] for c in chains if c["steps"]]
     late = [s for c in chains for s in c["steps"] if s["step"] >= 9]
     probes = [p for c in chains for p in c["probes"]]
+    # Tracks with inline probes measure them on the probe requests themselves.
+    probes = probes or [
+        {
+            "pass": int(s["new_pass"].partition("/")[0]),
+            "total": int(s["new_pass"].partition("/")[2]),
+            "regression_rate": None,
+            "existing_prod_files_edited": s["existing_prod_files_edited"],
+            "ci_selected_fraction": s["ci_selected_fraction"],
+            "agent_seconds": s["agent_seconds"],
+        }
+        for c in chains
+        for s in c["steps"]
+        if s.get("probe_id")
+    ]
     mutant_counts = [
         s["mutants_missed_by_selection"] for c in chains for s in c["steps"] if s.get("ci_measured")
     ]
@@ -354,7 +369,7 @@ def decide(arms: dict, treatment: str = "anaxigraph", control: str = "charter") 
     identities = t.get("scenario_identities", []) + c.get("scenario_identities", [])
     if (
         scenario.get("status") != "executable"
-        or scenario.get("comparison_rule") != "switchboard-v1"
+        or scenario.get("comparison_rule") not in scenarios.COMPARISON_RULES.values()
         or any(value != scenario for value in definitions)
         or identities
         and any(value != identities[0] for value in identities)

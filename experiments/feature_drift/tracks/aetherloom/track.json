@@ -1,0 +1,41 @@
+{
+  "id": "aetherloom",
+  "name": "AetherLoom",
+  "version": 1,
+  "product": "AetherLoom",
+  "ci_from_step": 5,
+  "inline_probes": {
+    "7": "P1",
+    "14": "P2",
+    "20": "P3"
+  },
+  "adaptations": [
+    "All requests keep the original title and prompt verbatim (request 5's prompt excepted, see below) and add a 'What I need' public contract; architectural-pressure notes are not shown to agents and no internal structure or file name is prescribed.",
+    "Physics is deliberately simple and fully specified: one linear diffusion rule (coefficient 0 < k <= 1/6) on an axial hex grid of radius 0-32 with a fixed neighbour order and canonical cell order, and an exact IEEE-754 operation order so results can be required bit-identical.",
+    "'Conserved to 1e-12' is made checkable as a relative bound: an audit endpoint reports drift = (cells + sinks [+ residuals]) - expected_total, where expected_total is an explicit ledger of external inputs (cell sets, applied frame deltas); ok means |drift| <= 1e-12 * max(1, |expected_total|).",
+    "Transducer delta frames are zero-sum transfers between the transducer's own cells (|sum| <= 1e-12); a frame that is not is 'conservation-violating' (request 0), which gives request 9 its trigger.",
+    "Request 0 delivers 'framed telemetry packets' as JSON delta frames; binary wire frames arrive in request 2. Conservation at sub-tick resolution is delivered by request 1's micro-phases and audit.",
+    "Request 1: micro-phases are sub_ticks 0-3 (emit, propagate, arbitrate, commit); stepping by sub-ticks is exposed; editing cells mid-tick is refused (409 mid_tick) to keep the phase semantics unambiguous.",
+    "Request 2: wire envelope (magic, dialect id, version, seq, length, payload, CRC) is defined; CRC variant is CRC-16/CCITT-FALSE (check value 0x29B1 for '123456789'); receive window size 8; receipts expose delivered seqs and selective NACKs.",
+    "Request 3: capability bits are defined (1 DELTA_FRAMES required, 2 SELECTIVE_NACK which gates NACK reporting) so the bitmask has observable effect; the JSON dialect gains versions 1.0, 1.1 and 2.0 so negotiation has something to choose.",
+    "Request 4: '.loom rules' are one arithmetic expression evaluated per cell in Arbitrate to a gate in [0, 1] that scales flows; static fuel and stack depth are defined on the expression tree (independent of any bytecode format, which is not mandated); runtime fuel exhaustion fails closed (gate 0).",
+    "Request 5: the original 'anaxigraph/ci-policy.json' is replaced by Switchboard request 6's ci.json selector contract (stdin changed paths -> pytest targets or ALL; safe, cheap, docs-only -> nothing, pyproject.toml/uv.lock/ci.json -> ALL, < 10 s, targets exist). The prompt line is reworded to name ci.json so the bare arm is never told about AnaxiGraph.",
+    "Request 6: CBOR-lite is a defined RFC 8949 subset (array of [int, int, float64]); all four payload formats are byte-exact; encode/decode endpoints are added so codecs are observable without a device.",
+    "Request 7 (P1): 'invert radial flux vectors on odd sub-ticks' is defined as reflecting each outward boundary flow onto the opposite neighbour (direction d+3), computed in Propagate (sub-tick 1) and applied in Commit (sub-tick 3). The default boundary switches to reflective; absorbing stays selectable with a new 'boundary' field. Era rule: hidden checks for requests 0-6 that depend on the boundary expect the reflective default when DRIFT_STEP >= 7.",
+    "Request 8: planes have their own k; the cross-plane matrix moves C[i][j] * v_i per tick within a cell with a specified accumulation order; frames and policy variables keep working on the first plane.",
+    "Request 9: 'within 50 ticks' means three violations with ticks in (t-50, t]; quarantine takes effect at the next Emit (tick boundary); queued frames are dead-lettered; cells are rerouted to the owner of the first owned neighbour in direction order (deterministic tie-breaking).",
+    "Request 10: persistence of all field state across restarts is introduced here (needed later by the out-of-process control plane). Restore = latest checkpoint <= target, then deterministic replay with no new inputs; checkpoints include queue, windows, agreements and quarantine state. Checkpoint format is left to the implementer; compatibility is judged through restart survival, not a cross-version import format.",
+    "Request 11: the bridge is per-transducer quantization to an 8/16-bit register with step size, round-half-even, and an error-feedback compensation accumulator per cell; residual_total joins the conservation audit.",
+    "Request 12: staged policies are statically verified (fuel and stack) and activate at the next Emit; direct PUT/DELETE of the policy mid-tick now answers 409 mid_tick (request 4 checks never install mid-tick, so no era rule is needed). Boundary order is specified: policy, then quarantine, then frames.",
+    "Request 13: the six auditors get simple, fully specified per-plane definitions (mass, first moments, net charge, Shannon entropy cap, per-cell quota, sink limit) rather than domain physics; values are judged with 1e-9 relative tolerance, ok flags exactly.",
+    "Request 14 (P2): getattr/metaclass dispatch is architectural framing only; the contract is runtime alias registration (chains, re-pointing with cycle detection, deletion guard, persistence) plus a minor-version fallback chain M.n -> M.(n-1) ... M.0 for wire headers and codec endpoints. Era rule: request 3's check of an unknown minor version (1.7) expects dialect_mismatch before step 14 and delivery from step 14.",
+    "Request 15: '16x16 sectors' are axial floor-division blocks (sector_size, default 16); 'step in parallel' is exposed as workers and sector_order step parameters that must not change a single bit; halo counts and per-sector exchange accounting make halo double counting observable.",
+    "Request 16: telemetry consumers are pull-based over HTTP (read + ack) instead of an external service; a window is 8 frames; 'non-commutative arbitration events' are boundary events (policy activation, quarantine) which are never coalesced.",
+    "Request 17: fragment formats for the four links are defined (LoRaBurst, AcousticModem, OpticalLink custom headers; CANBus ISO-TP style) with MTUs 51, 32, 255 and 8; reassembled frames go through normal wire processing.",
+    "Request 18: Ed25519 is replaced by HMAC-SHA256 (stdlib) with per-transducer keys supplied via the API; replay protection is a 64-counter window whose watermark is excluded from checkpoints, so restores never re-open replays.",
+    "Request 19: MCP is newline-delimited JSON-RPC 2.0 over stdio (initialize, tools/list, tools/call) via 'python -m aetherloom mcp'; the CLI is 'python -m aetherloom cli <op>'; both share state with the HTTP service through AETHERLOOM_DATA_DIR, one process at a time, and must return the same documents as HTTP.",
+    "Request 20 (P3): 'mid-tick' injection is made deterministic with a scheduled-faults API keyed by (tick, sub_tick) whose effects still apply at the next tick boundary; the cross-cutting change is that quarantining a bridged transducer now flushes its residuals into its cells (request 11 had kept them forever); an operator quarantine endpoint is added.",
+    "No network and no new dependencies: AetherLoom needs no fake external services (the seed README defines only AETHERLOOM_DATA_DIR); the dependency set equals Switchboard's seed (fastapi, uvicorn, httpx; dev pytest, pytest-cov, ruff) with the same locked versions.",
+    "Inline probe requests 7, 14 and 20 drop the draft's 'Fault Probe Pn:' title prefix and 'PROBE Pn:' prompt prefix so agents are not told which requests are measured; the rest of each title and prompt is verbatim."
+  ]
+}

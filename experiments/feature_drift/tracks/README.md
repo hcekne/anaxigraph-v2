@@ -8,45 +8,50 @@ independent changes applied to copies of its final code.
 
 | Track | Architectural pressure | Status |
 | --- | --- | --- |
-| Switchboard | Provider evolution, shared state, extension isolation and CI scope | Executable existing campaign |
-| ChronoWeave | Bitemporal ledgers, speculative merges, extensible verification and replay | Specification only |
-| AetherLoom | Discrete fields, protocol dialects, conserved flux and fault isolation | Specification only |
+| Switchboard | Provider evolution, shared state, extension isolation and CI scope | Executable (`scenario/`) |
+| ChronoWeave | Bitemporal ledgers, speculative merges, extensible verification and replay | Executable (`tracks/chronoweave/`) |
+| AetherLoom | Discrete fields, protocol dialects, conserved flux and fault isolation | Executable (`tracks/aetherloom/`) |
 
-Inspect and export without any model calls:
+A track folder is executable once it holds `track.json`, a `seed/` with `run.json`,
+public requests `00`–`20` and a hidden acceptance file per request; otherwise the
+JSON draft stays specification-only and execution is refused before any model or
+state. The drafts remain the origin; `track.json` lists every adaptation, including:
+
+- each request keeps its original title and prompt and adds a precise public
+  contract (endpoints, errors, tie-breaking, numeric rules) without prescribing
+  internal structure or file names;
+- no network or new dependencies: zstd becomes gzip, Ed25519 and zero-knowledge
+  proofs become HMAC/SHA-256, MCP becomes newline-delimited JSON-RPC over stdio;
+- the CI request (5) uses Switchboard's `ci.json` selector contract, so the bare
+  arm is never told about AnaxiGraph; the CI safety gate applies from step 5;
+- probe requests 7, 14 and 20 do not tell the agent that they are probes.
+
+Inspect, export or run:
 
 ```bash
 uv run python experiments/feature_drift/runner.py --list-tracks
 uv run python experiments/feature_drift/runner.py --track chronoweave --describe-track
-uv run python experiments/feature_drift/runner.py --track aetherloom --export-track /path/to/new-spec.json
+uv run python experiments/feature_drift/runner.py --track aetherloom --state <new dir> \
+  --arms bare,charter,anaxigraph --replicates 3
 ```
 
-Exports contain the specification and its digest, not arm results. Existing files
-are not overwritten. Draft execution is rejected before a model or benchmark
-starts. The existing [Switchboard protocol](../README.md) remains runnable; use a
-new state directory when frozen scenario, oracle, runtime or harness inputs change.
+Exports contain the specification and its digest, not arm results. Use a new state
+directory whenever frozen scenario, oracle, runtime or harness inputs change.
 
-## Acceptance work before a paid campaign
+## Qualification without models
 
-The imported oracle ideas need externally executable checks with explicit public
-contracts. Preserve the ideas without guessing behavior hidden from the agent:
+`--agent ref:<git repo>` replays a reference implementation tagged `step-00`…`step-20`
+through the real harness, CI safety gate included. Both references (kept outside
+this repository) complete all 21 steps with every hidden check passing, no omitted
+consumer obligation and no missed planted mutant. Deliberately broken variants of
+each probe step fail that step's hidden checks.
 
-- ChronoWeave: historical repeatability after retraction/compaction; extension
-  isolation through a declared capability surface; atomic promotion and quarantine
-  when a parent is retracted concurrently.
-- AetherLoom: conservation including sinks and quantization residuals; policy and
-  quarantine transitions at tick boundaries; extensible dialect/auditor discovery.
+## Comparison rule (fixed before any paid run on these tracks)
 
-Define wire operations, validation/errors, deterministic tie breaking, CRC variant,
-fee brackets, numerical tolerances and checkpoint compatibility. Inject AetherLoom
-faults mid-tick but apply quarantine at its documented boundary. A diamond-shaped
-DAG is not itself a causal cycle: define the actual invalid-cycle injection.
-Judge extension isolation without requiring particular internal filenames.
-
-Then implement cumulative evaluator-owned checks for steps 0–20, exercise all six
-fault probes against both valid and deliberately broken candidates, and run the
-existing no-model harness before paying for matched coding arms. Pre-register a
-comparison rule for each new track. No synthetic timing, winning assertion or
-fixed weakness diagnosis from the prototype is included.
+`chronoweave-v1` and `aetherloom-v1` apply the [Switchboard decision rule](../README.md)
+unchanged, with one substitution: the probe measures (pass count and existing files
+edited) come from the inline probe requests 7, 14 and 20 instead of post-history
+probes. At least three matched replicates per arm are required.
 
 AnaxiGraph's immediately executable [hypothesis tests](../../google_transfer/test_hypotheses.py)
 cover the relevant tool risks today, without claiming either proposed product has

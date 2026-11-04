@@ -1,0 +1,26 @@
+# Request 5 — Component-Scoped CI Check Policy for Dialect & Kernel Suites
+
+Declare component test boundaries in `ci.json` so dialect additions run only dialect + contract tests.
+
+The suite is starting to bite. In my other big repo a one-line codec change now takes an hour
+of CI because every change runs every test, including long conservation runs. I don't want
+that here, ever. Set up CI now:
+
+- A GitHub Actions workflow: on pull requests run lint plus only the tests a change can
+  affect; on pushes to `main` (and nightly) run everything.
+- A machine-readable selector our tooling can call, kept correct as the code changes.
+
+## What I need
+
+`ci.json` at the repository root: `{"select": ["<argv>", "..."]}`. Our tooling runs that command
+from the repository root with `.venv/bin/python` available and no network. It writes the
+changed paths (repository-relative, one per line) to stdin and reads pytest targets from stdout:
+one per line (test files, directories or node ids), or the single line `ALL` to run everything.
+
+- It must be **safe**: if a change could break a test, that test must be selected. Our tooling
+  will regularly plant small bugs in single files and check the selected tests catch them.
+- It should be **cheap**: select as little as safety allows. A change limited to one area
+  (say, one dialect) should not run the whole suite.
+- Changes only to Markdown files or `docs/` select nothing (empty output).
+- Changes to `pyproject.toml`, `uv.lock` or `ci.json` → `ALL`.
+- It must finish in under 10 seconds, and every target it prints must exist.

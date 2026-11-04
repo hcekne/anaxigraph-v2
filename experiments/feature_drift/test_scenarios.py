@@ -20,7 +20,7 @@ runner, scenarios = (
 
 @pytest.mark.parametrize("track_id", scenarios.TRACK_IDS[1:])
 def test_imported_specifications_keep_all_requests_and_inline_probes_without_outcomes(track_id):
-    track = scenarios.describe(track_id)
+    track = scenarios.draft(track_id)
     assert [step["number"] for step in track["steps"]] == list(range(21))
     assert [
         (step["number"], step["probe_id"]) for step in track["steps"] if "probe_id" in step
@@ -37,7 +37,7 @@ def test_imported_specifications_keep_all_requests_and_inline_probes_without_out
 
 @pytest.mark.parametrize("tamper", ["missing", "duplicate", "probe", "outcomes", "ready"])
 def test_specification_validation_rejects_missing_requests_and_fabricated_readiness(tamper):
-    track = scenarios.describe("chronoweave")
+    track = scenarios.draft("chronoweave")
     if tamper == "missing":
         track["steps"].pop()
     elif tamper == "duplicate":
@@ -139,16 +139,16 @@ def test_list_tracks_names_readiness_without_executing_them():
     assert result.returncode == 0, result.stderr
     rows = json.loads(result.stdout)
     assert [(row["id"], row["status"]) for row in rows] == [
-        ("switchboard", "executable"),
-        ("chronoweave", "specification_only"),
-        ("aetherloom", "specification_only"),
+        (track, scenarios.describe(track)["status"]) for track in scenarios.TRACK_IDS
     ]
+    assert rows[0]["status"] == "executable"
 
 
 @pytest.mark.parametrize("track_id", scenarios.TRACK_IDS[1:])
 def test_specification_only_execution_stops_before_clients_or_state_creation(
     track_id, monkeypatch, tmp_path
 ):
+    _drafts_only(monkeypatch, tmp_path / "catalog")
     monkeypatch.setattr(
         sys, "argv", ["runner", "--track", track_id, "--state", str(tmp_path / "run")]
     )
@@ -249,3 +249,65 @@ def test_resume_requires_exact_frozen_scenario_and_runtime_inputs(changed, tmp_p
     with pytest.raises(ValueError, match="incompatible frozen inputs"):
         runner.validate_resume(config, tmp_path)
     assert path.read_bytes() == before
+
+
+def _track_folder(base: Path, *, requests: int = 21) -> None:
+    base.mkdir(parents=True)
+    (base / "track.json").write_text(json.dumps({
+        "id": "chronoweave", "name": "ChronoWeave", "version": 1, "product": "ChronoWeave",
+        "ci_from_step": 5, "inline_probes": {"7": "P1", "14": "P2", "20": "P3"},
+        "adaptations": ["zstd -> gzip"],
+    }))  # fmt: skip
+    for folder in ("seed", "requests", "hidden"):
+        (base / folder).mkdir()
+    (base / "seed" / "run.json").write_text('{"command": []}')
+    for number in range(requests):
+        (base / "requests" / f"{number:02d}-request.md").write_text(f"# Request {number}")
+        (base / "hidden" / f"step_{number:02d}.py").write_text("")
+
+
+def _drafts_only(monkeypatch, base: Path) -> None:
+    """A catalog holding only the imported specifications, independent of built folders."""
+    (base / "tracks").mkdir(parents=True)
+    for name in ("chronoweave.json", "aetherloom.json"):
+        (base / "tracks" / name).write_text((scenarios.HERE / "tracks" / name).read_text())
+    monkeypatch.setattr(scenarios, "HERE", base)
+
+
+def test_complete_track_folder_becomes_executable_with_inline_probes(monkeypatch, tmp_path):
+    _drafts_only(monkeypatch, tmp_path)
+    _track_folder(tmp_path / "tracks" / "chronoweave", requests=20)
+    assert scenarios.describe("chronoweave")["status"] == "specification_only"
+    (tmp_path / "tracks" / "chronoweave" / "requests" / "20-request.md").write_text("# Request 20")
+    (tmp_path / "tracks" / "chronoweave" / "hidden" / "step_20.py").write_text("")
+    track = scenarios.describe("chronoweave")
+    required = scenarios.requirements(track)
+    assert track["status"] == "executable" and track["product"] == "ChronoWeave"
+    assert required["steps"] == list(range(21))
+    assert required["inline_probes"] == [
+        {"step": 7, "id": "P1"}, {"step": 14, "id": "P2"}, {"step": 20, "id": "P3"}
+    ]  # fmt: skip
+    assert required["post_history_probes"] == []
+    assert required["comparison_rule"] == "chronoweave-v1"
+    paths = scenarios.layout(track)
+    assert paths["ci_from_step"] == 5 and len(paths["requests"]) == 21
+    assert scenarios.identity(track)["oracle_sha256"]
+
+
+def test_reference_agent_checks_out_the_tagged_step_and_keeps_requests(tmp_path):
+    source, repo = tmp_path / "reference", tmp_path / "repo"
+    for path in (source, repo / "docs" / "requests"):
+        path.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(source)], check=True)
+    (source / "app.py").write_text("step = 3\n")
+    git = ["git", "-C", str(source), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "s3"], check=True)
+    subprocess.run([*git, "tag", "step-03"], check=True)
+    (repo / "stale.py").write_text("old")
+    (repo / "docs" / "requests" / "03.md").write_text("request")
+    result = runner.checkout_reference(source, "step-03", repo, 0.0)
+    assert result["status"] == "reference"
+    assert (repo / "app.py").read_text() == "step = 3\n"
+    assert not (repo / "stale.py").exists() and (repo / "docs" / "requests" / "03.md").exists()
+    assert runner.checkout_reference(source, "repair-1", repo, 0.0)["status"] == "noop"
