@@ -77,7 +77,8 @@ def test_checkpoint_errors(app):
     expect_error(cp(uid("ghost-")), 404, "not_found")
     expect_error(cp(gone["id"]), 409, "already_retracted")
     other = app.add(p + "o", 1, 100)
-    expect_error(cp(other["id"], at=1), 409, "clock_regression")
+    app.add(p + "later", 1, 100)  # moves the clock past other's own time; other stays visible
+    expect_error(cp(other["id"], at=other["asserted_at"]), 409, "clock_regression")
     name = app.fork()
     expect_error(cp(other["id"], branch=name), 409, "main_only")
     response = app.post("/api/branches/main/checkpoints", json={"assertion_id": a["id"]})

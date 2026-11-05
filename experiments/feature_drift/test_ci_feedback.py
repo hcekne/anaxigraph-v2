@@ -237,10 +237,19 @@ def test_partial_junit_does_not_hide_a_collection_error(monkeypatch, tmp_path):
     assert result["passed"] and result["collection_error"]
 
 
-@pytest.mark.parametrize("broken", ["partial", "probe"])
-def test_feedback_requires_every_cumulative_and_probe_acceptance_module(
-    monkeypatch, tmp_path, broken
+@pytest.mark.parametrize(
+    "broken, allowed, status",
+    [
+        ("partial", None, "failed"),
+        ("probe", None, "passed"),
+        ("probe", ["probe_2::test_probe"], "passed"),
+        ("probe", [], "failed"),
+    ],
+)
+def test_feedback_requires_every_module_and_gates_only_new_behavioral_failures(
+    monkeypatch, tmp_path, broken, allowed, status
 ):
+    """Original misses are scored, not gated; a repair may not add a hidden failure."""
     inputs, environment = {"lib.py": "frozen"}, {"python": "synthetic qualification"}
     report = {
         "version": 1,
@@ -274,15 +283,23 @@ def test_feedback_requires_every_cumulative_and_probe_acceptance_module(
         by_file = {"step_01": {"passed": 1, "total": 1}}
         if broken == "probe":
             by_file.update(step_02={"passed": 1, "total": 1}, probe_2={"passed": 0, "total": 1})
-        return {"by_file": by_file, "collection_error": False}
+        failed = ["probe_2::test_probe"] if broken == "probe" else []
+        return {"by_file": by_file, "failed": failed, "collection_error": False}
 
     monkeypatch.setattr(runner, "hidden_tests", hidden)
     files = ["step_01.py", "step_02.py", "probe_2.py"]
     config = SimpleNamespace(mutants=1, scenario={"steps": [1, 2]})
     result = runner.safety_feedback(
-        config, tmp_path, tmp_path / "checks", 2, "base", "head", acceptance_files=files
+        config,
+        tmp_path,
+        tmp_path / "checks",
+        2,
+        "base",
+        "head",
+        acceptance_files=files,
+        allowed_failures=allowed,
     )
-    assert result["gate"]["status"] == "failed"
+    assert result["gate"]["status"] == status
     assert seen == [files]
 
 

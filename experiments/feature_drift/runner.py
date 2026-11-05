@@ -511,8 +511,13 @@ def safety_feedback(
     baseline_inputs=None,
     treatment=False,
     acceptance_files=None,
+    allowed_failures=None,
 ):
-    """Collect once, publish fresh evidence, then expose the same measured gap to each arm."""
+    """Collect once, publish fresh evidence, then expose the same measured gap to each arm.
+
+    Hidden failures already present before a repair (`allowed_failures`; None means every
+    failure of the original attempt) are scored, not gated: repair agents never see the
+    hidden checks, so the gate only refuses repairs that add new behavioral failures."""
     started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
     diff = metrics.diff_stats(repo, base, head)
@@ -554,20 +559,19 @@ def safety_feedback(
             "incomplete": gate["incomplete"] + [collected["error"]],
         }
     expected_hidden = {Path(name).stem for name in files}
+    failed = set(hidden.get("failed", []))
     if (
         hidden.get("collection_error")
         or set(hidden.get("by_file", {})) != expected_hidden
-        or any(
-            not row.get("total") or row.get("passed") != row["total"]
-            for row in hidden.get("by_file", {}).values()
-        )
+        or any(not row.get("total") for row in hidden.get("by_file", {}).values())
+        or (allowed_failures is not None and failed - set(allowed_failures))
     ):
         gate = {
             **gate,
             "status": "failed",
             "failures": gate["failures"]
             + [
-                "Cumulative behavioral acceptance is incomplete or failed; preserve the public requirements"
+                "Cumulative behavioral acceptance is incomplete or regressed; preserve the public requirements"
             ],
         }
     suite = quality.get("coverage_run") or {}
@@ -655,6 +659,9 @@ def repair_ci(
             baseline_inputs=baseline_inputs,
             treatment=treatment,
             acceptance_files=acceptance_files,
+            allowed_failures=attempts[-1].get("evaluation", {}).get("hidden", {}).get("failed", [])
+            if attempts
+            else None,
         )
         inventory = set(checked.pop("test_inventory", []))
         if not retained_ids:
@@ -713,10 +720,12 @@ def repair_ci(
             }
         instruction = (
             "\n\nIndependent CI safety verification requires repair. Preserve all original requirements "
-            "and the original change baseline. Repair the selector or ownership/tests so all observed "
-            "consumer obligations are retained for single-file AND multi-file changes. Use focused "
-            "contracts when justified; unknown/shared inputs need conservative fallback. Do not delete "
-            "tests, fake receipts, edit the external evaluator, or claim safety from an empty selection. "
+            "and the original change baseline. Repair the selector so all observed consumer obligations "
+            "are retained for single-file AND multi-file changes; you may add new test files. Existing "
+            "test and conftest files are frozen: do not edit, move, rename or delete them, and every "
+            "existing test ID must still run; a repair that changes them fails verification. Use focused "
+            "contracts when justified; unknown/shared inputs need conservative fallback. Do not fake "
+            "receipts, edit the external evaluator, or claim safety from an empty selection. "
             "The coordinator will rerun independent verification on your changed source.\n"
             + json.dumps(compact, default=str)
         )
