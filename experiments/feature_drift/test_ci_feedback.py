@@ -17,7 +17,7 @@ import metrics  # noqa: E402
 import runner  # noqa: E402
 
 
-def test_empty_selection_executes_no_tests_and_execution_errors_are_not_detected_faults(
+def test_empty_selection_executes_no_tests_and_only_collection_errors_are_detected_faults(
     monkeypatch, tmp_path
 ):
     def forbidden(*args, **kwargs):
@@ -25,11 +25,11 @@ def test_empty_selection_executes_no_tests_and_execution_errors_are_not_detected
 
     monkeypatch.setattr(metrics, "run", forbidden)
     assert metrics.run_tests(tmp_path, []) == (True, 0.0)
-    for code in (2, 5, 124):
+    for code, caught in ((2, False), (3, None), (4, None), (5, None), (124, None)):
         monkeypatch.setattr(
             metrics, "run", lambda *args, **kwargs: subprocess.CompletedProcess([], code, "", "")
         )
-        assert metrics.run_tests(tmp_path, ["tests/missing.py"])[0] is None
+        assert metrics.run_tests(tmp_path, ["tests/missing.py"])[0] is caught
 
 
 def test_complete_single_file_selections_do_not_hide_multifile_omission(monkeypatch, tmp_path):
@@ -332,7 +332,8 @@ def test_real_cli_validation_sees_published_evidence_and_keeps_original_baseline
 
 
 @pytest.mark.parametrize(
-    "tamper", ["replace", "remove", "filter", "add", "selector", "data", "stale"]
+    "tamper",
+    ["replace", "remove", "filter", "add", "selector", "data", "stale", "later_stale", "reparam"],
 )
 def test_ci_only_repair_retains_verification_bytes_and_ids(monkeypatch, tmp_path, tamper):
     (tmp_path / "tests").mkdir()
@@ -342,16 +343,23 @@ def test_ci_only_repair_retains_verification_bytes_and_ids(monkeypatch, tmp_path
     (tmp_path / "tools/test_rooms.py").write_text("ROOMS = {}\n")
     (tmp_path / "tests/room.json").write_text("{}")
     original = "tests/test_existing.py::test_existing"
-    config = SimpleNamespace(ci_repair_attempts=1, agent="synthetic-transport")
+    # later_stale: the first repair changes the selection, which breaks an own test that
+    # asserted the old selection; the second repair may then correct that test file.
+    later = tamper == "later_stale"
+    config = SimpleNamespace(ci_repair_attempts=2 if later else 1, agent="synthetic-transport")
     calls = []
 
     def verify(*args, **kwargs):
         calls.append(True)
         ids = [] if tamper in {"remove", "filter"} and len(calls) > 1 else [original]
-        failing = ["tests/test_existing.py"] if tamper == "stale" else []
+        if tamper == "reparam" and len(calls) > 1:
+            ids = [f"{original}[stable-0]", f"{original}[stable-1]"]
+        failing = (
+            ["tests/test_existing.py"] if tamper == "stale" or later and len(calls) == 2 else []
+        )
         return {
             "evaluation": {"ci": {"coverage_run": {"failed_files": failing}}},
-            "gate": {"status": "failed" if len(calls) == 1 else "passed"},
+            "gate": {"status": "failed" if len(calls) < (3 if later else 2) else "passed"},
             "feedback": {},
             "verification_seconds": 1,
             "anaxigraph_seconds": 0,
@@ -359,7 +367,7 @@ def test_ci_only_repair_retains_verification_bytes_and_ids(monkeypatch, tmp_path
         }
 
     def repair(*args):
-        if tamper in {"replace", "stale"}:
+        if tamper in {"replace", "stale"} or later and len(calls) == 2:
             existing.write_text("def test_existing():\n    pass\n")
         elif tamper == "selector":
             (tmp_path / "tools/test_rooms.py").write_text("ROOMS = {'a': 1}\n")
@@ -379,7 +387,7 @@ def test_ci_only_repair_retains_verification_bytes_and_ids(monkeypatch, tmp_path
     result = runner.repair_ci(
         config, tmp_path, tmp_path / "logs", "task", {"seconds": 1}, 13, "base", "head"
     )
-    allowed = {"add", "selector", "data", "stale"}
+    allowed = {"add", "selector", "data", "stale", "later_stale", "reparam"}
     assert result["ci_gate"]["status"] == ("passed" if tamper in allowed else "failed")
 
 
@@ -515,6 +523,24 @@ def test_unstable_parametrised_ids_and_conftest_obligations_are_measured(real_ca
     omitted = quality["change_selection"]["omitted_tests"]
     assert "tests/test_consumer.py::test_consumer" in omitted
     assert quality["change_selection"]["status"] == "failed"
+    evidence = collector.quality_report(
+        root, root.parent / "evidence.json", seed=1, mutants=0, changed=["lib.py"]
+    )
+    assert evidence["error"] is None
+    assert evidence["report"]["suite"]["tests"] == len(evidence["report"]["tests"])
+
+
+def test_fault_that_breaks_collection_of_selected_ids_is_caught(real_candidate):
+    root = real_candidate
+    (root / "rooms.py").write_text("def rooms():\n    return ['a', 'b']\n")
+    (root / "tests/test_rooms.py").write_text(
+        "import pytest\nfrom rooms import rooms\n"
+        "@pytest.mark.parametrize('room', rooms())\ndef test_room(room):\n    assert room\n"
+    )
+    ids = metrics.collect(root, ["tests/test_rooms.py"])
+    assert metrics.run_tests(root, ids)[0] is True
+    (root / "rooms.py").write_text("def rooms():\n    raise ValueError('broken')\n")
+    assert metrics.run_tests(root, ids)[0] is False
 
 
 def test_failing_own_tests_are_named_with_their_module(real_candidate):

@@ -624,6 +624,12 @@ def safety_feedback(
     }
 
 
+def retained(test: str, inventory: set[str]) -> bool:
+    """An id still runs when only its parametrisation became stable or unstable."""
+    function = test.split("[", 1)[0]
+    return function in inventory or any(other.startswith(function + "[") for other in inventory)
+
+
 def repair_ci(
     config,
     repo,
@@ -665,30 +671,32 @@ def repair_ci(
             else None,
         )
         inventory = set(checked.pop("test_inventory", []))
+        # Tests failing in any attempt (for example ones asserting the old selection) may be
+        # corrected, never removed; their files leave the frozen set.
+        run = checked.get("evaluation", {}).get("ci", {}).get("coverage_run") or {}
+        failed_files = set(run.get("failed_files", []))
         if not attempts:
             # Freeze modules holding collected tests and conftest files, not selector code or
-            # data that merely sits in a test folder. Tests already failing in the original
-            # attempt may be corrected, never removed.
+            # data that merely sits in a test folder.
             modules = {test.split("::")[0] for test in inventory}
-            run = checked.get("evaluation", {}).get("ci", {}).get("coverage_run") or {}
             frozen_tests = {
                 path: fingerprint
                 for path, fingerprint in frozen_tests.items()
-                if path not in run.get("failed_files", [])
-                and (
-                    Path(path).name == "conftest.py"
-                    or path in modules
-                    or (not modules and path.endswith(".py"))
-                )
+                if Path(path).name == "conftest.py"
+                or path in modules
+                or (not modules and path.endswith(".py"))
             }
-            write_json(log / "test-obligations.json", frozen_tests)
+        frozen_tests = {p: f for p, f in frozen_tests.items() if p not in failed_files}
+        write_json(log / "test-obligations.json", frozen_tests)
         if not retained_ids:
             retained_ids = inventory
         current = collector.inventory(repo)
         changed_tests = [
             path for path, fingerprint in frozen_tests.items() if current.get(path) != fingerprint
         ]
-        missing_ids = sorted(retained_ids - inventory)
+        missing_ids = sorted(
+            test for test in retained_ids - inventory if not retained(test, inventory)
+        )
         if changed_tests or missing_ids:
             checked["gate"] = {
                 **checked["gate"],

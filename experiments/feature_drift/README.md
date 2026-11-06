@@ -195,7 +195,10 @@ The current protocol requires CI safety inside the coding loop. From the track's
 gets the same external consumer/combined-change/fault verification and up to two fresh repair
 sessions (`--ci-repair-attempts 0..3`). The treatment also runs strict AnaxiGraph validation against
 its original pre-edit baseline. Accepted work retains all original test obligations during CI-only
-repair: existing test and conftest files are frozen, which the repair prompt states. Hidden
+repair: existing test and conftest files are frozen, which the repair prompt states, except files
+whose tests failed in some attempt (for example tests asserting the old selection); those may be
+corrected but every test id must still run. A planted fault that breaks collection of the tests
+executing it counts as caught, as it would fail CI. Hidden
 acceptance misses of the original attempt are scored, not gated (repair agents never see the
 hidden checks); a repair that adds a hidden failure is refused. Failed or incomplete chains retain pending attempts and stop; a resume cannot reset the
 repair budget. Probes use the same qualification loop, including their own hidden acceptance.

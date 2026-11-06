@@ -532,9 +532,16 @@ def run_tests(repo: Path, targets: list[str], timeout: float = 900) -> tuple[boo
         return True, 0.0  # No assertions; never substitute pytest's default full suite.
     started = time.monotonic()
     args = [] if targets == ["ALL"] else targets
-    result = run(
-        [*pytest_argv(repo), "-x", "-o", "addopts=", *args], repo, timeout, candidate_env(repo)
-    )
+    command = [*pytest_argv(repo), "-x", "-o", "addopts="]
+    result = run([*command, *args], repo, timeout, candidate_env(repo))
+    if result.returncode not in (0, 1, 124) and args:
+        # A fault can change or break collection (for example tests parametrised from the
+        # selector), so the requested ids vanish. Rerun their modules: a collection error
+        # there fails CI just as a failing test does.
+        modules = list(dict.fromkeys(target.split("::", 1)[0] for target in args))
+        result = run([*command, *modules], repo, timeout, candidate_env(repo))
+        if result.returncode == 2:
+            return False, time.monotonic() - started
     return (
         result.returncode == 0 if result.returncode in (0, 1) else None
     ), time.monotonic() - started

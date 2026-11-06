@@ -267,7 +267,9 @@ def quality_report(
                 for row in quality.get("mutants", {}).get("details", [])
                 if not row.get("verification_error")
             ],
-            "suite": suite,
+            # The whole raw suite passed above; count it in the same (possibly per-function)
+            # identities as the inventory so the checker compares like with like.
+            "suite": {**suite, "tests": len(tests), "passed": len(tests)},
             "change_selection": {
                 "changed_paths": changed,
                 "selected_tests": references(
