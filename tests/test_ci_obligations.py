@@ -165,3 +165,10 @@ def test_configured_planner_never_uses_a_gap_as_authority_to_skip_consumers(tmp_
         invalid = app.ci_plan(changed_paths=["cache.py"])
         assert invalid["selection_evidence"]["status"] == "invalid"
         assert not invalid["execution_ready"]
+
+
+def test_conftest_is_test_support_not_unobserved_production_code():
+    from anaxigraph.indexing.python import is_test
+
+    assert is_test("conftest.py") and is_test("pkg/conftest.py")
+    assert not is_test("pkg/contest.py")

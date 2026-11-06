@@ -42,7 +42,7 @@ def reference_name(node: ast.AST) -> str:
 
 def is_test(path: str) -> bool:
     p = PurePosixPath(path)
-    return "tests" in p.parts or p.name.startswith("test_") or p.name.endswith("_test.py")
+    return "tests" in p.parts or any(map(p.match, ("test_*", "*_test.py", "conftest.py")))
 
 
 def _public_surface(body: list[ast.stmt], exports: set[str] | None = None) -> list[tuple]:

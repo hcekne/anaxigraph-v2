@@ -236,7 +236,7 @@ def quality_report(
             or suite.get("returncode") != 0
             or not suite.get("tests")
             or suite.get("passed") != suite.get("tests")
-            or suite.get("tests") != len(observed.get("tests", []))
+            or suite.get("tests") != quality.get("tests_collected")
             or quality.get("selector") != "ok"
             or quality.get("selector_failures")
         ):

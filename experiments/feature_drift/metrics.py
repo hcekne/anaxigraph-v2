@@ -369,6 +369,16 @@ def numbits_to_lines(blob: bytes) -> set[int]:
     }
 
 
+def junit_file(repo: Path, classname: str) -> str | None:
+    """The test module of a JUnit classname such as `tests.api.test_x.TestCase`."""
+    parts = classname.split(".")
+    for end in range(len(parts), 0, -1):
+        path = "/".join(parts[:end]) + ".py"
+        if (repo / path).is_file():
+            return path
+    return None
+
+
 def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
     """Run the candidate suite once with per-test contexts: file → line → covering test ids."""
     with tempfile.TemporaryDirectory(prefix="drift-cov-") as tmp:
@@ -396,6 +406,11 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
         }
         if junit.exists():
             cases = list(ET.parse(junit).getroot().iter("testcase"))
+            failing = [
+                case
+                for case in cases
+                if case.find("failure") is not None or case.find("error") is not None
+            ]
             info.update(
                 tests=len(cases),
                 passed=sum(
@@ -403,6 +418,10 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
                     and case.find("error") is None
                     and case.find("skipped") is None
                     for case in cases
+                ),
+                failed_tests=[f"{c.get('classname')}::{c.get('name')}" for c in failing][:20],
+                failed_files=sorted(
+                    {path for c in failing if (path := junit_file(repo, c.get("classname") or ""))}
                 ),
             )
         if not data.exists():
@@ -539,13 +558,44 @@ def ci_quality(
         return report
     covered, info = coverage_by_test(repo)
     report["coverage_run"] = info
+    # Parametrised ids built from run-dependent values (timestamps, addresses) differ between
+    # pytest processes; such a test is identified by its function so evidence stays comparable.
+    executed = {test for lines in covered.values() for tests in lines.values() for test in tests}
+    unstable = sorted({test.split("[", 1)[0] for test in executed ^ set(all_tests) if "[" in test})
+    if unstable:
+        canon = set(unstable)
+
+        def stable(test):
+            base = test.split("[", 1)[0]
+            return base if base in canon else test
+
+        all_tests = list(dict.fromkeys(stable(test) for test in all_tests))
+        covered = {
+            path: {line: {stable(test) for test in tests} for line, tests in lines.items()}
+            for path, lines in covered.items()
+        }
+        report["unstable_test_ids"] = {
+            "functions": unstable[:20],
+            "functions_total": len(unstable),
+            "note": "Parametrised ids differ between runs; each is identified by its function. "
+            "Build parameter ids from fixed values (for example gzip.compress(data, mtime=0)).",
+        }
+    else:
+
+        def stable(test):
+            return test
+
+    report["tests_collected"] = report["tests_total"]
     per_file, selections, observations = [], {}, []
     collection_cache = {("ALL",): all_tests}
 
     def test_ids(targets):
         key = tuple(targets)
         if key not in collection_cache:
-            collection_cache[key] = collect(repo, targets)
+            ids = collect(repo, targets)
+            collection_cache[key] = (
+                None if ids is None else list(dict.fromkeys(stable(test) for test in ids))
+            )
         return collection_cache[key]
 
     selector_seconds = []
@@ -622,7 +672,14 @@ def ci_quality(
         for path in changed_paths:
             if path.startswith("docs/") or path.endswith((".md", ".rst")):
                 continue
-            if is_test_path(path):
+            if PurePosixPath(path).name == "conftest.py":  # Its fixtures reach the whole subtree.
+                base = PurePosixPath(path).parent.as_posix()
+                required.update(
+                    test
+                    for test in all_tests
+                    if base == "." or test.split("::")[0].startswith(base + "/")
+                )
+            elif is_test_path(path):
                 required.update(test for test in all_tests if test.split("::")[0] == path)
             elif path not in observed_paths and not path.endswith((".md", ".rst")):
                 required.update(all_tests)  # Shared/configuration/unresolved inputs widen.

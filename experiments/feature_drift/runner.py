@@ -608,6 +608,8 @@ def safety_feedback(
         if collected.get("report")
         else None,
         "actual_change": quality.get("change_selection"),
+        "failing_own_tests": (quality.get("coverage_run") or {}).get("failed_tests", []),
+        "unstable_test_ids": quality.get("unstable_test_ids"),
         "sampled_faults": quality.get("mutants"),
         "validation": validation,
     }
@@ -646,7 +648,6 @@ def repair_ci(
         if metrics.is_test_path(path)
     }
     retained_ids = set()
-    write_json(log / "test-obligations.json", frozen_tests)
     for number in range(config.ci_repair_attempts + 1):
         checked = safety_feedback(
             config,
@@ -664,6 +665,23 @@ def repair_ci(
             else None,
         )
         inventory = set(checked.pop("test_inventory", []))
+        if not attempts:
+            # Freeze modules holding collected tests and conftest files, not selector code or
+            # data that merely sits in a test folder. Tests already failing in the original
+            # attempt may be corrected, never removed.
+            modules = {test.split("::")[0] for test in inventory}
+            run = checked.get("evaluation", {}).get("ci", {}).get("coverage_run") or {}
+            frozen_tests = {
+                path: fingerprint
+                for path, fingerprint in frozen_tests.items()
+                if path not in run.get("failed_files", [])
+                and (
+                    Path(path).name == "conftest.py"
+                    or path in modules
+                    or (not modules and path.endswith(".py"))
+                )
+            }
+            write_json(log / "test-obligations.json", frozen_tests)
         if not retained_ids:
             retained_ids = inventory
         current = collector.inventory(repo)
@@ -721,9 +739,11 @@ def repair_ci(
         instruction = (
             "\n\nIndependent CI safety verification requires repair. Preserve all original requirements "
             "and the original change baseline. Repair the selector so all observed consumer obligations "
-            "are retained for single-file AND multi-file changes; you may add new test files. Existing "
-            "test and conftest files are frozen: do not edit, move, rename or delete them, and every "
-            "existing test ID must still run; a repair that changes them fails verification. Use focused "
+            "are retained for single-file AND multi-file changes, and make every listed failing_own_tests "
+            "test pass; you may add new test files. Existing test and conftest files are frozen: do "
+            "not edit, move, rename or delete them, except that files containing failing_own_tests may "
+            "be corrected. Every existing test ID must still run; a repair that breaks this fails "
+            "verification. Use focused "
             "contracts when justified; unknown/shared inputs need conservative fallback. Do not fake "
             "receipts, edit the external evaluator, or claim safety from an empty selection. "
             "The coordinator will rerun independent verification on your changed source.\n"

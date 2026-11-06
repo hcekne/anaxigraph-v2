@@ -331,11 +331,16 @@ def test_real_cli_validation_sees_published_evidence_and_keeps_original_baseline
     assert second["ci_selection"]["status"] == "stale"
 
 
-@pytest.mark.parametrize("tamper", ["replace", "remove", "filter", "add"])
+@pytest.mark.parametrize(
+    "tamper", ["replace", "remove", "filter", "add", "selector", "data", "stale"]
+)
 def test_ci_only_repair_retains_verification_bytes_and_ids(monkeypatch, tmp_path, tamper):
     (tmp_path / "tests").mkdir()
     existing = tmp_path / "tests/test_existing.py"
     existing.write_text("def test_existing():\n    assert 1 == 1\n")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools/test_rooms.py").write_text("ROOMS = {}\n")
+    (tmp_path / "tests/room.json").write_text("{}")
     original = "tests/test_existing.py::test_existing"
     config = SimpleNamespace(ci_repair_attempts=1, agent="synthetic-transport")
     calls = []
@@ -343,8 +348,9 @@ def test_ci_only_repair_retains_verification_bytes_and_ids(monkeypatch, tmp_path
     def verify(*args, **kwargs):
         calls.append(True)
         ids = [] if tamper in {"remove", "filter"} and len(calls) > 1 else [original]
+        failing = ["tests/test_existing.py"] if tamper == "stale" else []
         return {
-            "evaluation": {},
+            "evaluation": {"ci": {"coverage_run": {"failed_files": failing}}},
             "gate": {"status": "failed" if len(calls) == 1 else "passed"},
             "feedback": {},
             "verification_seconds": 1,
@@ -353,8 +359,12 @@ def test_ci_only_repair_retains_verification_bytes_and_ids(monkeypatch, tmp_path
         }
 
     def repair(*args):
-        if tamper == "replace":
+        if tamper in {"replace", "stale"}:
             existing.write_text("def test_existing():\n    pass\n")
+        elif tamper == "selector":
+            (tmp_path / "tools/test_rooms.py").write_text("ROOMS = {'a': 1}\n")
+        elif tamper == "data":
+            (tmp_path / "tests/room.json").write_text('{"a": 1}')
         elif tamper == "remove":
             existing.unlink()
         elif tamper == "filter":
@@ -369,7 +379,8 @@ def test_ci_only_repair_retains_verification_bytes_and_ids(monkeypatch, tmp_path
     result = runner.repair_ci(
         config, tmp_path, tmp_path / "logs", "task", {"seconds": 1}, 13, "base", "head"
     )
-    assert result["ci_gate"]["status"] == ("passed" if tamper == "add" else "failed")
+    allowed = {"add", "selector", "data", "stale"}
+    assert result["ci_gate"]["status"] == ("passed" if tamper in allowed else "failed")
 
 
 def test_standalone_check_exits_nonzero_for_omissions_then_passes_after_repair(real_candidate):
@@ -487,3 +498,31 @@ def test_real_git_backed_feedback_loop_repairs_consumer_gap_without_models(
         for attempt in result["ci_attempts"]
     )
     assert collector.REPORT_PATH in IndexSession(root).snapshot().files
+
+
+def test_unstable_parametrised_ids_and_conftest_obligations_are_measured(real_candidate):
+    root = real_candidate
+    (root / "tests/test_unstable.py").write_text(
+        "import time\nimport pytest\nfrom lib import increment\n"
+        "@pytest.mark.parametrize('v', [1, 2], ids=lambda v: f'{v}-{time.time_ns()}')\n"
+        "def test_varies(v):\n    assert increment(v) == v + 1\n"
+    )
+    (root / "tests/conftest.py").write_text("import pytest\n")
+    quality = metrics.ci_quality(root, 1, 2, changed_paths=["tests/conftest.py"])
+    assert quality["collection_complete"] is True
+    assert quality["unstable_test_ids"]["functions"] == ["tests/test_unstable.py::test_varies"]
+    assert quality["mutants"]["unverified"] == 0
+    omitted = quality["change_selection"]["omitted_tests"]
+    assert "tests/test_consumer.py::test_consumer" in omitted
+    assert quality["change_selection"]["status"] == "failed"
+
+
+def test_failing_own_tests_are_named_with_their_module(real_candidate):
+    root = real_candidate
+    (root / "tests/test_stale.py").write_text(
+        "from lib import increment\nclass TestOld:\n"
+        "    def test_old(self):\n        assert increment(1) == 3\n"
+    )
+    _, info = metrics.coverage_by_test(root)
+    assert info["failed_files"] == ["tests/test_stale.py"]
+    assert info["failed_tests"] == ["tests.test_stale.TestOld::test_old"]
