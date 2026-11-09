@@ -13,6 +13,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import runner  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def synthetic_executor(monkeypatch):
+    monkeypatch.setattr(runner.executor_policy, "preflight", lambda: {"synthetic": True})
+
+
 def test_model_events_reach_disk_before_session_finishes(tmp_path, monkeypatch):
     script = tmp_path / "fake_model.py"
     release = tmp_path / "release"

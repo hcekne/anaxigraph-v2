@@ -43,7 +43,14 @@ change breaks every earlier feature that was not migrated.
 ## Arms
 
 All arms use the same model (default `gpt-6.1-sol`, effort `high`) through `codex exec`, a fresh
-session per request, the same prompt, sandbox (no network), and timeout.
+session per request, the same prompt, sandbox (external egress denied), and timeout.
+
+Real Codex sessions first run a model-free executor preflight: local socketpairs and
+cross-thread asyncio must work, while direct external connections and proxy requests
+must be denied. The named workspace policy keeps writes scoped to the workspace,
+permits local concurrency, and uses an empty-domain network proxy. Unsupported executors
+stop before paid calls. The policy is frozen in provenance; changing it requires an
+explicit stopped-state migration, retaining the earlier executor identity and costs.
 
 | Arm | Gets |
 | --- | --- |

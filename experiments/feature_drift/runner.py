@@ -38,6 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import collect_evidence as collector  # noqa: E402
+import executor_policy  # noqa: E402
 import metrics  # noqa: E402
 
 try:
@@ -72,7 +73,7 @@ request has arrived. It is saved at `{path}`; earlier requests are in `docs/requ
 Implement it completely in this repository, with tests. Everything earlier requests asked for
 must keep working.
 
-- There is no network access. The locked virtualenv in `.venv` is all there is; do not add
+- External network access is blocked. The locked virtualenv in `.venv` is all there is; do not add
   dependencies. Run tests with `.venv/bin/python -m pytest`.
 - Keep `run.json` working: the service is started from it.
 - Do not commit; the coordinator commits your work. Independent CI-safety feedback may request
@@ -172,7 +173,7 @@ def codex_argv(config, repo: Path, with_anaxigraph: bool) -> list[str]:
         "approval_policy": '"never"',
         "project_doc_max_bytes": "0",
         "mcp_servers": "{}",
-        "sandbox_workspace_write.network_access": "false",
+        **executor_policy.settings(),
     }
     if with_anaxigraph:
         settings.update(
@@ -188,7 +189,7 @@ def codex_argv(config, repo: Path, with_anaxigraph: bool) -> list[str]:
         argv += ["--config", f"{key}={value}"]
     return argv + [
         "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check",
-        "--json", "--model", config.model, "--sandbox", "workspace-write", "--color", "never",
+        "--json", "--model", config.model, "--color", "never",
         "--cd", str(repo), "-",
     ]  # fmt: skip
 
@@ -235,6 +236,11 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
         raise FileExistsError(
             f"Agent session already exists; retain it and use a new session: {log}"
         )
+    executor_receipt = (
+        executor_policy.preflight()
+        if config.agent != "noop" and not config.agent.startswith(("ref:", "copy:"))
+        else None
+    )
     log.parent.mkdir(parents=True, exist_ok=True)
     (log.with_suffix(".prompt.md")).write_text(prompt)
     started = time.monotonic()
@@ -253,7 +259,12 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
                 shutil.copy2(path, repo / rel)
         return {"status": "copied", "seconds": round(time.monotonic() - started, 1)}
     env = {"UV_OFFLINE": "1", "UV_NO_SYNC": "1", "PYTHONDONTWRITEBYTECODE": "1"}
-    session = {"status": "running", "started": now(), "log": str(log)}
+    session = {
+        "status": "running",
+        "started": now(),
+        "log": str(log),
+        "executor_preflight": executor_receipt,
+    }
     write_json(log.with_suffix(".session.json"), session)
     with log.open("w") as stdout, log.with_suffix(".stderr.txt").open("w") as stderr:
         process = subprocess.Popen(
@@ -1196,6 +1207,7 @@ def provenance(config) -> dict:
                     HERE / "continuation.py",
                     HERE / "mutation_state.py",
                     HERE / "process_guard.py",
+                    HERE / "executor_policy.py",
                     Path(getfile(collector.audit_selection)),
                 )
             }
@@ -1218,6 +1230,7 @@ def provenance(config) -> dict:
         "ci_repair_attempts": config.ci_repair_attempts,
         "ci_gate_protocol": "coverage-consumers-and-actual-diff-v1",
         "evaluation_resource_policy": metrics.RESOURCE_POLICY,
+        "executor_policy": executor_policy.POLICY,
         "measurement_settings": {
             "mutants": config.mutants,
             "ci_every": config.ci_every,
@@ -1250,6 +1263,7 @@ def validate_resume(config, chain: Path) -> None:
         "ci_repair_attempts",
         "ci_gate_protocol",
         "evaluation_resource_policy",
+        "executor_policy",
         "measurement_settings",
     )
     changed = [
@@ -1421,6 +1435,12 @@ def main() -> None:
             preflight_runtime(config)
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             parser.error(str(error))
+    executor_receipt = None
+    if config.agent != "noop" and not config.agent.startswith(("ref:", "copy:")):
+        try:
+            executor_receipt = executor_policy.preflight()
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            parser.error(str(error))
     config.provenance = provenance(config)
     import continuation
 
@@ -1455,6 +1475,8 @@ def main() -> None:
     write_json(
         config.state / f"run-{int(time.time())}.json", {"argv": sys.argv, **config.provenance}
     )
+    if executor_receipt is not None:
+        write_json(config.state / "executor-preflight.json", executor_receipt)
     with concurrent.futures.ThreadPoolExecutor(max_workers=config.concurrency) as pool:
         failed = False
         futures = {pool.submit(run_chain, config, arm, r): (arm, r) for arm, r in chains}

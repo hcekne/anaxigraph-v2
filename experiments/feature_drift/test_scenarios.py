@@ -214,6 +214,8 @@ def test_old_runtime_is_rejected_before_state_or_paid_sessions(monkeypatch, tmp_
         "oracle_sha256",
         "runtime_version",
         "evaluation_resource_policy",
+        "executor_policy",
+        "missing_executor_policy",
         "missing",
     ],
 )
@@ -234,6 +236,7 @@ def test_resume_requires_exact_frozen_scenario_and_runtime_inputs(changed, tmp_p
             "ci_repair_attempts",
             "ci_gate_protocol",
             "evaluation_resource_policy",
+            "executor_policy",
             "measurement_settings",
         ),
         "frozen",
@@ -248,7 +251,9 @@ def test_resume_requires_exact_frozen_scenario_and_runtime_inputs(changed, tmp_p
     runner.validate_resume(config, tmp_path)
     if changed == "missing":
         metadata.pop("scenario_identity")
-    elif changed in {"runtime_version", "evaluation_resource_policy"}:
+    elif changed == "missing_executor_policy":
+        metadata.pop("executor_policy")
+    elif changed in {"runtime_version", "evaluation_resource_policy", "executor_policy"}:
         metadata[changed] = "new"
     else:
         metadata["scenario_identity"][changed] = "changed"

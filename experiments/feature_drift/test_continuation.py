@@ -34,6 +34,7 @@ def fork(tmp_path):
         "review_steps": [6],
         "review_kinds": ["patterns"],
         "runtime_commit": "old-runtime",
+        "executor_policy": {"id": "synthetic-frozen-policy"},
     }
     driver.write_json(source / "run-1.json", previous)
     driver.write_json(chain / "chain.json", previous | {"arm": "bare", "scenario": {}})
