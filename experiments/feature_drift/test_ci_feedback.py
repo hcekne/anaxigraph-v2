@@ -552,3 +552,7 @@ def test_failing_own_tests_are_named_with_their_module(real_candidate):
     _, info = metrics.coverage_by_test(root)
     assert info["failed_files"] == ["tests/test_stale.py"]
     assert info["failed_tests"] == ["tests.test_stale.TestOld::test_old"]
+    detail = info["failure_details"][0]
+    assert detail["test"] == info["failed_tests"][0]
+    assert "assert" in detail["traceback"]
+    assert "2 == 3" in detail["message"]

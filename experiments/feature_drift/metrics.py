@@ -423,6 +423,15 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
                 failed_files=sorted(
                     {path for c in failing if (path := junit_file(repo, c.get("classname") or ""))}
                 ),
+                failure_details=[
+                    {
+                        "test": f"{case.get('classname')}::{case.get('name')}",
+                        "message": failure.get("message", "")[:500],
+                        "traceback": (failure.text or "")[-2000:],
+                    }
+                    for case in failing[:8]
+                    for failure in [*case.findall("failure"), *case.findall("error")]
+                ],
             )
         if not data.exists():
             info["error"] = (result.stdout + result.stderr)[-1500:]

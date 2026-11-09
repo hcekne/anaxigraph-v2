@@ -194,6 +194,14 @@ def chain_summary(chain: Path) -> dict:
                 "mutants_missed_by_selection": mutants.get("missed_by_selection"),
                 "agent_status": (row.get("agent") or {}).get("status"),
                 "agent_seconds": (row.get("agent") or {}).get("seconds"),
+                "known_agent_seconds": (row.get("agent") or {}).get(
+                    "known_seconds", (row.get("agent") or {}).get("seconds") or 0
+                ),
+                "unknown_agent_seconds": (row.get("agent") or {}).get(
+                    "seconds_unknown_sessions", int((row.get("agent") or {}).get("seconds") is None)
+                ),
+                "continuation": row.get("continuation"),
+                "benchmark_access_flag": (row.get("agent") or {}).get("contaminated", False),
                 "verification_seconds": row.get("verification_seconds"),
                 "coding_sessions": (row.get("agent") or {}).get("sessions", 1),
                 "initial_ci_gate": row.get("initial_ci_gate"),
@@ -252,6 +260,7 @@ def chain_summary(chain: Path) -> dict:
             "replicate": meta.get("replicate"), "scenario": scenario,
             "scenario_identity": meta.get("scenario_identity"),
             "verification": verification(rows, probes, scenario),
+            "continuation": meta.get("continuation"),
             "steps": steps, "probes": probe_rows}  # fmt: skip
 
 
@@ -293,6 +302,19 @@ def arm_summary(chains: list[dict]) -> dict:
     ]
     return {
         "chains": len(chains),
+        "continuation_chains": [c["chain"] for c in chains if c.get("continuation")],
+        "benchmark_access_flags": [
+            {"chain": c["chain"], "step": s["step"]}
+            for c in chains
+            for s in c["steps"]
+            if s.get("benchmark_access_flag")
+        ],
+        "inherited_unqualified_checkpoints": [
+            {"chain": c["chain"], "step": s["step"], "gate": s["continuation"]["original_ci_gate"]}
+            for c in chains
+            for s in c["steps"]
+            if s.get("continuation") and s["continuation"].get("original_ci_gate")
+        ],
         "scenarios": [
             c.get("scenario") or scenarios.requirements(scenarios.describe()) for c in chains
         ],
@@ -337,6 +359,13 @@ def arm_summary(chains: list[dict]) -> dict:
         "probe_ci_selected_fraction": avg(p["ci_selected_fraction"] for p in probes),
         "probe_agent_seconds": avg(p["agent_seconds"] for p in probes),
         "agent_minutes_total": mean_total(chains, "agent_seconds", 60),
+        "known_agent_minutes_total": avg(
+            sum(s.get("known_agent_seconds", s.get("agent_seconds") or 0) for s in c["steps"]) / 60
+            for c in chains
+        ),
+        "agent_duration_unknown_sessions": sum(
+            s.get("unknown_agent_seconds", 0) for c in chains for s in c["steps"]
+        ),
         "analysis_minutes_total": avg(
             sum(s["analysis_seconds"] or 0 for s in c["steps"]) / 60 for c in chains
         ),
@@ -364,6 +393,11 @@ def decide(arms: dict, treatment: str = "anaxigraph", control: str = "charter") 
     t, c = arms.get(treatment), arms.get(control)
     if not t or not c:
         return {"verdict": "incomplete"}
+    if t.get("continuation_chains") or c.get("continuation_chains"):
+        return {
+            "verdict": "exploratory-continuation",
+            "reason": "Extra repairs and inherited histories are explicitly outside the original preregistered comparison; inspect qualification and descriptive measurements.",
+        }
     definitions = t.get("scenarios", []) + c.get("scenarios", [])
     scenario = definitions[0] if definitions else scenarios.requirements(scenarios.describe())
     identities = t.get("scenario_identities", []) + c.get("scenario_identities", [])
@@ -470,10 +504,13 @@ def render(summary: dict) -> str:
         )
         lines.append("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         for s in chain["steps"]:
+            minutes = (
+                round(s["agent_seconds"] / 60, 1) if s["agent_seconds"] is not None else "unknown"
+            )
             lines.append(
                 f"| {s['step']} | {s['new_pass']} | {s['cumulative_rate']:.2f} | {s['regressions']}"
                 f" | {s['existing_prod_files_edited']} | {s['prod_loc']} | {s['ci_selected_fraction']}"
-                f" | {s['mutants_missed_by_selection']} | {round((s['agent_seconds'] or 0) / 60, 1)} |"
+                f" | {s['mutants_missed_by_selection']} | {minutes} |"
             )
         for p in chain["probes"]:
             lines.append(
@@ -498,6 +535,21 @@ def main() -> None:
         by_arm.setdefault(chain["arm"], []).append(chain)
     arms = {arm: arm_summary(rows) for arm, rows in by_arm.items()}
     summary = {"arms": arms, "decision": decide(arms), "chains": chains}
+    manifest = args.state / "continuation.json"
+    if manifest.exists():
+        value = json.loads(manifest.read_text())
+        summary["continuation"] = {
+            key: value[key]
+            for key in (
+                "protocol",
+                "source_state",
+                "created",
+                "additional_ci_repairs",
+                "note",
+                "audited_contamination",
+            )
+            if key in value
+        }
     if args.json:
         args.json.write_text(json.dumps(summary, indent=1))
     print(render(summary))

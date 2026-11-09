@@ -25,6 +25,7 @@ import concurrent.futures
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -104,13 +105,27 @@ def now() -> str:
 
 
 def write_json(path: Path, value) -> None:
+    atomic_text(path, json.dumps(value, indent=1, default=str))
+
+
+def atomic_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=1, default=str))
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def append_jsonl(path: Path, value) -> None:
-    with path.open("a") as stream:
-        stream.write(json.dumps(value, default=str) + "\n")
+    previous = path.read_text() if path.exists() else ""
+    atomic_text(path, previous + json.dumps(value, default=str) + "\n")
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -215,6 +230,10 @@ def summarize_events(raw: str) -> dict:
 
 
 def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool) -> dict:
+    if log.exists() or log.with_suffix(".prompt.md").exists():
+        raise FileExistsError(
+            f"Agent session already exists; retain it and use a new session: {log}"
+        )
     log.parent.mkdir(parents=True, exist_ok=True)
     (log.with_suffix(".prompt.md")).write_text(prompt)
     started = time.monotonic()
@@ -233,28 +252,51 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
                 shutil.copy2(path, repo / rel)
         return {"status": "copied", "seconds": round(time.monotonic() - started, 1)}
     env = {"UV_OFFLINE": "1", "UV_NO_SYNC": "1", "PYTHONDONTWRITEBYTECODE": "1"}
-    try:
-        result = subprocess.run(
+    session = {"status": "running", "started": now(), "log": str(log)}
+    write_json(log.with_suffix(".session.json"), session)
+    with log.open("w") as stdout, log.with_suffix(".stderr.txt").open("w") as stderr:
+        process = subprocess.Popen(
             codex_argv(config, repo, with_anaxigraph),
-            input=prompt,
-            capture_output=True,
+            stdin=subprocess.PIPE,
+            stdout=stdout,
+            stderr=stderr,
             text=True,
-            timeout=config.agent_timeout,
             env={**os.environ, **env},
+            start_new_session=True,
         )
-        raw, status = result.stdout, "completed" if result.returncode == 0 else "failed"
-        stderr = result.stderr
-    except subprocess.TimeoutExpired as error:
-        raw = error.stdout.decode() if isinstance(error.stdout, bytes) else (error.stdout or "")
-        status, stderr = "timeout", "agent timed out"
-    log.write_text(raw)
-    log.with_suffix(".stderr.txt").write_text(stderr or "")
+        session["pid"] = process.pid
+        try:
+            session["process_start"] = (
+                Path(f"/proc/{process.pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+            )
+            session["boot_id"] = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+        except OSError:
+            session["process_start"] = None
+        write_json(log.with_suffix(".session.json"), session)
+        try:
+            process.communicate(prompt, timeout=config.agent_timeout)
+            status = "completed" if process.returncode == 0 else "failed"
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.communicate()
+            status = "timeout"
+            stderr.write("\nAgent timed out; streamed events retained.\n")
+    session.update(status=status, finished=now(), seconds=round(time.monotonic() - started, 1))
+    write_json(log.with_suffix(".session.json"), session)
+    raw = log.read_text()
+    summary = summarize_events(raw)
     return {
         "status": status,
-        "seconds": round(time.monotonic() - started, 1),
+        "seconds": session["seconds"],
+        "usage_unknown_sessions": int(status != "completed" or summary["turns"] == 0),
         # The benchmark lives on the same machine; flag transcripts that touched it.
         "contaminated": "feature_drift" in raw or "scenario/hidden" in raw,
-        **summarize_events(raw),
+        **summary,
+        "known_usage": summary["usage"],
+        "usage": summary["usage"] if status == "completed" and summary["turns"] else None,
     }
 
 
@@ -438,14 +480,35 @@ def aggregate_agents(attempts: list[dict]) -> dict:
     agents = [attempt["agent"] for attempt in attempts]
     result = {
         **agents[-1],
-        "seconds": sum(agent.get("seconds", 0) for agent in agents),
-        "sessions": len(agents),
-        "usage_unknown_sessions": sum(not agent.get("usage") for agent in agents),
+        "seconds": sum(agent.get("seconds", 0) for agent in agents)
+        if all(agent.get("seconds") is not None for agent in agents)
+        else None,
+        "known_seconds": sum(
+            agent.get("known_seconds", agent.get("seconds") or 0) for agent in agents
+        ),
+        "seconds_unknown_sessions": sum(
+            agent.get("seconds_unknown_sessions", int(agent.get("seconds") is None))
+            for agent in agents
+        ),
+        "sessions": sum(agent.get("sessions", 1) for agent in agents),
+        "usage_unknown_sessions": sum(
+            agent.get("usage_unknown_sessions", int(not agent.get("usage"))) for agent in agents
+        ),
     }
     result["usage"] = {
         key: sum(agent["usage"][key] for agent in agents)
-        if all(type((agent.get("usage") or {}).get(key)) is int for agent in agents)
+        if all(
+            type((agent.get("usage") or {}).get(key)) is int
+            and not agent.get("usage_unknown_sessions", 0)
+            for agent in agents
+        )
         else None
+        for key in ("input_tokens", "cached_input_tokens", "output_tokens")
+    }
+    result["known_usage"] = {
+        key: sum(
+            (agent.get("known_usage") or agent.get("usage") or {}).get(key) or 0 for agent in agents
+        )
         for key in ("input_tokens", "cached_input_tokens", "output_tokens")
     }
     for field in ("items", "mcp_tools"):
@@ -609,6 +672,7 @@ def safety_feedback(
         else None,
         "actual_change": quality.get("change_selection"),
         "failing_own_tests": (quality.get("coverage_run") or {}).get("failed_tests", []),
+        "own_failure_details": (quality.get("coverage_run") or {}).get("failure_details", []),
         "unstable_test_ids": quality.get("unstable_test_ids"),
         "sampled_faults": quality.get("mutants"),
         "validation": validation,
@@ -630,6 +694,83 @@ def retained(test: str, inventory: set[str]) -> bool:
     return function in inventory or any(other.startswith(function + "[") for other in inventory)
 
 
+def repair_candidate(config, repo, log, prompt, step, number, feedback, baseline_id, treatment):
+    compact = {
+        **feedback,
+        "actual_change": {
+            key: value
+            for key, value in (feedback.get("actual_change") or {}).items()
+            if key not in {"selected_tests", "required_tests"}
+        },
+    }
+    actual = compact["actual_change"]
+    omitted = actual.get("omitted_tests", [])
+    actual["omitted_tests"] = omitted[:20]
+    actual["omitted_tests_total"] = len(omitted)
+    if compact.get("validation"):
+        compact["validation"] = {
+            key: compact["validation"].get(key)
+            for key in (
+                "baseline_id",
+                "validation_status",
+                "completion_allowed",
+                "ci_selection",
+                "checks",
+                "error",
+            )
+        }
+    instruction = (
+        "\n\nIndependent CI safety verification requires repair. Preserve all original requirements "
+        "and the original change baseline. Repair the selector so all observed consumer obligations "
+        "are retained for single-file AND multi-file changes, and make every listed failing_own_tests "
+        "test pass; you may add new test files. Existing test and conftest files are frozen: do "
+        "not edit, move, rename or delete them, except that files containing failing_own_tests may "
+        "be corrected. Every existing test ID must still run; a repair that breaks this fails "
+        "verification. Use focused "
+        "contracts when justified; unknown/shared inputs need conservative fallback. Do not fake "
+        "receipts, edit the external evaluator, or claim safety from an empty selection. "
+        "The coordinator will rerun independent verification on your changed source.\n"
+        + json.dumps(compact, default=str)
+    )
+    if treatment:
+        instruction += (
+            f"\nOriginal baseline_id={baseline_id}. Inspect fresh anaxigraph/ci-evidence.json, "
+            "scan, then validate_change with this explicit original baseline. Do not prepare "
+            "a new baseline or rerun model workflows. Fix deterministic blocked/incomplete findings."
+        )
+    if getattr(config, "continuation", None):
+        import continuation
+
+        agent = continuation.run_or_recover(
+            config,
+            repo,
+            log / f"repair-{number}.jsonl",
+            prompt + instruction,
+            treatment,
+            sys.modules[__name__],
+        )
+    else:
+        agent = run_agent(
+            config, repo, log / f"repair-{number}.jsonl", prompt + instruction, treatment
+        )
+    head = commit(repo, f"CI safety repair {number}, request {step}")
+    return agent, head
+
+
+def repaired_result(attempts, head):
+    final = attempts[-1]
+    return {
+        **final["evaluation"],
+        "commit": head,
+        "agent": aggregate_agents(attempts),
+        "ci_attempts": attempts,
+        "ci_gate": final["gate"],
+        "initial_ci_gate": attempts[0]["gate"],
+        "verification_seconds": sum(attempt["verification_seconds"] for attempt in attempts),
+        "ci_validation_seconds": sum(attempt["anaxigraph_seconds"] for attempt in attempts),
+    }
+
+
 def repair_ci(
     config,
     repo,
@@ -644,17 +785,48 @@ def repair_ci(
     baseline_inputs=None,
     treatment=False,
     acceptance_files=None,
+    prior_attempts=None,
 ):
     """Bounded fresh sessions; retain original baseline, every attempt and all resource use."""
-    attempts = []
+    attempts = list(prior_attempts or [])
+    if attempts and attempts[-1]["gate"]["status"] == "passed":
+        return repaired_result(attempts, attempts[-1]["commit"])
     agent = initial_agent
-    frozen_tests = {
-        path: fingerprint
-        for path, fingerprint in collector.inventory(repo).items()
-        if metrics.is_test_path(path)
-    }
-    retained_ids = set()
-    for number in range(config.ci_repair_attempts + 1):
+    obligations = log / "test-obligations.json"
+    frozen_tests = (
+        json.loads(obligations.read_text())
+        if attempts and obligations.exists()
+        else {
+            path: fingerprint
+            for path, fingerprint in collector.inventory(repo).items()
+            if metrics.is_test_path(path)
+        }
+    )
+    saved_inventory = log / "test-inventory.json"
+    retained_ids = (
+        set(json.loads(saved_inventory.read_text()))
+        if attempts and saved_inventory.exists()
+        else set()
+    )
+    if attempts and not retained_ids:
+        retained_ids = set(metrics.collect(repo, ["ALL"]) or [])
+        if not retained_ids:
+            raise ValueError("Cannot continue repairs without the retained test inventory")
+    extension = (getattr(config, "continuation", None) or {}).get("additional_ci_repairs", 0)
+    limit = config.ci_repair_attempts + extension
+    if attempts and len(attempts) <= limit:
+        agent, head = repair_candidate(
+            config,
+            repo,
+            log,
+            prompt,
+            step,
+            len(attempts),
+            attempts[-1]["feedback"],
+            baseline_id,
+            treatment,
+        )
+    for number in range(len(attempts), limit + 1):
         checked = safety_feedback(
             config,
             repo,
@@ -690,6 +862,7 @@ def repair_ci(
         write_json(log / "test-obligations.json", frozen_tests)
         if not retained_ids:
             retained_ids = inventory
+        write_json(saved_inventory, sorted(retained_ids))
         current = collector.inventory(repo)
         changed_tests = [
             path for path, fingerprint in frozen_tests.items() if current.get(path) != fingerprint
@@ -713,71 +886,12 @@ def repair_ci(
         write_json(log / f"attempt-{number}" / "final-feedback.json", checked["feedback"])
         attempts.append({"number": number, "agent": agent, "commit": head, **checked})
         write_json(log / f"attempt-{number}.json", attempts[-1])
-        if (
-            checked["gate"]["status"] == "passed"
-            or number == config.ci_repair_attempts
-            or config.agent == "noop"
-        ):
+        if checked["gate"]["status"] == "passed" or number == limit or config.agent == "noop":
             break
-        feedback = checked["feedback"]
-        compact = {
-            **feedback,
-            "actual_change": {
-                key: value
-                for key, value in (feedback.get("actual_change") or {}).items()
-                if key not in {"selected_tests", "required_tests"}
-            },
-        }
-        actual = compact["actual_change"]
-        omitted = actual.get("omitted_tests", [])
-        actual["omitted_tests"] = omitted[:20]
-        actual["omitted_tests_total"] = len(omitted)
-        if compact.get("validation"):
-            compact["validation"] = {
-                key: compact["validation"].get(key)
-                for key in (
-                    "baseline_id",
-                    "validation_status",
-                    "completion_allowed",
-                    "ci_selection",
-                    "checks",
-                    "error",
-                )
-            }
-        instruction = (
-            "\n\nIndependent CI safety verification requires repair. Preserve all original requirements "
-            "and the original change baseline. Repair the selector so all observed consumer obligations "
-            "are retained for single-file AND multi-file changes, and make every listed failing_own_tests "
-            "test pass; you may add new test files. Existing test and conftest files are frozen: do "
-            "not edit, move, rename or delete them, except that files containing failing_own_tests may "
-            "be corrected. Every existing test ID must still run; a repair that breaks this fails "
-            "verification. Use focused "
-            "contracts when justified; unknown/shared inputs need conservative fallback. Do not fake "
-            "receipts, edit the external evaluator, or claim safety from an empty selection. "
-            "The coordinator will rerun independent verification on your changed source.\n"
-            + json.dumps(compact, default=str)
+        agent, head = repair_candidate(
+            config, repo, log, prompt, step, number + 1, checked["feedback"], baseline_id, treatment
         )
-        if treatment:
-            instruction += (
-                f"\nOriginal baseline_id={baseline_id}. Inspect fresh anaxigraph/ci-evidence.json, "
-                "scan, then validate_change with this explicit original baseline. Do not prepare "
-                "a new baseline or rerun model workflows. Fix deterministic blocked/incomplete findings."
-            )
-        agent = run_agent(
-            config, repo, log / f"repair-{number + 1}.jsonl", prompt + instruction, treatment
-        )
-        head = commit(repo, f"CI safety repair {number + 1}, request {step}")
-    final = attempts[-1]
-    return {
-        **final["evaluation"],
-        "commit": head,
-        "agent": aggregate_agents(attempts),
-        "ci_attempts": attempts,
-        "ci_gate": final["gate"],
-        "initial_ci_gate": attempts[0]["gate"],
-        "verification_seconds": sum(attempt["verification_seconds"] for attempt in attempts),
-        "ci_validation_seconds": sum(attempt["anaxigraph_seconds"] for attempt in attempts),
-    }
+    return repaired_result(attempts, head)
 
 
 # -- chains ---------------------------------------------------------------------------------
@@ -797,6 +911,10 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
     chain = config.state / f"{arm_name}-r{replicate}"
     repo, results = chain / "repo", chain / "steps.jsonl"
     validate_resume(config, chain)
+    if getattr(config, "continuation", None) and repo.exists():
+        import continuation
+
+        continuation.resume(config, chain, sys.modules[__name__])
     pending = sorted(chain.glob("pending-step-*.json"))
     if pending:
         return {
@@ -809,6 +927,7 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
         commit(repo, "Seed")
         write_json(chain / "chain.json", {"arm": arm_name, **arm, "replicate": replicate,
                                           "scenario": config.scenario,
+                                          "continuation": {key: config.continuation[key] for key in ("protocol", "additional_ci_repairs")} if getattr(config, "continuation", None) else None,
                                           "started": now(), **config.provenance})  # fmt: skip
     done = {row["step"] for row in read_jsonl(results)}
     for request in REQUESTS:
@@ -1072,6 +1191,7 @@ def provenance(config) -> dict:
                     HERE / "scenarios.py",
                     HERE / "charter.md",
                     HERE / "collect_evidence.py",
+                    HERE / "continuation.py",
                     Path(getfile(collector.audit_selection)),
                 )
             }
@@ -1131,6 +1251,11 @@ def validate_resume(config, chain: Path) -> None:
     ]
     if previous.get("scenario") != config.scenario:
         changed.append("scenario")
+    continuation = getattr(config, "continuation", None)
+    if continuation and previous.get("continuation") != {
+        key: continuation[key] for key in ("protocol", "additional_ci_repairs")
+    }:
+        changed.append("continuation")
     if changed:
         raise ValueError(
             f"Cannot resume {chain.name}: incompatible frozen inputs: {', '.join(changed)}"
@@ -1145,6 +1270,25 @@ def parse_steps(text: str) -> tuple[int, int]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--state", type=Path)
+    parser.add_argument(
+        "--continue-from", type=Path, help="Fork a frozen campaign into a new exploratory state"
+    )
+    parser.add_argument(
+        "--fork-only",
+        action="store_true",
+        help="Create or verify an exploratory fork without launching coding agents",
+    )
+    parser.add_argument(
+        "--continuation-audit",
+        type=Path,
+        help="Attach a transcript-hash-verified public-documentation contamination audit",
+    )
+    parser.add_argument(
+        "--additional-ci-repairs",
+        type=int,
+        default=3,
+        help="Explicit extra repair allowance for every arm in an exploratory continuation",
+    )
     parser.add_argument("--track", choices=scenarios.TRACK_IDS, default="switchboard")
     parser.add_argument(
         "--list-tracks", action="store_true", help="List executable and draft tracks without models"
@@ -1272,6 +1416,30 @@ def main() -> None:
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             parser.error(str(error))
     config.provenance = provenance(config)
+    import continuation
+
+    try:
+        if config.additional_ci_repairs < 1:
+            raise ValueError("Additional continuation repairs must be positive")
+        continuation.prepare(config, sys.modules[__name__])
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    if config.fork_only:
+        if not config.continuation:
+            parser.error(
+                "--fork-only requires an explicit continuation source or existing manifest"
+            )
+        print(
+            json.dumps(
+                {
+                    "status": "forked",
+                    "state": str(config.state),
+                    "protocol": config.continuation["protocol"],
+                    "paid_calls": 0,
+                }
+            )
+        )
+        return
     chains = [(arm, r) for r in range(config.replicates) for arm in arms]
     try:
         for arm, replicate in chains:

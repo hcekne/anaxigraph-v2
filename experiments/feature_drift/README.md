@@ -159,6 +159,37 @@ history (`<state>/<arm>-r<n>/repo`), agent transcripts and prompts (`logs/`), an
 artifacts (`eval/`). Pin the AnaxiGraph runtime (`--runtime`) for the whole run; its version and
 commit are recorded.
 
+### Explicit exploratory continuation
+
+A stopped, exhausted or interrupted run is not silently restarted. To finish its trajectory
+after a harness repair, fork it into a **new** state and explicitly grant the same additional
+repair allowance to every arm:
+
+```bash
+.venv/bin/python experiments/feature_drift/runner.py --track chronoweave \
+  --continue-from /absolute/path/to/frozen-run --state /absolute/path/to/new-continuation \
+  --arms bare,charter,anaxigraph --replicates 3 --concurrency 3 \
+  --runtime /absolute/path/to/frozen-runtime/anaxigraph --additional-ci-repairs 3
+```
+
+The fork preserves original session records, failed attempts, test obligations and measured
+costs; caches and virtual environments are rebuilt locally. The source's non-cache files are
+hashed before and after copying. Completed coding transcripts are reused, while interrupted
+calls whose usage or duration was never saved remain explicitly unknown. A stopped repair
+uses its next numbered attempt and remaining allowance, never resets the original budget.
+New checkout paths receive a structural baseline mapped to the exact original Git tree and
+source fingerprints. Candidate test corrections must still be made by the measured model;
+diagnostic or reference patches are never applied to an arm.
+
+An independently reviewed false-positive contamination flag can be accompanied by
+`--continuation-audit PATH`, bound to the exact original transcript hashes. The raw flag stays
+unchanged. Genuine hidden-test access is never excused by that classification.
+
+Reports label these trajectories **exploratory-continuation** even after they finish safely.
+They cannot establish a win under the original preregistered protocol. Report qualification,
+all inherited failures, known cost lower bounds and unknown sessions alongside their final
+descriptive measurements. Keep the original failed/incomplete run available separately.
+
 A full run is about 20 × arms × replicates agent sessions (180 for three arms and three
 replicates) plus 9 probe sessions per replicate, and AnaxiGraph refreshes. Run the pilot first.
 
