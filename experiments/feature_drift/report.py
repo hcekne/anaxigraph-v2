@@ -144,9 +144,13 @@ def verification(rows: list[dict], probes: list[dict], scenario: dict | None = N
 def chain_summary(chain: Path) -> dict:
     rows = sorted(read_jsonl(chain / "steps.jsonl"), key=lambda r: r["step"])
     probes = read_jsonl(chain / "probes.jsonl")
-    rows += [json.loads(path.read_text()) for path in sorted(chain.glob("pending-step-*.json"))]
+    pending = [json.loads(path.read_text()) for path in sorted(chain.glob("pending-step-*.json"))]
+    pending_steps = {id(row) for row in pending}
+    rows += pending
     rows.sort(key=lambda row: row["step"])
-    probes += [json.loads(path.read_text()) for path in sorted(chain.glob("pending-probe-*.json"))]
+    pending = [json.loads(path.read_text()) for path in sorted(chain.glob("pending-probe-*.json"))]
+    pending_probes = {id(row) for row in pending}
+    probes += pending
     meta = json.loads((chain / "chain.json").read_text()) if (chain / "chain.json").exists() else {}
     scenario = meta.get("scenario") or scenarios.requirements(scenarios.describe())
     regressed = regressions(rows)
@@ -160,6 +164,7 @@ def chain_summary(chain: Path) -> dict:
         steps.append(
             {
                 "step": row["step"],
+                "checkpoint_status": "pending" if id(row) in pending_steps else "accepted",
                 "probe_id": row.get("probe_id"),
                 "new_pass": f"{new['passed']}/{new['total']}",
                 "new_rate": new["passed"] / new["total"] if new["total"] else None,
@@ -213,6 +218,7 @@ def chain_summary(chain: Path) -> dict:
                 "usage_unknown_sessions": (row.get("agent") or {}).get(
                     "usage_unknown_sessions", int(not usage)
                 ),
+                "known_usage": (row.get("agent") or {}).get("known_usage") or usage,
                 "anaxigraph_calls": sum(((row.get("agent") or {}).get("mcp_tools") or {}).values()),
                 "analysis_seconds": (row.get("anaxigraph") or {}).get("seconds"),
                 "analysis_model_calls": sum(
@@ -229,6 +235,7 @@ def chain_summary(chain: Path) -> dict:
         probe_rows.append(
             {
                 "probe": probe["probe"],
+                "checkpoint_status": "pending" if id(probe) in pending_probes else "accepted",
                 "pass": sum(v["passed"] for v in own.values()),
                 "total": sum(v["total"] for v in own.values()),
                 "regression_rate": sum(v["passed"] for v in reg.values())
@@ -241,6 +248,12 @@ def chain_summary(chain: Path) -> dict:
                 if probe.get("ci_selected") is not None and probe.get("ci_total")
                 else None,
                 "agent_seconds": probe["agent"].get("seconds"),
+                "known_agent_seconds": probe["agent"].get(
+                    "known_seconds", probe["agent"].get("seconds") or 0
+                ),
+                "unknown_agent_seconds": probe["agent"].get(
+                    "seconds_unknown_sessions", int(probe["agent"].get("seconds") is None)
+                ),
                 "verification_seconds": probe.get("verification_seconds"),
                 "initial_ci_gate": probe.get("initial_ci_gate"),
                 "final_ci_gate": probe.get("ci_gate"),
@@ -254,6 +267,9 @@ def chain_summary(chain: Path) -> dict:
                 "usage_unknown_sessions": probe["agent"].get(
                     "usage_unknown_sessions", int(not probe["agent"].get("usage"))
                 ),
+                "known_usage": probe["agent"].get("known_usage")
+                or probe["agent"].get("usage")
+                or {},
             }
         )
     return {"chain": chain.name, "arm": meta.get("arm", chain.name.rsplit("-r", 1)[0]),
@@ -277,6 +293,42 @@ def mean_total(chains: list[dict], key: str, scale: float = 1) -> float | None:
             return None
         totals.append(sum(row[key] for row in rows) / scale)
     return avg(totals)
+
+
+def recorded_costs(chains: list[dict]) -> dict:
+    """Absolute checkpoint sums; comparison fields retain their existing per-chain means."""
+    rows = [row for chain in chains for row in [*chain["steps"], *chain["probes"]]]
+
+    def total(key):
+        return (
+            sum(row[key] for row in rows) if all(row.get(key) is not None for row in rows) else None
+        )
+
+    token_keys = ("input_tokens", "cached_input_tokens", "output_tokens")
+    return {
+        "scope": "Absolute accepted/pending checkpoint sums; known values are lower bounds. Unfolded session journals are excluded.",
+        "accepted_checkpoints": sum(row.get("checkpoint_status") != "pending" for row in rows),
+        "pending_checkpoints": sum(row.get("checkpoint_status") == "pending" for row in rows),
+        "coding_seconds": total("agent_seconds"),
+        "known_coding_seconds": sum(
+            row.get("known_agent_seconds", row.get("agent_seconds") or 0) for row in rows
+        ),
+        "coding_duration_unknown_sessions": sum(
+            row.get("unknown_agent_seconds", int(row.get("agent_seconds") is None)) for row in rows
+        ),
+        "tokens": {key: total(key) for key in token_keys},
+        "known_tokens": {
+            key: sum((row.get("known_usage") or {}).get(key, row.get(key)) or 0 for row in rows)
+            for key in token_keys
+        },
+        "coding_usage_unknown_sessions": sum(row.get("usage_unknown_sessions", 0) for row in rows),
+        "verification_seconds": total("verification_seconds"),
+        "known_verification_seconds": sum(row.get("verification_seconds") or 0 for row in rows),
+        "verification_unknown_checkpoints": sum(
+            row.get("verification_seconds") is None for row in rows
+        ),
+        "recorded_analysis_seconds": sum(row.get("analysis_seconds") or 0 for row in rows),
+    }
 
 
 def arm_summary(chains: list[dict]) -> dict:
@@ -358,7 +410,9 @@ def arm_summary(chains: list[dict]) -> dict:
         "probe_existing_files_edited": avg(p["existing_prod_files_edited"] for p in probes),
         "probe_ci_selected_fraction": avg(p["ci_selected_fraction"] for p in probes),
         "probe_agent_seconds": avg(p["agent_seconds"] for p in probes),
+        "comparison_cost_semantics": "Timing/token *_total fields are per-chain means, not arm spend; session counts are sums.",
         "agent_minutes_total": mean_total(chains, "agent_seconds", 60),
+        "recorded_costs": recorded_costs(chains),
         "known_agent_minutes_total": avg(
             sum(s.get("known_agent_seconds", s.get("agent_seconds") or 0) for s in c["steps"]) / 60
             for c in chains
@@ -491,7 +545,14 @@ def render(summary: dict) -> str:
         if arms
         else []
     )
-    lines = ["| metric | " + " | ".join(arms) + " |", "| --- |" + " ---: |" * len(arms)]
+    lines = [
+        "Timing and token fields ending `_total` retain per-chain comparison means, not arm spend.",
+        "`recorded_costs` sums checkpoint rows; known values are lower bounds when receipts are missing.",
+        "Completed session journals not yet folded into checkpoints require the separate cost audit.",
+        "",
+        "| metric | " + " | ".join(arms) + " |",
+        "| --- |" + " ---: |" * len(arms),
+    ]
     for key in keys:
         lines.append(f"| {key} | " + " | ".join(str(arms[a][key]) for a in arms) + " |")
     lines.append("")

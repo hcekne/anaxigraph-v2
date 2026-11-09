@@ -263,6 +263,77 @@ def test_missing_retry_usage_does_not_become_a_zero_token_or_time_total():
     assert report.mean_total(chains, "agent_seconds", 60) is None
 
 
+def test_arm_checkpoint_sums_preserve_partial_receipts_and_comparison_means(tmp_path):
+    rows, _ = records()
+    template = rows[0]
+    template["hidden"].update(failed=[], passed=[])
+    template["static"] = dict.fromkeys(
+        ("prod_loc", "duplication", "import_cycles", "max_complexity", "largest_module_loc"), 1
+    )
+    template["diff"] = dict.fromkeys(
+        ("prod_modified_files", "prod_added_files", "prod_lines_added", "prod_lines_deleted"), 1
+    )
+    template["own_suite"]["seconds"] = 1
+    agents = [
+        {
+            "seconds": 60,
+            "sessions": 1,
+            "usage": {"input_tokens": 100, "cached_input_tokens": 80, "output_tokens": 10},
+        },
+        {
+            "seconds": None,
+            "known_seconds": 30,
+            "seconds_unknown_sessions": 1,
+            "sessions": 2,
+            "usage": dict.fromkeys(("input_tokens", "cached_input_tokens", "output_tokens")),
+            "known_usage": {"input_tokens": 70, "cached_input_tokens": 50, "output_tokens": 5},
+            "usage_unknown_sessions": 1,
+        },
+    ]
+    chains = []
+    for n, agent in enumerate(agents):
+        chain = tmp_path / f"anaxigraph-r{n}"
+        chain.mkdir()
+        (chain / "chain.json").write_text(json.dumps({"arm": "anaxigraph", "replicate": n}))
+        row = copy.deepcopy(template) | {
+            "agent": agent,
+            "verification_seconds": 3 + n,
+            "anaxigraph": {"seconds": 6 if n == 0 else 2},
+        }
+        (chain / "steps.jsonl").write_text(json.dumps(row) + "\n" if n == 0 else "")
+        if n == 1:
+            (chain / "pending-step-01.json").write_text(json.dumps(row))
+        chains.append(report.chain_summary(chain))
+    summary = report.arm_summary(chains)
+    # The preregistered comparison still uses means of chain totals and preserves unknowns.
+    assert summary["agent_minutes_total"] is None
+    assert summary["known_agent_minutes_total"] == 0.75
+    assert summary["input_tokens_total"] is None
+    assert summary["verification_minutes_total"] == round(3.5 / 60, 3)
+    assert summary["analysis_minutes_total"] == round(4 / 60, 3)
+    assert summary["coding_sessions_total"] == 3
+    costs = summary["recorded_costs"]
+    assert costs["accepted_checkpoints"] == costs["pending_checkpoints"] == 1
+    assert costs["coding_seconds"] is None
+    assert costs["known_coding_seconds"] == 90
+    assert costs["coding_duration_unknown_sessions"] == 1
+    assert costs["tokens"] == dict.fromkeys(
+        ("input_tokens", "cached_input_tokens", "output_tokens")
+    )
+    assert costs["known_tokens"] == {
+        "input_tokens": 170,
+        "cached_input_tokens": 130,
+        "output_tokens": 15,
+    }
+    assert costs["coding_usage_unknown_sessions"] == 1
+    assert costs["verification_seconds"] == costs["known_verification_seconds"] == 7
+    assert costs["recorded_analysis_seconds"] == 8
+    assert "per-chain means" in summary["comparison_cost_semantics"]
+    rendered = report.render({"arms": {"anaxigraph": summary}, "decision": {}, "chains": chains})
+    assert "per-chain comparison means, not arm spend" in rendered
+    assert "not yet folded into checkpoints" in rendered
+
+
 def test_specification_only_tracks_never_qualify_even_with_fabricated_passing_rows():
     scenario = report.scenarios.requirements(report.scenarios.draft("chronoweave"))
     rows, _ = records()
