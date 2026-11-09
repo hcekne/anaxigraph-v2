@@ -208,7 +208,14 @@ def test_old_runtime_is_rejected_before_state_or_paid_sessions(monkeypatch, tmp_
 
 
 @pytest.mark.parametrize(
-    "changed", ["requests_sha256", "oracle_sha256", "runtime_version", "missing"]
+    "changed",
+    [
+        "requests_sha256",
+        "oracle_sha256",
+        "runtime_version",
+        "evaluation_resource_policy",
+        "missing",
+    ],
 )
 def test_resume_requires_exact_frozen_scenario_and_runtime_inputs(changed, tmp_path):
     provenance = dict.fromkeys(
@@ -226,6 +233,7 @@ def test_resume_requires_exact_frozen_scenario_and_runtime_inputs(changed, tmp_p
             "workflow_config_sha256",
             "ci_repair_attempts",
             "ci_gate_protocol",
+            "evaluation_resource_policy",
             "measurement_settings",
         ),
         "frozen",
@@ -240,7 +248,7 @@ def test_resume_requires_exact_frozen_scenario_and_runtime_inputs(changed, tmp_p
     runner.validate_resume(config, tmp_path)
     if changed == "missing":
         metadata.pop("scenario_identity")
-    elif changed == "runtime_version":
+    elif changed in {"runtime_version", "evaluation_resource_policy"}:
         metadata[changed] = "new"
     else:
         metadata["scenario_identity"][changed] = "changed"
