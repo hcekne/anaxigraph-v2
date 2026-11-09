@@ -185,10 +185,30 @@ An independently reviewed false-positive contamination flag can be accompanied b
 `--continuation-audit PATH`, bound to the exact original transcript hashes. The raw flag stays
 unchanged. Genuine hidden-test access is never excused by that classification.
 
+Injected faults have a durable journal in the candidate's Git metadata. Recovery restores
+only the exact recorded mutant; independent edits stop recovery for inspection. Legacy
+unjournaled faults require an exact evaluator transform of a completed, committed candidate.
+Verification subprocesses have a uniform 2 GiB sampled aggregate resident-memory budget and
+64 MiB combined-output budget, with process-tree cleanup and measured termination reasons.
+These limits do not shorten coding-model deadlines. Faults are injected only after the
+unmodified suite passes. Changing a continuation's harness requires a stopped-state backup
+and explicit provenance migration; retain all recovery costs and the prior harness identity.
+
 Reports label these trajectories **exploratory-continuation** even after they finish safely.
 They cannot establish a win under the original preregistered protocol. Report qualification,
 all inherited failures, known cost lower bounds and unknown sessions alongside their final
 descriptive measurements. Keep the original failed/incomplete run available separately.
+
+Evaluator mutations have a durable journal under the candidate's `.git/`, written before
+injection. Recovery verifies both original and mutant hashes and restores only evaluator-owned
+bytes; concurrent source changes remain untouched for review. A completed legacy coding session
+may recover one exact known evaluator transform against its committed candidate, with archived
+fault bytes and an explicit receipt. Unclassified post-commit edits are never silently reset.
+Neutral verification processes record a sampled 2 GiB descendant-RSS bound and 64 MiB combined
+output bound; timeout and resource cleanup includes child processes. Existing test deadlines and
+coding-model deadlines are unchanged. Fault injection starts only after the baseline suite passes
+under the same resource policy. Exhausting that declared budget fails a check; unavailable
+measurements remain unknown. These evaluator changes are part of frozen harness provenance.
 
 A full run is about 20 × arms × replicates agent sessions (180 for three arms and three
 replicates) plus 9 probe sessions per replicate, and AnaxiGraph refreshes. Run the pilot first.

@@ -145,6 +145,7 @@ def sh(argv, cwd=None, timeout=None, env=None, check=True) -> subprocess.Complet
 
 
 def commit(repo: Path, message: str) -> str:
+    metrics.restore_mutation(repo)
     sh(["git", "-C", str(repo), "add", "-A"])
     sh(["git", "-C", str(repo), "commit", "--allow-empty", "-q", "-m", message])
     return sh(["git", "-C", str(repo), "rev-parse", "HEAD"]).stdout.strip()
@@ -673,6 +674,7 @@ def safety_feedback(
         "actual_change": quality.get("change_selection"),
         "failing_own_tests": (quality.get("coverage_run") or {}).get("failed_tests", []),
         "own_failure_details": (quality.get("coverage_run") or {}).get("failure_details", []),
+        "own_resource_usage": (quality.get("coverage_run") or {}).get("resource_usage"),
         "unstable_test_ids": quality.get("unstable_test_ids"),
         "sampled_faults": quality.get("mutants"),
         "validation": validation,
@@ -1192,6 +1194,8 @@ def provenance(config) -> dict:
                     HERE / "charter.md",
                     HERE / "collect_evidence.py",
                     HERE / "continuation.py",
+                    HERE / "mutation_state.py",
+                    HERE / "process_guard.py",
                     Path(getfile(collector.audit_selection)),
                 )
             }
@@ -1213,6 +1217,7 @@ def provenance(config) -> dict:
         else None,
         "ci_repair_attempts": config.ci_repair_attempts,
         "ci_gate_protocol": "coverage-consumers-and-actual-diff-v1",
+        "evaluation_resource_policy": metrics.RESOURCE_POLICY,
         "measurement_settings": {
             "mutants": config.mutants,
             "ci_every": config.ci_every,
@@ -1244,6 +1249,7 @@ def validate_resume(config, chain: Path) -> None:
         "workflow_config_sha256",
         "ci_repair_attempts",
         "ci_gate_protocol",
+        "evaluation_resource_policy",
         "measurement_settings",
     )
     changed = [

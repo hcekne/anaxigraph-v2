@@ -387,3 +387,40 @@ def test_interrupted_live_model_is_checked_before_any_git_mutation(tmp_path, mon
     )
     with pytest.raises(ValueError, match="still running"):
         continuation.interrupted_row(SimpleNamespace(), chain, 5, driver)
+
+
+@pytest.mark.parametrize("ending", ["\n", "\r\n"])
+def test_completed_paid_candidate_recovers_only_an_exact_unrestored_evaluator_fault(
+    tmp_path, ending
+):
+    chain = tmp_path / "bare-r0"
+    repo = chain / "repo"
+    repo.mkdir(parents=True)
+    driver.sh(["git", "init", "-q", "-b", "main"], cwd=repo)
+    driver.sh(["git", "config", "user.name", "fixture"], cwd=repo)
+    driver.sh(["git", "config", "user.email", "fixture@example.invalid"], cwd=repo)
+    original = (
+        "def choose(value):\n    if value > 2:\n        return value + 1\n    return 0\n".replace(
+            "\n", ending
+        )
+    )
+    file = repo / "logic.py"
+    file.write_bytes(original.encode())
+    head = driver.commit(repo, "Step 17: completed paid candidate")
+    (chain / "logs").mkdir()
+    (chain / "logs/step-17.jsonl").write_text('{"type":"turn.completed"}\n')
+    mutant = next(
+        driver.metrics.mutate(original, index)[0]
+        for index, _ in driver.metrics.candidate_mutants(original)
+        if driver.metrics.mutate(original, index)[1][0] == "negate_if"
+    )
+    file.write_text(mutant)
+    proof = continuation.recover_legacy_mutant(chain, 17, {"status": "recovered-completed"}, driver)
+    assert proof["status"] == "restored-paid-candidate"
+    assert file.read_bytes() == original.encode()
+    assert (chain / "legacy-mutant-step-17.bin").read_text() == mutant
+    assert driver.sh(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip() == head
+    file.write_text(original + "\ndef independent_work():\n    return True\n")
+    with pytest.raises(ValueError, match="not one exact"):
+        continuation.recover_legacy_mutant(chain, 17, {"status": "recovered-completed"}, driver)
+    assert "independent_work" in file.read_text()

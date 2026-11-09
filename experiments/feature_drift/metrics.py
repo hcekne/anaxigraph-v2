@@ -23,6 +23,21 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path, PurePosixPath
 
+try:
+    from .mutation_state import injected
+    from .mutation_state import restore as restore_mutation
+except ImportError:
+    from mutation_state import injected
+    from mutation_state import restore as restore_mutation
+
+try:
+    from . import process_guard
+except ImportError:
+    import process_guard
+
+RESOURCE_POLICY = process_guard.RESOURCE_POLICY
+run = process_guard.run
+
 SKIP_PARTS = {".venv", "node_modules", "__pycache__", "anaxigraph"}
 
 
@@ -270,21 +285,6 @@ def diff_stats(repo: Path, base: str, head: str = "HEAD") -> dict:
 # -- CI selection --------------------------------------------------------------------------
 
 
-def run(argv: list[str], cwd: Path, timeout: float, env: dict | None = None, stdin: str = ""):
-    try:
-        return subprocess.run(
-            argv,
-            cwd=cwd,
-            input=stdin,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env={**os.environ, **(env or {})},
-        )
-    except subprocess.TimeoutExpired as error:
-        return subprocess.CompletedProcess(argv, 124, error.stdout or "", "timeout")
-
-
 def candidate_env(repo: Path) -> dict:
     return {
         "PATH": f"{repo / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
@@ -381,6 +381,7 @@ def junit_file(repo: Path, classname: str) -> str | None:
 
 def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
     """Run the candidate suite once with per-test contexts: file → line → covering test ids."""
+    restore_mutation(repo)
     with tempfile.TemporaryDirectory(prefix="drift-cov-") as tmp:
         data = Path(tmp) / ".coverage"
         junit = Path(tmp) / "suite.xml"
@@ -403,6 +404,7 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
             "returncode": result.returncode,
             "seconds": round(time.monotonic() - started, 1),
             "command": shlex.join(result.args),
+            "resource_usage": getattr(result, "resource_usage", None),
         }
         if junit.exists():
             cases = list(ET.parse(junit).getroot().iter("testcase"))
@@ -543,6 +545,11 @@ def run_tests(repo: Path, targets: list[str], timeout: float = 900) -> tuple[boo
     args = [] if targets == ["ALL"] else targets
     command = [*pytest_argv(repo), "-x", "-o", "addopts="]
     result = run([*command, *args], repo, timeout, candidate_env(repo))
+    if (getattr(result, "resource_usage", None) or {}).get("termination_reason") in {
+        "rss_limit",
+        "output_limit",
+    }:
+        return False, time.monotonic() - started
     if result.returncode not in (0, 1, 124) and args:
         # A fault can change or break collection (for example tests parametrised from the
         # selector), so the requested ids vanish. Rerun their modules: a collection error
@@ -565,7 +572,10 @@ def ci_quality(
     include_observations: bool = False,
 ) -> dict:
     """Selector cost per file and safety against planted bugs the suite itself catches."""
+    restoration = restore_mutation(repo)
     report: dict = {"selector": "missing"}
+    if restoration:
+        report["restored_evaluator_mutation"] = restoration
     collected = collect(repo, ["ALL"])
     all_tests = collected or []
     report["collection_complete"] = collected is not None and bool(all_tests)
@@ -677,7 +687,18 @@ def ci_quality(
             "per_file": per_file,
         }
     )
-    report["mutants"] = plant_bugs(repo, covered, selections, seed, mutants)
+    report["mutants"] = (
+        plant_bugs(repo, covered, selections, seed, mutants)
+        if info.get("returncode") == 0
+        else {
+            "planted": 0,
+            "caught_by_suite": 0,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "details": [],
+            "skipped": "Baseline suite did not pass; faults are not injected into failing source",
+        }
+    )
     if changed_paths is not None:
         targets, seconds = select(repo, changed_paths)
         ids = test_ids(targets) if targets is not None else None
@@ -751,8 +772,7 @@ def plant_bugs(repo, covered, selections, seed: int, count: int) -> dict:
         if mutated is None or mutated[0] == original:
             continue
         executing = sorted(covered[path].get(line, set()))
-        try:
-            file.write_text(mutated[0], encoding="utf-8")
+        with injected(repo, file, mutated[0], {"kind": mutated[1][0], "line": line, "seed": seed}):
             passed, _ = run_tests(repo, executing)
             row = {
                 "file": path,
@@ -768,8 +788,6 @@ def plant_bugs(repo, covered, selections, seed: int, count: int) -> dict:
                 row["caught_by_selection"] = None if selected_pass is None else not selected_pass
                 if selected_pass is None:
                     row["verification_error"] = True
-        finally:
-            file.write_text(original, encoding="utf-8")
         results["planted"] += 1
         results["caught_by_suite"] += row["caught_by_suite"]
         results["missed_by_selection"] += row.get("caught_by_selection") is False

@@ -6,8 +6,14 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 from copy import deepcopy
 from pathlib import Path
+
+try:
+    from .mutation_state import atomic
+except ImportError:
+    from mutation_state import atomic
 
 PROTOCOL = "exploratory-continuation-v1"
 EXCLUDED = {".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".uv-cache"}
@@ -239,11 +245,68 @@ def original_baseline(config, chain: Path, row: dict, driver) -> None:
         driver.sh(["git", "checkout", "--detach", current], cwd=repo)
 
 
+def recover_legacy_mutant(chain: Path, step: int, agent: dict, driver) -> dict | None:
+    """Only undo an exact evaluator transform after its paid candidate was committed."""
+    if agent.get("status") not in {"completed", "recovered-completed"}:
+        return None
+    repo = chain / "repo"
+    head = driver.sh(["git", "log", "-1", "--format=%H %s"], cwd=repo).stdout.strip()
+    commit, _, subject = head.partition(" ")
+    if not subject.startswith(f"Step {step}:"):
+        return None
+    safety = chain / "eval" / f"step-{step:02d}" / "safety"
+    if any(safety.glob("repair-*.jsonl")):
+        return None  # Later paid work needs its own transcript, never an inferred reset.
+    changed = driver.sh(["git", "diff", "--name-only", "HEAD"], cwd=repo).stdout.splitlines()
+    source = [path for path in changed if not driver.metrics.is_scratch(path)]
+    if not source:
+        return None
+    if len(source) != 1 or not source[0].endswith(".py") or driver.metrics.is_test_path(source[0]):
+        raise ValueError(
+            "Completed candidate has unclassified post-commit source changes; preserve for audit"
+        )
+    relative = source[0]
+    original_bytes = subprocess.run(
+        ["git", "show", f"{commit}:{relative}"], cwd=repo, check=True, capture_output=True
+    ).stdout
+    original = original_bytes.decode("utf-8")
+    file = repo / relative
+    observed = file.read_text()
+    matches = []
+    for index, line in driver.metrics.candidate_mutants(original):
+        mutated = driver.metrics.mutate(original, index)
+        if mutated and mutated[0] == observed:
+            matches.append({"index": index, "line": line, "kind": mutated[1][0]})
+    if len(matches) != 1:
+        raise ValueError(
+            "Completed candidate changes are not one exact evaluator mutation; preserve for audit"
+        )
+    proof = {
+        "classification": "exact-unrestored-evaluator-mutation",
+        "paid_commit": commit,
+        "path": relative,
+        "mutation": matches[0],
+        "original_sha256": hashlib.sha256(original_bytes).hexdigest(),
+        "mutant_sha256": fingerprint(file),
+        "source_transcript_sha256": fingerprint(chain / "logs" / f"step-{step:02d}.jsonl"),
+        "status": "classified-before-restoration",
+    }
+    backup = chain / f"legacy-mutant-step-{step:02d}.bin"
+    atomic(backup, file.read_bytes())
+    receipt = chain / f"legacy-mutant-step-{step:02d}.json"
+    driver.write_json(receipt, proof)
+    atomic(file, original_bytes, file.stat().st_mode & 0o777)
+    proof["status"] = "restored-paid-candidate"
+    driver.write_json(receipt, proof)
+    return proof
+
+
 def interrupted_row(config, chain: Path, step: int, driver) -> dict:
     repo = chain / "repo"
     prompt = chain / "logs" / f"step-{step:02d}.prompt.md"
     transcript = prompt.with_name(f"step-{step:02d}.jsonl")
     agent = recovered_session(transcript, driver)
+    mutation = recover_legacy_mutant(chain, step, agent, driver)
     commits = driver.sh(["git", "log", "--format=%H %s"], cwd=repo).stdout.splitlines()
     bases = [
         line.split(" ", 1)[0] for line in commits if line.split(" ", 1)[1] == f"Request {step}"
@@ -264,7 +327,11 @@ def interrupted_row(config, chain: Path, step: int, driver) -> dict:
         "commit": current,
         "baseline_inputs": baseline_inputs,
         "agent": agent,
-        "continuation": {"recovered_interrupted_request": True, "original_session_seconds": None},
+        "continuation": {
+            "recovered_interrupted_request": True,
+            "original_session_seconds": None,
+            "evaluator_mutation_recovery": mutation,
+        },
     }
     preparation = chain / "eval" / f"step-{step:02d}" / "preparation.json"
     if preparation.exists():
@@ -280,6 +347,7 @@ def resume(config, chain: Path, driver) -> None:
     for directory in (chain / "logs", chain / "eval"):
         for session in directory.rglob("*.session.json"):
             ensure_stopped(json.loads(session.read_text()))
+    driver.metrics.restore_mutation(chain / "repo")
     pending = sorted(chain.glob("pending-step-*.json"))
     if len(pending) > 1:
         raise ValueError("A chain cannot recover multiple pending requests at once")

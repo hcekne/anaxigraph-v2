@@ -45,6 +45,7 @@ def environment(repo: Path) -> dict:
 
 
 def inventory(repo: Path) -> dict:
+    metrics.restore_mutation(repo)
     return evidence_inputs(IndexSession(repo).snapshot().files)
 
 
