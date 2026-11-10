@@ -254,7 +254,7 @@ disjoint half-open `{"ranges": [[start, stop], ...]}` only when smaller than an 
 The runtime still accepts version 1 reports. The artifact limit remains 1 MB; the explicitly
 approved source budget increase from 13,500 to 13,535 lines covers 26 lines for the codec and
 bounded batch decoding, plus 9 for behavior validation's data-label distinction. No scoring
-thresholds or evidence limits changed. Plain backticked words explicitly described as data
+thresholds or evidence limits changed. Lowercase backticked words explicitly described as data
 objects, fields, keys, labels or values do not become implementation names when unrelated
 helpers share their spelling. Unqualified backticked names without that context, code-shaped
 identities, calls and qualified references still reject. This validator fix does not revise

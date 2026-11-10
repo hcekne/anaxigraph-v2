@@ -238,6 +238,7 @@ def test_bare_word_input_files_do_not_turn_ordinary_english_into_source_leaks(tm
 def test_unrelated_test_helpers_do_not_invalidate_observable_data_labels(tmp_path):
     (tmp_path / "errors.py").write_text(
         "def respond():\n    return {'error': {'code': 'invalid', 'message': 'Invalid input'}}\n"
+        "\nclass Store:\n    pass\n"
     )
     app = Application(tmp_path)
     app.scan()
@@ -267,7 +268,11 @@ def test_unrelated_test_helpers_do_not_invalidate_observable_data_labels(tmp_pat
     assert module.data["annotation_status"] == "current"
     assert module.data["annotation"]["contracts"][0]["statement"] == statement
     behavior.check_behaviors(graph, [statement, "Preserve the field `error` and key `code`."])
-    for explicit in ("Call error() to format failures.", "Use `error` to format failures."):
+    for explicit in (
+        "Call error() to format failures.",
+        "Use `error` to format failures.",
+        "Return a `Store` object.",
+    ):
         with pytest.raises(ValueError, match="source identity"):
             behavior.check_behaviors(graph, [explicit])
     blind = json.dumps(app.analysis_request("fresh-eyes", ["errors.py"])["packet"])
@@ -280,6 +285,7 @@ def test_unrelated_test_helpers_do_not_invalidate_observable_data_labels(tmp_pat
         "Return the `error`, `code`, and `message` fields.",
         "Preserve keys `error` and `code`.",
         "Return an `error` object.",
+        "Return the `error` AND `code` FIELDS.",
     ],
 )
 def test_explicit_data_context_does_not_make_plain_labels_implementation_names(statement):
@@ -291,6 +297,7 @@ def test_explicit_data_context_does_not_make_plain_labels_implementation_names(s
     "statement",
     [
         "Return an `InvoiceStore` object.",
+        "Return a `Store` object.",
         "Preserve the key `create_invoice`.",
         "Return the field `error()`.",
         "Read wire.error for failures.",
@@ -302,7 +309,7 @@ def test_explicit_data_context_does_not_make_plain_labels_implementation_names(s
 )
 def test_data_labels_preserve_code_shaped_and_explicit_source_detection(statement):
     matcher = behavior._compile_matcher(
-        ("InvoiceStore", "create_invoice", "module:owner.py", "owner.py"), ("error",)
+        ("InvoiceStore", "create_invoice", "module:owner.py", "owner.py"), ("error", "Store")
     )
     assert matcher(statement)
 

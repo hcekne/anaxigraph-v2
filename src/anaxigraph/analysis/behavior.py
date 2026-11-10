@@ -15,9 +15,9 @@ from anaxigraph.contracts import Graph
 Matcher = Callable[[str], bool]
 _MATCHERS: OrderedDict[int, tuple[weakref.ReferenceType[Graph], Matcher]] = OrderedDict()
 _LOCK = threading.Lock()
-_LABELS = r"`\w+`(?:(?:\s*,\s*(?:and\s+)?|\s+and\s+)`\w+`)*"
-_DATA = r"(?:object|field|key|label|value)s?"
-_DATA_LABELS = re.compile(rf"\b{_DATA}\s+{_LABELS}|{_LABELS}\s+{_DATA}\b", re.IGNORECASE)
+_LABELS = r"`[a-z]+`(?:(?:\s*,\s*(?:(?i:and)\s+)?|\s+(?i:and)\s+)`[a-z]+`)*"
+_DATA = r"(?i:(?:object|field|key|label|value)s?)"
+_DATA_LABELS = re.compile(rf"\b{_DATA}\s+{_LABELS}|{_LABELS}\s+{_DATA}\b")
 
 
 @lru_cache(maxsize=4)
