@@ -235,6 +235,78 @@ def test_bare_word_input_files_do_not_turn_ordinary_english_into_source_leaks(tm
     assert app.submit_analysis(request["request_id"], result)["saved"]
 
 
+def test_unrelated_test_helpers_do_not_invalidate_observable_data_labels(tmp_path):
+    (tmp_path / "errors.py").write_text(
+        "def respond():\n    return {'error': {'code': 'invalid', 'message': 'Invalid input'}}\n"
+    )
+    app = Application(tmp_path)
+    app.scan()
+    request = app.analysis_request("annotate", ["errors.py"])
+    result = answer(request)
+    statement = "Error responses contain an `error` object with `code` and `message` fields."
+    result["annotations"][0]["capabilities"] = [statement]
+    result["annotations"][0]["contracts"] = [
+        {
+            "statement": statement,
+            "basis": "declared",
+            "evidence": [{"path": "errors.py", "line": 1}],
+        }
+    ]
+    app.submit_analysis(request["request_id"], result)
+    source_fingerprint = app._current().snapshot.files["errors.py"]
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests/test_helpers.py").write_text(
+        "def error(): pass\ndef code(): pass\ndef message(): pass\n"
+    )
+    app.scan()
+    graph = app._current()
+    assert graph.snapshot.files["errors.py"] == source_fingerprint
+    module = next(
+        node for node in graph.nodes if node.path == "errors.py" and node.kind == "module"
+    )
+    assert module.data["annotation_status"] == "current"
+    assert module.data["annotation"]["contracts"][0]["statement"] == statement
+    behavior.check_behaviors(graph, [statement, "Preserve the field `error` and key `code`."])
+    for explicit in ("Call error() to format failures.", "Use `error` to format failures."):
+        with pytest.raises(ValueError, match="source identity"):
+            behavior.check_behaviors(graph, [explicit])
+    blind = json.dumps(app.analysis_request("fresh-eyes", ["errors.py"])["packet"])
+    assert "errors.py" not in blind and "respond" not in blind and "test_helpers" not in blind
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "Return the `error`, `code`, and `message` fields.",
+        "Preserve keys `error` and `code`.",
+        "Return an `error` object.",
+    ],
+)
+def test_explicit_data_context_does_not_make_plain_labels_implementation_names(statement):
+    matcher = behavior._compile_matcher(("module:owner.py",), ("error", "code", "message"))
+    assert not matcher(statement)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "Return an `InvoiceStore` object.",
+        "Preserve the key `create_invoice`.",
+        "Return the field `error()`.",
+        "Read wire.error for failures.",
+        "Read error.code for failures.",
+        "Use `error` for formatting.",
+        "Look at owner.py for details.",
+        "Inspect module:owner.py for details.",
+    ],
+)
+def test_data_labels_preserve_code_shaped_and_explicit_source_detection(statement):
+    matcher = behavior._compile_matcher(
+        ("InvoiceStore", "create_invoice", "module:owner.py", "owner.py"), ("error",)
+    )
+    assert matcher(statement)
+
+
 def test_matchers_reuse_annotation_only_graph_copies_without_retaining_graphs(tmp_path):
     app = application(tmp_path)
     graph = app._current()

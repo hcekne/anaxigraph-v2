@@ -252,8 +252,13 @@ to collect additional observations from historical code. Keep original trial res
 Version 2 evidence retains every test identity and observation, encoding index sets as ordered,
 disjoint half-open `{"ranges": [[start, stop], ...]}` only when smaller than an index list.
 The runtime still accepts version 1 reports. The artifact limit remains 1 MB; the explicitly
-approved source budget increase from 13,500 to 13,526 lines covers the bounded decoder and
-decoding only relevant rows for batch selection, with unchanged safety and scoring semantics.
+approved source budget increase from 13,500 to 13,535 lines covers 26 lines for the codec and
+bounded batch decoding, plus 9 for behavior validation's data-label distinction. No scoring
+thresholds or evidence limits changed. Plain backticked words explicitly described as data
+objects, fields, keys, labels or values do not become implementation names when unrelated
+helpers share their spelling. Unqualified backticked names without that context, code-shaped
+identities, calls and qualified references still reject. This validator fix does not revise
+historical workflow failures or establish which text the rejected models produced.
 
 The current protocol requires CI safety inside the coding loop. From the track's CI request onward (6 for Switchboard, 5 for the newer tracks), every arm
 gets the same external consumer/combined-change/fault verification and up to two fresh repair

@@ -15,6 +15,9 @@ from anaxigraph.contracts import Graph
 Matcher = Callable[[str], bool]
 _MATCHERS: OrderedDict[int, tuple[weakref.ReferenceType[Graph], Matcher]] = OrderedDict()
 _LOCK = threading.Lock()
+_LABELS = r"`\w+`(?:(?:\s*,\s*(?:and\s+)?|\s+and\s+)`\w+`)*"
+_DATA = r"(?:object|field|key|label|value)s?"
+_DATA_LABELS = re.compile(rf"\b{_DATA}\s+{_LABELS}|{_LABELS}\s+{_DATA}\b", re.IGNORECASE)
 
 
 @lru_cache(maxsize=4)
@@ -26,7 +29,13 @@ def _compile_matcher(identities: tuple[str, ...], names: tuple[str, ...]) -> Mat
         r"|(?<!\w)[A-Za-z_]\w*\." + code_names + r"(?!\w)"
     )
     has_names = bool(names)
-    return lambda text: bool(literal.search(text) or (has_names and code.search(text)))
+    return lambda text: bool(
+        literal.search(text)
+        or (
+            has_names
+            and code.search(_DATA_LABELS.sub(lambda match: match[0].replace("`", ""), text))
+        )
+    )
 
 
 def behavior_matcher(graph: Graph) -> Matcher:
