@@ -217,7 +217,11 @@ def summarize_events(raw: str) -> dict:
                 name = f"{item.get('server')}.{item.get('tool')}"
                 mcp_tools[name] = mcp_tools.get(name, 0) + 1
                 reply = item.get("result")
-                if item.get("error") or (isinstance(reply, dict) and reply.get("isError")):
+                if (
+                    item.get("status") == "failed"
+                    or item.get("error")
+                    or (isinstance(reply, dict) and reply.get("isError"))
+                ):
                     mcp_failures += 1
             if item["type"] == "agent_message":
                 final = item.get("text", "")
