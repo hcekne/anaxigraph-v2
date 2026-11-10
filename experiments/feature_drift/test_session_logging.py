@@ -53,9 +53,7 @@ def test_successful_mcp_architecture_finding_is_not_a_request_failure(finding):
         "status": "completed",
         "error": None,
         "result": {
-            "content": [
-                {"type": "text", "text": json.dumps({"architecture": {"status": finding}})}
-            ]
+            "content": [{"type": "text", "text": json.dumps({"architecture": {"status": finding}})}]
         },
     }
     result = runner.summarize_events(json.dumps({"type": "item.completed", "item": item}))
