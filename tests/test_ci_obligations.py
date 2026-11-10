@@ -4,6 +4,8 @@ import copy
 import hashlib
 import json
 
+import pytest
+
 from anaxigraph.analysis.ci_obligations import REPORT_PATH, audit_selection
 from anaxigraph.application import Application
 
@@ -75,6 +77,75 @@ def test_interned_inventory_preserves_omitted_identities_and_rejects_invalid_ind
     for invalid in ([2], [0, True], [0, 0], [-1]):
         value["files"][0]["selected"] = invalid
         assert audit_selection(value, inputs)["status"] == "invalid"
+
+
+@pytest.mark.parametrize("indices", [[], [0], [0, 1, 2, 3, 4, 5], [0, 2, 3, 5]])
+def test_v2_ranges_preserve_exact_v1_audits_in_every_reference_position(indices):
+    inputs = {"cache.py": "abc", "contracts.py": "def"}
+    value = report(inputs)
+    value["tests"] = [f"tests/test_local.py::test_{n}" for n in range(6)]
+    value["files"][0].update(executing=list(range(6)), selected=indices)
+    omitted = sorted(set(range(6)) - set(indices))
+    value["files"][0]["substitutions"] = [
+        {"contract_path": "contracts.py", "omitted": omitted, "replacements": indices}
+    ]
+    value["change_selection"] = {"changed_paths": ["cache.py"], "selected_tests": indices}
+    compact = copy.deepcopy(value)
+    compact["version"] = 2
+    row = compact["files"][0]
+    row["executing"] = {"ranges": [[0, 6]]}
+    row["selected"] = {"ranges": [[n, n + 1] for n in indices]}
+    row["substitutions"][0].update(
+        omitted={"ranges": [[n, n + 1] for n in omitted]}, replacements=row["selected"]
+    )
+    compact["change_selection"]["selected_tests"] = row["selected"]
+    for runtime in (None, value["environment"], {"python": "other"}):
+        for changed in (None, ["cache.py"], ["new.py"]):
+            assert audit_selection(compact, inputs, runtime, actual_changed_paths=changed) == (
+                audit_selection(value, inputs, runtime, actual_changed_paths=changed)
+            )
+    assert audit_selection(compact, inputs | {"new.py": "new"})["status"] == "stale"
+    compact["version"] = 1
+    assert audit_selection(compact, inputs)["status"] == "invalid"
+
+
+@pytest.mark.parametrize(
+    "ranges",
+    [
+        None,
+        "0:2",
+        [[0]],
+        [[0, 1, 2]],
+        [[True, 2]],
+        [[0, 1.0]],
+        [["0", 1]],
+        [[-1, 1]],
+        [[0, 0]],
+        [[1, 0]],
+        [[0, 3]],
+        [[0, 1], [0, 1]],
+        [[0, 2], [1, 2]],
+        [[1, 2], [0, 1]],
+        [[0, 1]] * 20_001,
+    ],
+)
+def test_v2_rejects_malformed_out_of_bounds_or_duplicate_ranges(ranges):
+    value = report({"cache.py": "abc"})
+    value["version"] = 2
+    value["files"][0]["selected"] = {"ranges": ranges}
+    assert audit_selection(value, value["inputs"])["status"] == "invalid"
+    value["files"][0]["selected"] = {"ranges": [], "unknown": []}
+    assert audit_selection(value, value["inputs"])["status"] == "invalid"
+
+
+def test_compact_ranges_keep_the_existing_inventory_ceiling():
+    value = report({"cache.py": "abc"})
+    value["version"] = 2
+    value["tests"] = [f"tests/test_local.py::test_{n}" for n in range(20_000)]
+    value["files"][0].update(executing={"ranges": [[0, 20_000]]}, selected=[])
+    assert audit_selection(value, value["inputs"])["omitted_execution_pairs"] == 20_000
+    value["tests"].append("tests/test_local.py::test_over_limit")
+    assert audit_selection(value, value["inputs"])["status"] == "invalid"
 
 
 def test_valid_long_parametrized_test_id_uses_the_aggregate_artifact_budget():

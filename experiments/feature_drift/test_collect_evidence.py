@@ -1,5 +1,6 @@
 """Real qualification collection plus refusal of unknown or changed evidence."""
 
+import copy
 import json
 import os
 import subprocess
@@ -13,9 +14,25 @@ import collect_evidence as collector  # noqa: E402
 import metrics  # noqa: E402
 
 from anaxigraph.analysis.ci_obligations import REPORT_PATH, audit_selection  # noqa: E402
+from anaxigraph.application import Application  # noqa: E402
 from anaxigraph.indexing import IndexSession  # noqa: E402
 
 TEST = "tests/test_lib.py::test_a"
+
+
+@pytest.mark.parametrize("selected", [[], [0], list(range(30)), [0, 2, 4, 7, 29]])
+def test_reference_encoder_chooses_only_a_smaller_lossless_representation(selected):
+    tests = [f"tests/test_lib.py::test_a[{n}]" for n in range(30)]
+    encoded = collector.references([tests[n] for n in selected], dict(zip(tests, range(30))))
+    if isinstance(encoded, dict):
+        decoded = [n for start, stop in encoded["ranges"] for n in range(start, stop)]
+        assert len(json.dumps(encoded, separators=(",", ":"))) < len(
+            json.dumps(selected, separators=(",", ":"))
+        )
+    else:
+        decoded = encoded
+        assert encoded == selected
+    assert decoded == selected
 
 
 @pytest.fixture
@@ -259,3 +276,65 @@ def test_canonical_refresh_keeps_last_valid_report_on_failure(candidate, monkeyp
         collector.write_report(candidate, output)
     assert output.read_bytes() == last_valid
     assert list(output.parent.iterdir()) == [output]
+
+
+def test_large_observation_fixture_is_published_and_read_by_the_runtime(candidate, monkeypatch):
+    """A scaled fixture exercises real file publication/read without running candidate code."""
+    tests = [f"tests/test_lib.py::test_a[{n}]" for n in range(2000)]
+    paths = ["lib.py", *[f"source_{n}.py" for n in range(99)]]
+    for path in paths:
+        (candidate / path).write_text("value = 1\n")
+    (candidate / "tests/test_lib.py").write_text(
+        "import pytest\n@pytest.mark.parametrize('case', range(2000))\n"
+        "def test_a(case):\n    assert case >= 0\n"
+    )
+    context = {"python": "synthetic-codec-fixture"}
+    monkeypatch.setattr(collector, "environment", lambda repo: context)
+    quality = {
+        "collection_complete": True,
+        "coverage_run": {"returncode": 0, "tests": 2000, "passed": 2000, "seconds": 1.0},
+        "tests_collected": 2000,
+        "selector": "ok",
+        "selector_failures": 0,
+        "mutants": {
+            "details": [{"file": "lib.py", "caught_by_suite": True, "caught_by_selection": True}]
+        },
+        "change_selection": {"selected_tests": tests},
+        "observations": {
+            "tests": tests,
+            "coverage_present": True,
+            "files": [{"path": path, "executing": tests, "selected": tests} for path in paths],
+        },
+    }
+    monkeypatch.setattr(metrics, "ci_quality", lambda *args, **kwargs: copy.deepcopy(quality))
+    output = candidate / REPORT_PATH
+    result = collector.quality_report(candidate, output, seed=1, mutants=1, changed=["lib.py"])
+    assert result["error"] is None
+    compact = json.loads(output.read_text())
+    legacy = copy.deepcopy(compact)
+    legacy["version"] = 1
+    for row in legacy["files"]:
+        row.update(executing=list(range(2000)), selected=list(range(2000)))
+    legacy["change_selection"]["selected_tests"] = list(range(2000))
+    assert len(json.dumps(legacy, separators=(",", ":")).encode()) > collector.MAX_BYTES
+    assert output.stat().st_size < collector.MAX_BYTES
+    assert compact == result["report"] and compact["version"] == 2
+    assert compact["tests"] == tests and len(compact["files"]) == len(paths)
+    assert compact["suite"] == legacy["suite"] and compact["faults"] == legacy["faults"]
+    fingerprints = collector.inventory(candidate)
+    expected = audit_selection(
+        legacy, fingerprints, context, require_suite=True, actual_changed_paths=["lib.py"]
+    )
+    assert expected["status"] == "reported_passed"
+    assert (
+        audit_selection(
+            compact, fingerprints, context, require_suite=True, actual_changed_paths=["lib.py"]
+        )
+        == expected
+    )
+    app = Application(candidate)
+    app.scan()
+    read = app.ci_plan(changed_paths=["lib.py"], runtime_context=context)["selection_evidence"]
+    assert read["status"] == "reported_passed"
+    assert read["tests_total"] == 2000 and read["files_total"] == 100
+    assert read["report_fingerprint"] == app._current().snapshot.files[REPORT_PATH]

@@ -249,6 +249,12 @@ selector to produce a compact `anaxigraph/ci-evidence.json` report. Optional `--
 repeated `--changed PATH` times full and selected checks on identical inputs. Use disposable copies
 to collect additional observations from historical code. Keep original trial results intact.
 
+Version 2 evidence retains every test identity and observation, encoding index sets as ordered,
+disjoint half-open `{"ranges": [[start, stop], ...]}` only when smaller than an index list.
+The runtime still accepts version 1 reports. The artifact limit remains 1 MB; the explicitly
+approved source budget increase from 13,500 to 13,526 lines covers the bounded decoder and
+decoding only relevant rows for batch selection, with unchanged safety and scoring semantics.
+
 The current protocol requires CI safety inside the coding loop. From the track's CI request onward (6 for Switchboard, 5 for the newer tracks), every arm
 gets the same external consumer/combined-change/fault verification and up to two fresh repair
 sessions (`--ci-repair-attempts 0..3`). The treatment also runs strict AnaxiGraph validation against

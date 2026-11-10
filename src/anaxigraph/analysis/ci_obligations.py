@@ -22,7 +22,31 @@ def _ids(value: Any) -> set[str]:
     return set(value)
 
 
-def _references(value: Any, tests: list[str]) -> set[str]:
+def _ranges(value: dict, tests: list[str]) -> set[str]:
+    """Decode ordered, disjoint half-open ranges within the bounded inventory."""
+    ranges = value.get("ranges")
+    if set(value) != {"ranges"} or not isinstance(ranges, list) or len(ranges) > 20_000:
+        raise ValueError("CI test ranges must be a bounded range list")
+    result: set[str] = set()
+    previous = 0
+    for pair in ranges:
+        if (
+            not isinstance(pair, list)
+            or len(pair) != 2
+            or any(type(index) is not int for index in pair)
+        ):
+            raise ValueError("CI test ranges need integer start and exclusive stop")
+        start, stop = pair
+        if not previous <= start < stop <= len(tests):
+            raise ValueError("CI test ranges must be ordered, disjoint and within the inventory")
+        result.update(tests[start:stop])
+        previous = stop
+    return result
+
+
+def _references(value: Any, tests: list[str], version: int) -> set[str]:
+    if isinstance(value, dict) and version == 2:
+        return _ranges(value, tests)
     if isinstance(value, list) and value and type(value[0]) is int:
         if len(value) > 20_000 or any(
             type(index) is not int or not 0 <= index < len(tests) for index in value
@@ -34,12 +58,12 @@ def _references(value: Any, tests: list[str]) -> set[str]:
     return _ids(value)
 
 
-def _file(row: Any, tests: list[str], inputs: dict) -> dict:
+def _file(row: Any, tests: list[str], inputs: dict, version: int) -> dict:
     if not isinstance(row, dict) or row.get("path") not in inputs:
         raise ValueError("CI observations must identify fingerprinted source inputs")
     observed, selected = (
-        _references(row.get("executing"), tests),
-        _references(row.get("selected"), tests),
+        _references(row.get("executing"), tests, version),
+        _references(row.get("selected"), tests, version),
     )
     if not (observed | selected) <= set(tests):
         raise ValueError("CI observations contain test IDs outside the supplied inventory")
@@ -51,8 +75,8 @@ def _file(row: Any, tests: list[str], inputs: dict) -> dict:
         if not isinstance(item, dict) or item.get("contract_path") not in inputs:
             raise ValueError("CI substitutions need a fingerprinted contract_path")
         if (
-            not _references(item.get("omitted"), tests) <= omitted
-            or not _references(item.get("replacements"), tests) <= selected
+            not _references(item.get("omitted"), tests, version) <= omitted
+            or not _references(item.get("replacements"), tests, version) <= selected
         ):
             raise ValueError("CI substitutions must reference omitted and selected tests")
     return {
@@ -139,7 +163,7 @@ def _observations(value: dict) -> list[dict]:
     raw = value.get("files")
     if not inventory or not isinstance(raw, list) or not 1 <= len(raw) <= 5000:
         raise ValueError("CI evidence needs nonempty test and source observations")
-    rows = [_file(row, value["tests"], value["inputs"]) for row in raw]
+    rows = [_file(row, value["tests"], value["inputs"], value["version"]) for row in raw]
     by_path = {row["path"]: row for row in rows}
     if len(by_path) != len(rows):
         raise ValueError("CI source observations must have distinct paths")
@@ -184,12 +208,10 @@ def _change_selection(value: dict, paths: list[str]) -> dict:
             "reason": "Actual changed paths differ; recollect batch selection.",
         }
     inventory = _ids(value["tests"])
-    selected = _references(batch.get("selected_tests"), value["tests"])
+    selected = _references(batch.get("selected_tests"), value["tests"], value["version"])
     if not selected <= inventory:
         raise ValueError("Actual selection contains tests outside the collected inventory")
-    observed = {
-        row["path"]: _references(row["executing"], value["tests"]) for row in value["files"]
-    }
+    observed = {row["path"]: row["executing"] for row in value["files"]}
     test_paths: dict[str, set[str]] = {}
     for test in inventory:
         test_paths.setdefault(test.partition("::")[0], set()).add(test)
@@ -198,7 +220,11 @@ def _change_selection(value: dict, paths: list[str]) -> dict:
         p for p in changed if not (p.startswith("docs/") or p.lower().endswith((".md", ".rst")))
     ]
     for path in relevant:
-        required.update(observed.get(path) or test_paths.get(path) or inventory)
+        required.update(
+            _references(observed.get(path, []), value["tests"], value["version"])
+            or test_paths.get(path)
+            or inventory
+        )
     omitted = required - selected
     return {
         "status": "reported_gap" if omitted else "reported_passed",
@@ -221,9 +247,9 @@ def _audit(
     if (
         not isinstance(value, dict)
         or type(value.get("version")) is not int
-        or value["version"] != 1
+        or value["version"] not in {1, 2}
     ):
-        raise ValueError("CI evidence must be a version 1 object")
+        raise ValueError("CI evidence must be a version 1 or 2 object")
     if value.get("inputs") != evidence_inputs(fingerprints):
         return {
             "status": "stale",

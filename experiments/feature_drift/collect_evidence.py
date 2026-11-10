@@ -78,11 +78,21 @@ def measure_diff(repo: Path, paths: list[str], tests: list[str]) -> dict:
     }
 
 
-def references(values: list[str], indices: dict[str, int]) -> list[int]:
+def references(values: list[str], indices: dict[str, int]) -> list[int] | dict:
+    """Use lossless half-open index ranges only when their JSON representation is smaller."""
     try:
-        return sorted({indices[value] for value in values})
+        selected = sorted({indices[value] for value in values})
     except KeyError as error:
         raise ValueError(f"Coverage or selection test ID was not collected: {error}") from error
+    ranges: list[list[int]] = []
+    for index in selected:
+        if ranges and ranges[-1][1] == index:
+            ranges[-1][1] = index + 1
+        else:
+            ranges.append([index, index + 1])
+    compact = {"ranges": ranges}
+    encoded = [json.dumps(value, separators=(",", ":")) for value in (selected, compact)]
+    return compact if len(encoded[1]) < len(encoded[0]) else selected
 
 
 def validate_shape(value: dict) -> None:
@@ -99,7 +109,7 @@ def report(repo: Path, changed: list[str] | None = None, *, measure_timings: boo
     # Validate format before costly execution; this probe is discarded, never evidence.
     validate_shape(
         {
-            "version": 1,
+            "version": 2,
             "inputs": inputs,
             "environment": runtime,
             "tests": tests,
@@ -146,7 +156,7 @@ def report(repo: Path, changed: list[str] | None = None, *, measure_timings: boo
     if inputs != inventory(repo) or runtime != environment(repo):
         raise ValueError("Candidate inputs or environment changed during evidence collection")
     value = {
-        "version": 1,
+        "version": 2,
         "inputs": inputs,
         "environment": runtime,
         "tests": tests,
@@ -247,7 +257,7 @@ def quality_report(
         tests = observed["tests"]
         indices = {test: n for n, test in enumerate(tests)}
         value = {
-            "version": 1,
+            "version": 2,
             "inputs": inputs,
             "environment": context,
             "tests": tests,
