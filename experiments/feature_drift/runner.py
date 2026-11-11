@@ -196,6 +196,19 @@ def codex_argv(config, repo: Path, with_anaxigraph: bool) -> list[str]:
     ]  # fmt: skip
 
 
+def benchmark_private_roots(state: Path, runtime: Path, explicit: list[Path]) -> tuple[str, ...]:
+    """Keep every explicit deny; do not add covered coordinator roots as nested masks."""
+    requested = {path.resolve() for path in explicit}
+    automatic = [state.resolve(), HERE.parent.parent.resolve()]
+    runtime = runtime.resolve()
+    if runtime.parent.name == "bin" and runtime.parent.parent.name == ".venv":
+        automatic.append(runtime.parent.parent.parent)
+    private = requested | {
+        path for path in automatic if not any(path.is_relative_to(parent) for parent in requested)
+    }
+    return tuple(sorted(map(str, private)))
+
+
 def summarize_events(raw: str) -> dict:
     usage = {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
     counts: dict[str, int] = {}
@@ -1454,11 +1467,9 @@ def main() -> None:
     if config.state is None:
         parser.error("--state is required for benchmark execution")
     config.state = config.state.resolve()
-    private = [config.state, HERE.parent.parent, *config.private_root]
-    resolved_runtime = config.runtime.resolve()
-    if resolved_runtime.parent.name == "bin" and resolved_runtime.parent.parent.name == ".venv":
-        private.append(resolved_runtime.parent.parent.parent)
-    config.private_roots = tuple(sorted({str(path.resolve()) for path in private}))
+    config.private_roots = benchmark_private_roots(
+        config.state, config.runtime, config.private_root
+    )
     configure_track(track)
     config.agent_timeout = float(config.agent_timeout or scenarios.layout(track)["agent_timeout"])
     config.scenario = scenarios.requirements(track)

@@ -195,3 +195,22 @@ def test_same_private_paths_reach_each_arm_and_preflight(fake_executor, tmp_path
     receipt = executor_policy.preflight(private)
     assert all(receipt["policy"]["filesystem"][str(path)] == "deny" for path in private)
     assert receipt["checks"]["private_read_denied"]
+
+
+def test_only_automatic_covered_roots_are_omitted_and_explicit_children_remain(
+    tmp_path, monkeypatch
+):
+    operations, state = tmp_path / "operations", tmp_path / "state"
+    frozen = operations / "frozen"
+    monkeypatch.setattr(runner, "HERE", frozen / "experiments/feature_drift")
+    explicit = [operations, state, state / "candidate/repo/private", tmp_path / "operations-other"]
+    selected = runner.benchmark_private_roots(
+        state / "pilot", frozen / ".venv/bin/anaxigraph", explicit
+    )
+    assert set(selected) == {str(path) for path in explicit}
+    assert str(frozen) not in selected and str(state / "pilot") not in selected
+    assert executor_policy.policy(selected)["filesystem"][str(explicit[2])] == "deny"
+    configured = tomllib.loads(
+        "profile=" + executor_policy.settings(selected)["permissions.drift-local"]
+    )["profile"]["filesystem"]
+    assert all(configured[str(path)] == "deny" for path in explicit)
