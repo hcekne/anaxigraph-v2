@@ -162,9 +162,10 @@ initial design choices, different generated tests and stochastic variation also 
 - Reduce stale-request loops and repetitive context, then measure whether concrete advice
   changes implementation rather than counting compliant tool calls.
 
-The next comparative run is AetherLoom, one repetition per condition: three runs total.
-It is a pilot of the fixed product, with the same tasks, model, effort and safety criteria
-across conditions. Its results must remain separate from these historical results.
+The subsequent [AetherLoom pilot](aetherloom-pilot-results-2026-11-11.md) used one repetition
+per condition: three runs total. It tested the fixed product with the same tasks, model,
+effort and safety criteria across conditions. Its results remain separate from these
+historical results.
 
 ## Evidence limits
 

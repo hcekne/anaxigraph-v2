@@ -28,6 +28,8 @@ state. The drafts remain the origin; `track.json` lists every adaptation, includ
 
 The [completed ChronoWeave exploratory results](../../../docs/chronoweave-exploratory-results-2026-11-11.md)
 record all nine runs, initial safety failures, repairs, costs and limitations.
+The [AetherLoom pilot results](../../../docs/aetherloom-pilot-results-2026-11-11.md)
+record one run per condition; all three stopped before completing the request sequence.
 
 Inspect, export or run:
 

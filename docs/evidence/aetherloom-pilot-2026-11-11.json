@@ -1,0 +1,1874 @@
+{
+  "kind": "aetherloom-one-replicate-terminal-aggregate-v1",
+  "generated_utc": "2026-11-11T11:07:42.213778+00:00",
+  "verdict": "terminal-unqualified; no completed-history comparison or winner established",
+  "protocol": {
+    "track": "aetherloom-v1",
+    "replicates_per_condition": 1,
+    "conditions": [
+      "bare",
+      "charter",
+      "anaxigraph"
+    ],
+    "requests_per_condition": 21,
+    "request_numbering": "0..20",
+    "coding_model": "gpt-6.1-sol",
+    "coding_effort": "high",
+    "coding_cli": "codex-cli 0.166.0",
+    "source_commit": "288713e2c491096bebc311803709f4dd15902d78",
+    "harness_sha256": "41fafaa9b1b1f7e7293472fec103c4b012f71f1fb4ef31af845f87e58cc1e1b5",
+    "scenario_identity": {
+      "id": "aetherloom",
+      "version": 1,
+      "scenario_sha256": "ec845f58b6372040128a475d1979390fb5b0aa72cca5e359b5c675cb92f9d6ec",
+      "requests_sha256": "0185a3ab47a41753b0ca7fcb6a1ca91aaf6171b94c8c5bc2ea06456305b60a6d",
+      "oracle_sha256": "0727623e3e533d25cd393fc7f097d4be5b05ca32c46d9e4af4ce1c515856217c"
+    },
+    "runtime_source_ci_run": 42960797693,
+    "repairs_per_failed_checkpoint": 2,
+    "reference_coverage_deadline_seconds": 3600,
+    "fault_deadline_seconds": 900,
+    "coding_deadline_seconds": 7200,
+    "scheduled_pattern_review_steps": [
+      6,
+      11,
+      16
+    ],
+    "fresh_eyes_scheduled": false,
+    "analysis_profiles": "Product defaults: cheap Luna/low first, stronger fallbacks; detail Sol/medium with Sol/xhigh fallback."
+  },
+  "campaign": {
+    "qualified_checkpoints": 35,
+    "attempted_unqualified_checkpoints": 3,
+    "unattempted_checkpoints": 25,
+    "planned_checkpoints": 63,
+    "completed_histories": 0,
+    "terminal_conditions": 3,
+    "wall_seconds": 22368.419129371643,
+    "start_utc": "2026-11-11T04:47:26.783526+00:00",
+    "end_utc": "2026-11-11T11:00:15.202656+00:00",
+    "runner_returncode": 1,
+    "report_returncode": 0
+  },
+  "arms": {
+    "bare": {
+      "qualified_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "terminal_attempted_step": 15,
+      "terminal_reason": "blocked-quality-repair-budget-exhausted",
+      "unattempted_steps": [
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "terminal_gate": {
+        "status": "incomplete",
+        "failures": [],
+        "incomplete": [
+          "Complete successful coverage, selector and nonempty suite evidence required",
+          "Positive fully verified caught-mutant evidence required"
+        ]
+      },
+      "terminal_own_suite": {
+        "returncode": 1,
+        "tests": 3442,
+        "passed": 3440,
+        "seconds": 608.9
+      },
+      "terminal_hidden": {
+        "passed": 82,
+        "total": 82
+      },
+      "terminal_single_source_selection": {
+        "reference_baseline_complete": false,
+        "observed_recall": null,
+        "raw_reported_recall": 1.0,
+        "raw_omitted_source_test_pairs": 0,
+        "selector_qualified": false,
+        "test_population": 3442,
+        "mean_selected_tests": 1745.5,
+        "mean_selected_fraction": 0.5071,
+        "reference_suite_seconds": 608.9,
+        "sampled_faults": {
+          "planted": 0,
+          "caught_by_suite": 0,
+          "missed_by_selection": 0,
+          "unverified": 0,
+          "skipped": "Baseline suite did not pass; faults are not injected into failing source"
+        }
+      },
+      "terminal_whole_actual_diff_selection": {
+        "status": "passed",
+        "selected_count": 3442,
+        "required_count": 3442,
+        "omitted_count": 0,
+        "reference_baseline_complete": false
+      },
+      "first_attempt_gate_counts_all_attempted_ci_steps": {
+        "passed": 7,
+        "failed": 4
+      },
+      "probes": [
+        {
+          "probe": "P1",
+          "step": 7,
+          "status": "passed",
+          "checkpoint_accepted": true,
+          "behavior_passed": true,
+          "recorded_probe_id": "P1",
+          "result": {
+            "passed": 5,
+            "total": 5
+          }
+        },
+        {
+          "probe": "P2",
+          "step": 14,
+          "status": "passed",
+          "checkpoint_accepted": true,
+          "behavior_passed": true,
+          "recorded_probe_id": "P2",
+          "result": {
+            "passed": 6,
+            "total": 6
+          }
+        },
+        {
+          "probe": "P3",
+          "step": 20,
+          "status": "unattempted",
+          "behavior_passed": null,
+          "checkpoint_accepted": false
+        }
+      ],
+      "all_incurred_recorded_costs": {
+        "scope": "Rows plus previously unowned cost fragments, counted once",
+        "accepted_checkpoints": 15,
+        "pending_checkpoints": 1,
+        "coding_seconds": 12398.0,
+        "known_coding_seconds": 12398.0,
+        "coding_duration_unknown_sessions": 0,
+        "tokens": {
+          "input_tokens": 33835985,
+          "cached_input_tokens": 32730624,
+          "output_tokens": 341902
+        },
+        "known_tokens": {
+          "input_tokens": 33835985,
+          "cached_input_tokens": 32730624,
+          "output_tokens": 341902
+        },
+        "coding_usage_unknown_sessions": 0,
+        "verification_seconds": 9963.153302379418,
+        "known_verification_seconds": 9963.153302379418,
+        "verification_unknown_checkpoints": 0,
+        "recorded_analysis_seconds": 0
+      },
+      "matched_checkpoints": {
+        "5": {
+          "request": 5,
+          "state": "accepted",
+          "cumulative_costs_0_through_request": {
+            "coding_seconds": 2088.6,
+            "analysis_seconds_including_validation": 0,
+            "validation_seconds_subset_already_in_analysis": 0.0,
+            "verification_seconds": 154.75576857011765,
+            "coding_sessions": 6,
+            "known_coding_tokens": {
+              "input_tokens": 3508951,
+              "cached_input_tokens": 3300992,
+              "output_tokens": 88765
+            },
+            "all_duration_and_usage_streams_known": true
+          },
+          "hidden_behavior_xml": {
+            "total": 32,
+            "failed": 0,
+            "skipped": 0,
+            "passed": 32
+          },
+          "initial_gate": {
+            "status": "passed",
+            "failures": [],
+            "incomplete": []
+          },
+          "final_gate": {
+            "status": "passed",
+            "failures": [],
+            "incomplete": []
+          },
+          "attempt_count": 1,
+          "repair_count": 0,
+          "attempts": [
+            {
+              "number": 0,
+              "gate": {
+                "status": "passed",
+                "failures": [],
+                "incomplete": []
+              },
+              "coding_seconds": 442.1,
+              "verification_seconds": 88.23618606524542,
+              "own_returncode": 0,
+              "own_passed": 580,
+              "own_seconds": 35.7,
+              "omitted_pairs": 0,
+              "recall": 1.0,
+              "faults_planted": 10,
+              "faults_reference_caught": 8,
+              "faults_selected_caught": 8,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            }
+          ],
+          "structural_proxies": {
+            "prod_files": 14,
+            "prod_loc": 1026,
+            "test_files": 6,
+            "test_loc": 1768,
+            "largest_module_loc": 270,
+            "functions": 89,
+            "max_function_lines": 111,
+            "mean_function_lines": 10.72,
+            "max_complexity": 33,
+            "functions_over_complexity_10": 5,
+            "import_cycles": 0,
+            "modules_in_cycles": 0,
+            "mean_fan_out": 1.64,
+            "max_fan_in": 5,
+            "duplication": 0.0
+          },
+          "change_surface": {
+            "prod_added_files": 2,
+            "prod_modified_files": 0,
+            "prod_deleted_files": 0,
+            "test_files_touched": 3,
+            "other_files_touched": 2,
+            "prod_lines_added": 131,
+            "prod_lines_deleted": 0,
+            "test_lines_added": 245,
+            "test_lines_deleted": 27
+          },
+          "selection": {
+            "raw_test_population": 580,
+            "canonical_test_population": 580,
+            "source_files_measured": 14,
+            "mean_selected_canonical_tests_per_source": 498.64285714285717,
+            "mean_selected_fraction_exact": 0.859729064039409,
+            "reported_fraction_rounded": 0.8597,
+            "executing_recall": 1.0,
+            "omitted_observed_consumer_pairs": 0,
+            "per_source_qualification": "observed_complete",
+            "whole_actual_diff_selection": {
+              "status": "passed",
+              "selected_canonical_tests": 580,
+              "required_canonical_tests": 580,
+              "omitted_tests": 0,
+              "selected_fraction_of_canonical_population": 1.0,
+              "selector_seconds": 0.032616838812828064
+            },
+            "full_reference_suite_seconds": 35.7
+          }
+        },
+        "6": {
+          "request": 6,
+          "state": "accepted",
+          "cumulative_costs_0_through_request": {
+            "coding_seconds": 2591.4,
+            "analysis_seconds_including_validation": 0,
+            "validation_seconds_subset_already_in_analysis": 0.0,
+            "verification_seconds": 463.43792449263856,
+            "coding_sessions": 8,
+            "known_coding_tokens": {
+              "input_tokens": 4672147,
+              "cached_input_tokens": 4369152,
+              "output_tokens": 109080
+            },
+            "all_duration_and_usage_streams_known": true
+          },
+          "hidden_behavior_xml": {
+            "total": 38,
+            "failed": 0,
+            "skipped": 0,
+            "passed": 38
+          },
+          "initial_gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": []
+          },
+          "final_gate": {
+            "status": "passed",
+            "failures": [],
+            "incomplete": []
+          },
+          "attempt_count": 2,
+          "repair_count": 1,
+          "attempts": [
+            {
+              "number": 0,
+              "gate": {
+                "status": "failed",
+                "failures": [
+                  "Observed consumers or reference-detected faults omitted"
+                ],
+                "incomplete": []
+              },
+              "coding_seconds": 361.3,
+              "verification_seconds": 170.30624686786905,
+              "own_returncode": 0,
+              "own_passed": 837,
+              "own_seconds": 57.7,
+              "omitted_pairs": 31,
+              "recall": 0.9939,
+              "faults_planted": 10,
+              "faults_reference_caught": 10,
+              "faults_selected_caught": 10,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            },
+            {
+              "number": 1,
+              "gate": {
+                "status": "passed",
+                "failures": [],
+                "incomplete": []
+              },
+              "coding_seconds": 141.5,
+              "verification_seconds": 138.37590905465186,
+              "own_returncode": 0,
+              "own_passed": 988,
+              "own_seconds": 65.5,
+              "omitted_pairs": 0,
+              "recall": 1.0,
+              "faults_planted": 10,
+              "faults_reference_caught": 10,
+              "faults_selected_caught": 10,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            }
+          ],
+          "structural_proxies": {
+            "prod_files": 16,
+            "prod_loc": 1217,
+            "test_files": 8,
+            "test_loc": 2138,
+            "largest_module_loc": 270,
+            "functions": 105,
+            "max_function_lines": 111,
+            "mean_function_lines": 10.72,
+            "max_complexity": 33,
+            "functions_over_complexity_10": 4,
+            "import_cycles": 0,
+            "modules_in_cycles": 0,
+            "mean_fan_out": 1.94,
+            "max_fan_in": 6,
+            "duplication": 0.0
+          },
+          "change_surface": {
+            "prod_added_files": 2,
+            "prod_modified_files": 3,
+            "prod_deleted_files": 0,
+            "test_files_touched": 4,
+            "other_files_touched": 2,
+            "prod_lines_added": 241,
+            "prod_lines_deleted": 9,
+            "test_lines_added": 453,
+            "test_lines_deleted": 5
+          },
+          "selection": {
+            "raw_test_population": 988,
+            "canonical_test_population": 988,
+            "source_files_measured": 16,
+            "mean_selected_canonical_tests_per_source": 767.8125,
+            "mean_selected_fraction_exact": 0.7771381578947368,
+            "reported_fraction_rounded": 0.7771,
+            "executing_recall": 1.0,
+            "omitted_observed_consumer_pairs": 0,
+            "per_source_qualification": "observed_complete",
+            "whole_actual_diff_selection": {
+              "status": "passed",
+              "selected_canonical_tests": 988,
+              "required_canonical_tests": 988,
+              "omitted_tests": 0,
+              "selected_fraction_of_canonical_population": 1.0,
+              "selector_seconds": 0.03255712799727917
+            },
+            "full_reference_suite_seconds": 65.5
+          }
+        }
+      },
+      "native_attempt_summary": {
+        "count": 17,
+        "gate_statuses": {
+          "passed": 10,
+          "failed": 5,
+          "incomplete": 2
+        },
+        "reference_fault_unknowns": 0,
+        "reference_fault_not_caught": 4,
+        "sampled_faults": {
+          "planted": 150,
+          "caught_by_suite": 146,
+          "missed_by_selection": 0,
+          "unverified": 0
+        },
+        "fault_sampling_skipped_after_failed_reference": 2
+      },
+      "terminal_native_attempts": [
+        {
+          "step": 15,
+          "attempt": 0,
+          "gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": []
+          },
+          "coverage_returncode": 0,
+          "hidden": {
+            "passed": 82,
+            "total": 82
+          },
+          "own_suite": {
+            "returncode": 0,
+            "tests": 2397,
+            "passed": 2397,
+            "seconds": 767.3
+          },
+          "coverage_seconds": 767.3,
+          "omitted_pairs": 145,
+          "recall": 0.9878,
+          "reference_baseline_complete": true,
+          "faults": {
+            "planted": 10,
+            "caught_by_suite": 10,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "skipped": null
+          },
+          "reference_fault_unknowns": 0,
+          "verification_seconds": 1176.120026054792
+        },
+        {
+          "step": 15,
+          "attempt": 1,
+          "gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": []
+          },
+          "coverage_returncode": 0,
+          "hidden": {
+            "passed": 82,
+            "total": 82
+          },
+          "own_suite": {
+            "returncode": 0,
+            "tests": 3388,
+            "passed": 3388,
+            "seconds": 594.3
+          },
+          "coverage_seconds": 594.3,
+          "omitted_pairs": 1,
+          "recall": 0.9999,
+          "reference_baseline_complete": true,
+          "faults": {
+            "planted": 10,
+            "caught_by_suite": 10,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "skipped": null
+          },
+          "reference_fault_unknowns": 0,
+          "verification_seconds": 1087.1346155512147
+        },
+        {
+          "step": 15,
+          "attempt": 2,
+          "gate": {
+            "status": "incomplete",
+            "failures": [],
+            "incomplete": [
+              "Complete successful coverage, selector and nonempty suite evidence required",
+              "Positive fully verified caught-mutant evidence required"
+            ]
+          },
+          "coverage_returncode": 1,
+          "hidden": {
+            "passed": 82,
+            "total": 82
+          },
+          "own_suite": {
+            "returncode": 1,
+            "tests": 3442,
+            "passed": 3440,
+            "seconds": 608.9
+          },
+          "coverage_seconds": 608.9,
+          "omitted_pairs": 0,
+          "recall": 1.0,
+          "reference_baseline_complete": false,
+          "faults": {
+            "planted": 0,
+            "caught_by_suite": 0,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "skipped": "Baseline suite did not pass; faults are not injected into failing source"
+          },
+          "reference_fault_unknowns": 0,
+          "verification_seconds": 645.2924114749767
+        }
+      ],
+      "integrity": {
+        "issues": 0,
+        "fingerprints_checked": {
+          "baseline_input": 518,
+          "frozen_test": 94,
+          "ci_input": 438,
+          "pending_baseline_input": 52,
+          "pending_frozen_test": 9
+        },
+        "open_coding_journals": 0,
+        "mutation_journal_exists": false,
+        "index_lock_exists": false
+      }
+    },
+    "charter": {
+      "qualified_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "terminal_attempted_step": 14,
+      "terminal_reason": "blocked-quality-repair-budget-exhausted",
+      "unattempted_steps": [
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "terminal_gate": {
+        "status": "failed",
+        "failures": [
+          "Observed consumers or reference-detected faults omitted"
+        ],
+        "incomplete": []
+      },
+      "terminal_own_suite": {
+        "returncode": 0,
+        "tests": 1766,
+        "passed": 1766,
+        "seconds": 236.8
+      },
+      "terminal_hidden": {
+        "passed": 78,
+        "total": 78
+      },
+      "terminal_single_source_selection": {
+        "reference_baseline_complete": true,
+        "observed_recall": 0.9979,
+        "raw_reported_recall": 0.9979,
+        "raw_omitted_source_test_pairs": 24,
+        "selector_qualified": false,
+        "test_population": 1766,
+        "mean_selected_tests": 1250.3170731707316,
+        "mean_selected_fraction": 0.708,
+        "reference_suite_seconds": 236.8,
+        "sampled_faults": {
+          "planted": 10,
+          "caught_by_suite": 10,
+          "missed_by_selection": 0,
+          "unverified": 0,
+          "skipped": null
+        }
+      },
+      "terminal_whole_actual_diff_selection": {
+        "status": "passed",
+        "selected_count": 1766,
+        "required_count": 1158,
+        "omitted_count": 0,
+        "reference_baseline_complete": true
+      },
+      "first_attempt_gate_counts_all_attempted_ci_steps": {
+        "failed": 3,
+        "passed": 6,
+        "incomplete": 1
+      },
+      "probes": [
+        {
+          "probe": "P1",
+          "step": 7,
+          "status": "passed",
+          "checkpoint_accepted": true,
+          "behavior_passed": true,
+          "recorded_probe_id": "P1",
+          "result": {
+            "passed": 5,
+            "total": 5
+          }
+        },
+        {
+          "probe": "P2",
+          "step": 14,
+          "status": "executed-unqualified",
+          "checkpoint_accepted": false,
+          "behavior_passed": true,
+          "recorded_probe_id": "P2",
+          "result": {
+            "passed": 6,
+            "total": 6
+          }
+        },
+        {
+          "probe": "P3",
+          "step": 20,
+          "status": "unattempted",
+          "behavior_passed": null,
+          "checkpoint_accepted": false
+        }
+      ],
+      "all_incurred_recorded_costs": {
+        "scope": "Rows plus previously unowned cost fragments, counted once",
+        "accepted_checkpoints": 14,
+        "pending_checkpoints": 1,
+        "coding_seconds": 10401.5,
+        "known_coding_seconds": 10401.5,
+        "coding_duration_unknown_sessions": 0,
+        "tokens": {
+          "input_tokens": 20493188,
+          "cached_input_tokens": 19373568,
+          "output_tokens": 352731
+        },
+        "known_tokens": {
+          "input_tokens": 20493188,
+          "cached_input_tokens": 19373568,
+          "output_tokens": 352731
+        },
+        "coding_usage_unknown_sessions": 0,
+        "verification_seconds": 6293.528733658139,
+        "known_verification_seconds": 6293.528733658139,
+        "verification_unknown_checkpoints": 0,
+        "recorded_analysis_seconds": 0
+      },
+      "matched_checkpoints": {
+        "5": {
+          "request": 5,
+          "state": "accepted",
+          "cumulative_costs_0_through_request": {
+            "coding_seconds": 3220.9,
+            "analysis_seconds_including_validation": 0,
+            "validation_seconds_subset_already_in_analysis": 0.0,
+            "verification_seconds": 322.4426200068556,
+            "coding_sessions": 8,
+            "known_coding_tokens": {
+              "input_tokens": 4836601,
+              "cached_input_tokens": 4512512,
+              "output_tokens": 131773
+            },
+            "all_duration_and_usage_streams_known": true
+          },
+          "hidden_behavior_xml": {
+            "total": 32,
+            "failed": 0,
+            "skipped": 0,
+            "passed": 32
+          },
+          "initial_gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": []
+          },
+          "final_gate": {
+            "status": "passed",
+            "failures": [],
+            "incomplete": []
+          },
+          "attempt_count": 3,
+          "repair_count": 2,
+          "attempts": [
+            {
+              "number": 0,
+              "gate": {
+                "status": "failed",
+                "failures": [
+                  "Observed consumers or reference-detected faults omitted"
+                ],
+                "incomplete": []
+              },
+              "coding_seconds": 554.7,
+              "verification_seconds": 106.85509893298149,
+              "own_returncode": 0,
+              "own_passed": 606,
+              "own_seconds": 22.5,
+              "omitted_pairs": 44,
+              "recall": 0.9813,
+              "faults_planted": 10,
+              "faults_reference_caught": 9,
+              "faults_selected_caught": 9,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            },
+            {
+              "number": 1,
+              "gate": {
+                "status": "incomplete",
+                "failures": [],
+                "incomplete": [
+                  "Complete successful coverage, selector and nonempty suite evidence required",
+                  "Positive fully verified caught-mutant evidence required"
+                ]
+              },
+              "coding_seconds": 319.8,
+              "verification_seconds": 44.93084434000775,
+              "own_returncode": 1,
+              "own_passed": 639,
+              "own_seconds": 26.2,
+              "omitted_pairs": 0,
+              "recall": 1.0,
+              "faults_planted": 0,
+              "faults_reference_caught": 0,
+              "faults_selected_caught": 0,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            },
+            {
+              "number": 2,
+              "gate": {
+                "status": "passed",
+                "failures": [],
+                "incomplete": []
+              },
+              "coding_seconds": 170.9,
+              "verification_seconds": 117.92959696426988,
+              "own_returncode": 0,
+              "own_passed": 652,
+              "own_seconds": 27.7,
+              "omitted_pairs": 0,
+              "recall": 1.0,
+              "faults_planted": 10,
+              "faults_reference_caught": 9,
+              "faults_selected_caught": 9,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            }
+          ],
+          "structural_proxies": {
+            "prod_files": 23,
+            "prod_loc": 1151,
+            "test_files": 17,
+            "test_loc": 2421,
+            "largest_module_loc": 280,
+            "functions": 109,
+            "max_function_lines": 100,
+            "mean_function_lines": 9.27,
+            "max_complexity": 30,
+            "functions_over_complexity_10": 5,
+            "import_cycles": 0,
+            "modules_in_cycles": 0,
+            "mean_fan_out": 1.43,
+            "max_fan_in": 6,
+            "duplication": 0.0
+          },
+          "change_surface": {
+            "prod_added_files": 1,
+            "prod_modified_files": 1,
+            "prod_deleted_files": 0,
+            "test_files_touched": 15,
+            "other_files_touched": 2,
+            "prod_lines_added": 151,
+            "prod_lines_deleted": 37,
+            "test_lines_added": 1070,
+            "test_lines_deleted": 740
+          },
+          "selection": {
+            "raw_test_population": 652,
+            "canonical_test_population": 652,
+            "source_files_measured": 23,
+            "mean_selected_canonical_tests_per_source": 476.4782608695652,
+            "mean_selected_fraction_exact": 0.7307948786343025,
+            "reported_fraction_rounded": 0.7308,
+            "executing_recall": 1.0,
+            "omitted_observed_consumer_pairs": 0,
+            "per_source_qualification": "observed_complete",
+            "whole_actual_diff_selection": {
+              "status": "passed",
+              "selected_canonical_tests": 652,
+              "required_canonical_tests": 652,
+              "omitted_tests": 0,
+              "selected_fraction_of_canonical_population": 1.0,
+              "selector_seconds": 0.03248609835281968
+            },
+            "full_reference_suite_seconds": 27.7
+          }
+        },
+        "6": {
+          "request": 6,
+          "state": "accepted",
+          "cumulative_costs_0_through_request": {
+            "coding_seconds": 3736.8,
+            "analysis_seconds_including_validation": 0,
+            "validation_seconds_subset_already_in_analysis": 0.0,
+            "verification_seconds": 454.1311342357658,
+            "coding_sessions": 9,
+            "known_coding_tokens": {
+              "input_tokens": 5562170,
+              "cached_input_tokens": 5192192,
+              "output_tokens": 152517
+            },
+            "all_duration_and_usage_streams_known": true
+          },
+          "hidden_behavior_xml": {
+            "total": 38,
+            "failed": 0,
+            "skipped": 0,
+            "passed": 38
+          },
+          "initial_gate": {
+            "status": "passed",
+            "failures": [],
+            "incomplete": []
+          },
+          "final_gate": {
+            "status": "passed",
+            "failures": [],
+            "incomplete": []
+          },
+          "attempt_count": 1,
+          "repair_count": 0,
+          "attempts": [
+            {
+              "number": 0,
+              "gate": {
+                "status": "passed",
+                "failures": [],
+                "incomplete": []
+              },
+              "coding_seconds": 515.9,
+              "verification_seconds": 131.6885142289102,
+              "own_returncode": 0,
+              "own_passed": 891,
+              "own_seconds": 34.3,
+              "omitted_pairs": 0,
+              "recall": 1.0,
+              "faults_planted": 10,
+              "faults_reference_caught": 10,
+              "faults_selected_caught": 10,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            }
+          ],
+          "structural_proxies": {
+            "prod_files": 28,
+            "prod_loc": 1349,
+            "test_files": 23,
+            "test_loc": 2823,
+            "largest_module_loc": 280,
+            "functions": 140,
+            "max_function_lines": 122,
+            "mean_function_lines": 8.71,
+            "max_complexity": 30,
+            "functions_over_complexity_10": 6,
+            "import_cycles": 0,
+            "modules_in_cycles": 0,
+            "mean_fan_out": 1.39,
+            "max_fan_in": 10,
+            "duplication": 0.0
+          },
+          "change_surface": {
+            "prod_added_files": 5,
+            "prod_modified_files": 6,
+            "prod_deleted_files": 0,
+            "test_files_touched": 7,
+            "other_files_touched": 1,
+            "prod_lines_added": 281,
+            "prod_lines_deleted": 6,
+            "test_lines_added": 506,
+            "test_lines_deleted": 1
+          },
+          "selection": {
+            "raw_test_population": 891,
+            "canonical_test_population": 891,
+            "source_files_measured": 28,
+            "mean_selected_canonical_tests_per_source": 651.9285714285714,
+            "mean_selected_fraction_exact": 0.731681898348565,
+            "reported_fraction_rounded": 0.7317,
+            "executing_recall": 1.0,
+            "omitted_observed_consumer_pairs": 0,
+            "per_source_qualification": "observed_complete",
+            "whole_actual_diff_selection": {
+              "status": "passed",
+              "selected_canonical_tests": 891,
+              "required_canonical_tests": 590,
+              "omitted_tests": 0,
+              "selected_fraction_of_canonical_population": 1.0,
+              "selector_seconds": 0.032528544776141644
+            },
+            "full_reference_suite_seconds": 34.3
+          }
+        }
+      },
+      "native_attempt_summary": {
+        "count": 17,
+        "gate_statuses": {
+          "failed": 6,
+          "incomplete": 2,
+          "passed": 9
+        },
+        "reference_fault_unknowns": 2,
+        "reference_fault_not_caught": 9,
+        "sampled_faults": {
+          "planted": 160,
+          "caught_by_suite": 149,
+          "missed_by_selection": 0,
+          "unverified": 2
+        },
+        "fault_sampling_skipped_after_failed_reference": 1
+      },
+      "terminal_native_attempts": [
+        {
+          "step": 14,
+          "attempt": 0,
+          "gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": [
+              "Positive fully verified caught-mutant evidence required"
+            ]
+          },
+          "coverage_returncode": 0,
+          "hidden": {
+            "passed": 78,
+            "total": 78
+          },
+          "own_suite": {
+            "returncode": 0,
+            "tests": 1734,
+            "passed": 1734,
+            "seconds": 235.5
+          },
+          "coverage_seconds": 235.5,
+          "omitted_pairs": 24,
+          "recall": 0.9979,
+          "reference_baseline_complete": true,
+          "faults": {
+            "planted": 10,
+            "caught_by_suite": 9,
+            "missed_by_selection": 0,
+            "unverified": 1,
+            "skipped": null
+          },
+          "reference_fault_unknowns": 1,
+          "verification_seconds": 425.1667357739061
+        },
+        {
+          "step": 14,
+          "attempt": 1,
+          "gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": []
+          },
+          "coverage_returncode": 0,
+          "hidden": {
+            "passed": 78,
+            "total": 78
+          },
+          "own_suite": {
+            "returncode": 0,
+            "tests": 1766,
+            "passed": 1766,
+            "seconds": 226.1
+          },
+          "coverage_seconds": 226.1,
+          "omitted_pairs": 24,
+          "recall": 0.9979,
+          "reference_baseline_complete": true,
+          "faults": {
+            "planted": 10,
+            "caught_by_suite": 10,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "skipped": null
+          },
+          "reference_fault_unknowns": 0,
+          "verification_seconds": 746.7545160003938
+        },
+        {
+          "step": 14,
+          "attempt": 2,
+          "gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": []
+          },
+          "coverage_returncode": 0,
+          "hidden": {
+            "passed": 78,
+            "total": 78
+          },
+          "own_suite": {
+            "returncode": 0,
+            "tests": 1766,
+            "passed": 1766,
+            "seconds": 236.8
+          },
+          "coverage_seconds": 236.8,
+          "omitted_pairs": 24,
+          "recall": 0.9979,
+          "reference_baseline_complete": true,
+          "faults": {
+            "planted": 10,
+            "caught_by_suite": 10,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "skipped": null
+          },
+          "reference_fault_unknowns": 0,
+          "verification_seconds": 773.3337921127677
+        }
+      ],
+      "integrity": {
+        "issues": 0,
+        "fingerprints_checked": {
+          "baseline_input": 782,
+          "frozen_test": 281,
+          "ci_input": 706,
+          "pending_baseline_input": 111,
+          "pending_frozen_test": 55,
+          "pending_ci_input": 120
+        },
+        "open_coding_journals": 0,
+        "mutation_journal_exists": false,
+        "index_lock_exists": false
+      }
+    },
+    "anaxigraph": {
+      "qualified_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "terminal_attempted_step": 6,
+      "terminal_reason": "blocked-quality-repair-budget-exhausted",
+      "unattempted_steps": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "terminal_gate": {
+        "status": "failed",
+        "failures": [
+          "Observed consumers or reference-detected faults omitted"
+        ],
+        "incomplete": [
+          "Fresh AnaxiGraph validation did not qualify completion"
+        ]
+      },
+      "terminal_own_suite": {
+        "returncode": 0,
+        "tests": 1163,
+        "passed": 1163,
+        "seconds": 74.2
+      },
+      "terminal_hidden": {
+        "passed": 38,
+        "total": 38
+      },
+      "terminal_single_source_selection": {
+        "reference_baseline_complete": true,
+        "observed_recall": 0.835,
+        "raw_reported_recall": 0.835,
+        "raw_omitted_source_test_pairs": 1085,
+        "selector_qualified": false,
+        "test_population": 1163,
+        "mean_selected_tests": 775.6071428571429,
+        "mean_selected_fraction": 0.6669,
+        "reference_suite_seconds": 74.2,
+        "sampled_faults": {
+          "planted": 10,
+          "caught_by_suite": 10,
+          "missed_by_selection": 0,
+          "unverified": 0,
+          "skipped": null
+        }
+      },
+      "terminal_whole_actual_diff_selection": {
+        "status": "passed",
+        "selected_count": 1163,
+        "required_count": 1163,
+        "omitted_count": 0,
+        "reference_baseline_complete": true
+      },
+      "first_attempt_gate_counts_all_attempted_ci_steps": {
+        "failed": 2
+      },
+      "probes": [
+        {
+          "probe": "P1",
+          "step": 7,
+          "status": "unattempted",
+          "behavior_passed": null,
+          "checkpoint_accepted": false
+        },
+        {
+          "probe": "P2",
+          "step": 14,
+          "status": "unattempted",
+          "behavior_passed": null,
+          "checkpoint_accepted": false
+        },
+        {
+          "probe": "P3",
+          "step": 20,
+          "status": "unattempted",
+          "behavior_passed": null,
+          "checkpoint_accepted": false
+        }
+      ],
+      "all_incurred_recorded_costs": {
+        "scope": "Rows plus previously unowned cost fragments, counted once",
+        "accepted_checkpoints": 6,
+        "pending_checkpoints": 1,
+        "coding_seconds": 4410.5,
+        "known_coding_seconds": 4410.5,
+        "coding_duration_unknown_sessions": 0,
+        "tokens": {
+          "input_tokens": 11049294,
+          "cached_input_tokens": 10342400,
+          "output_tokens": 176246
+        },
+        "known_tokens": {
+          "input_tokens": 11049294,
+          "cached_input_tokens": 10342400,
+          "output_tokens": 176246
+        },
+        "coding_usage_unknown_sessions": 0,
+        "verification_seconds": 638.4801390464418,
+        "known_verification_seconds": 638.4801390464418,
+        "verification_unknown_checkpoints": 0,
+        "recorded_analysis_seconds": 418.7584877004847
+      },
+      "matched_checkpoints": {
+        "5": {
+          "request": 5,
+          "state": "accepted",
+          "cumulative_costs_0_through_request": {
+            "coding_seconds": 3181.6,
+            "analysis_seconds_including_validation": 276.5163056082092,
+            "validation_seconds_subset_already_in_analysis": 3.1829094300046563,
+            "verification_seconds": 267.4994921502657,
+            "coding_sessions": 8,
+            "known_coding_tokens": {
+              "input_tokens": 7299051,
+              "cached_input_tokens": 6805504,
+              "output_tokens": 133076
+            },
+            "all_duration_and_usage_streams_known": true
+          },
+          "hidden_behavior_xml": {
+            "total": 32,
+            "failed": 0,
+            "skipped": 0,
+            "passed": 32
+          },
+          "initial_gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": [
+              "Fresh AnaxiGraph validation did not qualify completion"
+            ]
+          },
+          "final_gate": {
+            "status": "passed",
+            "failures": [],
+            "incomplete": []
+          },
+          "attempt_count": 3,
+          "repair_count": 2,
+          "attempts": [
+            {
+              "number": 0,
+              "gate": {
+                "status": "failed",
+                "failures": [
+                  "Observed consumers or reference-detected faults omitted"
+                ],
+                "incomplete": [
+                  "Fresh AnaxiGraph validation did not qualify completion"
+                ]
+              },
+              "coding_seconds": 750.5,
+              "verification_seconds": 84.81083438359201,
+              "own_returncode": 0,
+              "own_passed": 682,
+              "own_seconds": 26.6,
+              "omitted_pairs": 53,
+              "recall": 0.9765,
+              "faults_planted": 10,
+              "faults_reference_caught": 10,
+              "faults_selected_caught": 10,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            },
+            {
+              "number": 1,
+              "gate": {
+                "status": "incomplete",
+                "failures": [],
+                "incomplete": [
+                  "Complete successful coverage, selector and nonempty suite evidence required",
+                  "Positive fully verified caught-mutant evidence required",
+                  "Fresh AnaxiGraph validation did not qualify completion"
+                ]
+              },
+              "coding_seconds": 230.1,
+              "verification_seconds": 47.35473479516804,
+              "own_returncode": 1,
+              "own_passed": 696,
+              "own_seconds": 30.1,
+              "omitted_pairs": 0,
+              "recall": 1.0,
+              "faults_planted": 0,
+              "faults_reference_caught": 0,
+              "faults_selected_caught": 0,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            },
+            {
+              "number": 2,
+              "gate": {
+                "status": "passed",
+                "failures": [],
+                "incomplete": []
+              },
+              "coding_seconds": 105.8,
+              "verification_seconds": 90.48319751210511,
+              "own_returncode": 0,
+              "own_passed": 714,
+              "own_seconds": 29.0,
+              "omitted_pairs": 0,
+              "recall": 1.0,
+              "faults_planted": 10,
+              "faults_reference_caught": 10,
+              "faults_selected_caught": 10,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            }
+          ],
+          "structural_proxies": {
+            "prod_files": 21,
+            "prod_loc": 1113,
+            "test_files": 22,
+            "test_loc": 2336,
+            "largest_module_loc": 310,
+            "functions": 121,
+            "max_function_lines": 101,
+            "mean_function_lines": 8.02,
+            "max_complexity": 28,
+            "functions_over_complexity_10": 4,
+            "import_cycles": 0,
+            "modules_in_cycles": 0,
+            "mean_fan_out": 1.71,
+            "max_fan_in": 8,
+            "duplication": 0.0
+          },
+          "change_surface": {
+            "prod_added_files": 2,
+            "prod_modified_files": 0,
+            "prod_deleted_files": 0,
+            "test_files_touched": 20,
+            "other_files_touched": 2,
+            "prod_lines_added": 146,
+            "prod_lines_deleted": 0,
+            "test_lines_added": 1267,
+            "test_lines_deleted": 705
+          },
+          "selection": {
+            "raw_test_population": 714,
+            "canonical_test_population": 714,
+            "source_files_measured": 21,
+            "mean_selected_canonical_tests_per_source": 477.76190476190476,
+            "mean_selected_fraction_exact": 0.6691343203948246,
+            "reported_fraction_rounded": 0.6691,
+            "executing_recall": 1.0,
+            "omitted_observed_consumer_pairs": 0,
+            "per_source_qualification": "observed_complete",
+            "whole_actual_diff_selection": {
+              "status": "passed",
+              "selected_canonical_tests": 714,
+              "required_canonical_tests": 714,
+              "omitted_tests": 0,
+              "selected_fraction_of_canonical_population": 1.0,
+              "selector_seconds": 0.032604826148599386
+            },
+            "full_reference_suite_seconds": 29.0
+          }
+        },
+        "6": {
+          "request": 6,
+          "state": "pending-terminal-unqualified",
+          "cumulative_costs_0_through_request": {
+            "coding_seconds": 4410.5,
+            "analysis_seconds_including_validation": 418.7584877004847,
+            "validation_seconds_subset_already_in_analysis": 7.554470110218972,
+            "verification_seconds": 638.4801390464418,
+            "coding_sessions": 11,
+            "known_coding_tokens": {
+              "input_tokens": 11049294,
+              "cached_input_tokens": 10342400,
+              "output_tokens": 176246
+            },
+            "all_duration_and_usage_streams_known": true
+          },
+          "hidden_behavior_xml": {
+            "total": 38,
+            "failed": 0,
+            "skipped": 0,
+            "passed": 38
+          },
+          "initial_gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": [
+              "Fresh AnaxiGraph validation did not qualify completion"
+            ]
+          },
+          "final_gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": [
+              "Fresh AnaxiGraph validation did not qualify completion"
+            ]
+          },
+          "attempt_count": 3,
+          "repair_count": 2,
+          "attempts": [
+            {
+              "number": 0,
+              "gate": {
+                "status": "failed",
+                "failures": [
+                  "Observed consumers or reference-detected faults omitted"
+                ],
+                "incomplete": [
+                  "Fresh AnaxiGraph validation did not qualify completion"
+                ]
+              },
+              "coding_seconds": 651.0,
+              "verification_seconds": 119.08389321900904,
+              "own_returncode": 0,
+              "own_passed": 1018,
+              "own_seconds": 56.0,
+              "omitted_pairs": 320,
+              "recall": 0.9347,
+              "faults_planted": 10,
+              "faults_reference_caught": 10,
+              "faults_selected_caught": 10,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            },
+            {
+              "number": 1,
+              "gate": {
+                "status": "failed",
+                "failures": [
+                  "Observed consumers or reference-detected faults omitted"
+                ],
+                "incomplete": [
+                  "Fresh AnaxiGraph validation did not qualify completion"
+                ]
+              },
+              "coding_seconds": 205.9,
+              "verification_seconds": 119.29480722919106,
+              "own_returncode": 0,
+              "own_passed": 1023,
+              "own_seconds": 58.2,
+              "omitted_pairs": 182,
+              "recall": 0.9629,
+              "faults_planted": 10,
+              "faults_reference_caught": 10,
+              "faults_selected_caught": 10,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            },
+            {
+              "number": 2,
+              "gate": {
+                "status": "failed",
+                "failures": [
+                  "Observed consumers or reference-detected faults omitted"
+                ],
+                "incomplete": [
+                  "Fresh AnaxiGraph validation did not qualify completion"
+                ]
+              },
+              "coding_seconds": 372.0,
+              "verification_seconds": 132.60194644797593,
+              "own_returncode": 0,
+              "own_passed": 1163,
+              "own_seconds": 74.2,
+              "omitted_pairs": 1085,
+              "recall": 0.835,
+              "faults_planted": 10,
+              "faults_reference_caught": 10,
+              "faults_selected_caught": 10,
+              "faults_missed": 0,
+              "faults_unknown": 0
+            }
+          ],
+          "structural_proxies": {
+            "prod_files": 28,
+            "prod_loc": 1348,
+            "test_files": 31,
+            "test_loc": 2836,
+            "largest_module_loc": 310,
+            "functions": 158,
+            "max_function_lines": 97,
+            "mean_function_lines": 7.58,
+            "max_complexity": 28,
+            "functions_over_complexity_10": 4,
+            "import_cycles": 0,
+            "modules_in_cycles": 0,
+            "mean_fan_out": 1.89,
+            "max_fan_in": 14,
+            "duplication": 0.0
+          },
+          "change_surface": {
+            "prod_added_files": 7,
+            "prod_modified_files": 7,
+            "prod_deleted_files": 0,
+            "test_files_touched": 11,
+            "other_files_touched": 3,
+            "prod_lines_added": 343,
+            "prod_lines_deleted": 14,
+            "test_lines_added": 621,
+            "test_lines_deleted": 4
+          },
+          "selection": {
+            "raw_test_population": 1163,
+            "canonical_test_population": 1163,
+            "source_files_measured": 28,
+            "mean_selected_canonical_tests_per_source": 775.6071428571429,
+            "mean_selected_fraction_exact": 0.6669021004790566,
+            "reported_fraction_rounded": 0.6669,
+            "executing_recall": 0.835,
+            "omitted_observed_consumer_pairs": 1085,
+            "per_source_qualification": "observed_gap",
+            "whole_actual_diff_selection": {
+              "status": "passed",
+              "selected_canonical_tests": 1163,
+              "required_canonical_tests": 1163,
+              "omitted_tests": 0,
+              "selected_fraction_of_canonical_population": 1.0,
+              "selector_seconds": 0.03247355716302991
+            },
+            "full_reference_suite_seconds": 74.2
+          }
+        }
+      },
+      "native_attempt_summary": {
+        "count": 6,
+        "gate_statuses": {
+          "failed": 4,
+          "incomplete": 1,
+          "passed": 1
+        },
+        "reference_fault_unknowns": 0,
+        "reference_fault_not_caught": 0,
+        "sampled_faults": {
+          "planted": 50,
+          "caught_by_suite": 50,
+          "missed_by_selection": 0,
+          "unverified": 0
+        },
+        "fault_sampling_skipped_after_failed_reference": 1
+      },
+      "terminal_native_attempts": [
+        {
+          "step": 6,
+          "attempt": 0,
+          "gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": [
+              "Fresh AnaxiGraph validation did not qualify completion"
+            ]
+          },
+          "coverage_returncode": 0,
+          "hidden": {
+            "passed": 38,
+            "total": 38
+          },
+          "own_suite": {
+            "returncode": 0,
+            "tests": 1018,
+            "passed": 1018,
+            "seconds": 56.0
+          },
+          "coverage_seconds": 56.0,
+          "omitted_pairs": 320,
+          "recall": 0.9347,
+          "reference_baseline_complete": true,
+          "faults": {
+            "planted": 10,
+            "caught_by_suite": 10,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "skipped": null
+          },
+          "reference_fault_unknowns": 0,
+          "verification_seconds": 119.08389321900904
+        },
+        {
+          "step": 6,
+          "attempt": 1,
+          "gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": [
+              "Fresh AnaxiGraph validation did not qualify completion"
+            ]
+          },
+          "coverage_returncode": 0,
+          "hidden": {
+            "passed": 38,
+            "total": 38
+          },
+          "own_suite": {
+            "returncode": 0,
+            "tests": 1023,
+            "passed": 1023,
+            "seconds": 58.2
+          },
+          "coverage_seconds": 58.2,
+          "omitted_pairs": 182,
+          "recall": 0.9629,
+          "reference_baseline_complete": true,
+          "faults": {
+            "planted": 10,
+            "caught_by_suite": 10,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "skipped": null
+          },
+          "reference_fault_unknowns": 0,
+          "verification_seconds": 119.29480722919106
+        },
+        {
+          "step": 6,
+          "attempt": 2,
+          "gate": {
+            "status": "failed",
+            "failures": [
+              "Observed consumers or reference-detected faults omitted"
+            ],
+            "incomplete": [
+              "Fresh AnaxiGraph validation did not qualify completion"
+            ]
+          },
+          "coverage_returncode": 0,
+          "hidden": {
+            "passed": 38,
+            "total": 38
+          },
+          "own_suite": {
+            "returncode": 0,
+            "tests": 1163,
+            "passed": 1163,
+            "seconds": 74.2
+          },
+          "coverage_seconds": 74.2,
+          "omitted_pairs": 1085,
+          "recall": 0.835,
+          "reference_baseline_complete": true,
+          "faults": {
+            "planted": 10,
+            "caught_by_suite": 10,
+            "missed_by_selection": 0,
+            "unverified": 0,
+            "skipped": null
+          },
+          "reference_fault_unknowns": 0,
+          "verification_seconds": 132.60194644797593
+        }
+      ],
+      "integrity": {
+        "issues": 0,
+        "fingerprints_checked": {
+          "baseline_input": 170,
+          "frozen_test": 19,
+          "ci_input": 56,
+          "pending_baseline_input": 57,
+          "pending_frozen_test": 27,
+          "pending_ci_input": 74
+        },
+        "open_coding_journals": 0,
+        "mutation_journal_exists": false,
+        "index_lock_exists": false
+      }
+    }
+  },
+  "all_incurred_recorded_costs": {
+    "scope": "Accepted and pending rows plus previously unowned preparation, attempt and session fragments, counted once",
+    "accepted_checkpoints": 35,
+    "pending_checkpoints": 3,
+    "coding_seconds": 27210.0,
+    "known_coding_seconds": 27210.0,
+    "coding_duration_unknown_sessions": 0,
+    "tokens": {
+      "input_tokens": 65378467,
+      "cached_input_tokens": 62446592,
+      "output_tokens": 870879
+    },
+    "known_tokens": {
+      "input_tokens": 65378467,
+      "cached_input_tokens": 62446592,
+      "output_tokens": 870879
+    },
+    "coding_usage_unknown_sessions": 0,
+    "verification_seconds": 16895.162175084,
+    "known_verification_seconds": 16895.162175084,
+    "verification_unknown_checkpoints": 0,
+    "recorded_analysis_seconds": 418.7584877004847,
+    "unowned_cost_fragments": 0
+  },
+  "recorded_cost_completeness": {
+    "all_recorded_coding_durations_known": true,
+    "all_recorded_coding_usage_known": true,
+    "all_verification_segments_measured": true,
+    "no_unresolved_preparation_workers": true,
+    "no_active_or_unclosed_streams": true,
+    "input_records_stable_and_parseable": true,
+    "complete_billed_spend_claim": false
+  },
+  "analysis_model_usage": {
+    "calls": 95,
+    "known_output_tokens": 71489,
+    "unknown_output_calls": 0
+  },
+  "unscored_prelaunch_checks_excluded_from_condition_costs": {
+    "excluded_from_trial_costs": true,
+    "analysis_model_calls": 17,
+    "analysis_operator_seconds": 80.12215616507456,
+    "old_noedit_coding_seconds": 20.4,
+    "old_noedit_usage": {
+      "input_tokens": 72948,
+      "cached_input_tokens": 61696,
+      "output_tokens": 526
+    },
+    "final_noedit_coding_seconds": 22.9,
+    "final_noedit_usage": {
+      "input_tokens": 61105,
+      "cached_input_tokens": 53504,
+      "output_tokens": 647
+    },
+    "native_failed_startup_paid_calls": 0
+  },
+  "transcript_review": {
+    "closed_sessions": 55,
+    "closed_sessions_by_arm": {
+      "anaxigraph": 11,
+      "bare": 22,
+      "charter": 22
+    },
+    "anaxigraph_closed_sessions": 11,
+    "anaxigraph_main_sessions": 7,
+    "anaxigraph_mcp_calls": 90,
+    "anaxigraph_failed_requests": 5,
+    "request_error_categories": {
+      "stale-checkout-request": 5
+    },
+    "before_edit_context_inspect_plan_gaps_main_steps": [],
+    "after_last_edit_scan_validate_order_gaps_main_steps": [],
+    "availability_or_approval_errors": 0,
+    "control_mcp_calls": 0,
+    "commands_checked": 1046,
+    "access_events_reviewed": 31,
+    "access_events_requiring_manual_review": 0,
+    "access_classifications": {
+      "supplied-common-CI-evidence-command-path-metadata": 18,
+      "own-sandbox-process-and-permission-path-metadata": 5,
+      "own-test-subprocess-failure-path-metadata": 1,
+      "candidate-local-temporary-selector-or-Git-collection-fixture": 3,
+      "ancestor-instruction-filename-search-no-external-content-returned": 2,
+      "candidate-test-source-generation-parent-references": 2
+    },
+    "protected_content_reads_observed_in_reviewed_events": 0,
+    "error_recovery_same_tool_later_success": 5,
+    "valid_negative_findings": {
+      "validate_change:blocked": 3,
+      "validate_change:incomplete": 8
+    },
+    "distinct_material_dispositions": 0,
+    "undispositioned_exposed_material_ids": 0,
+    "open_sessions_excluded": 0,
+    "closed_inputs_stable": true,
+    "malformed_lines": 0
+  },
+  "terminal_freeze_review": {
+    "coding_sessions_closed": 55,
+    "coding_journals_open": 0,
+    "matching_live_coding_PIDs": 0,
+    "transcript_scope_unchanged_from_previous55": true,
+    "frozen_source_clean": true,
+    "frozen_commit": "288713e2c491096bebc311803709f4dd15902d78",
+    "protocol_and_source_fingerprints_match_all_arms": true,
+    "accepted_checkpoints": 35,
+    "planned_checkpoints": 63,
+    "completed_histories": 0,
+    "blocked_pending_steps": {
+      "bare": [
+        15
+      ],
+      "charter": [
+        14
+      ],
+      "anaxigraph": [
+        6
+      ]
+    },
+    "active_mutation_journals": 0,
+    "index_locks": 0,
+    "service_stopped": true,
+    "full_trial_success": false,
+    "mcp_calls": 90,
+    "mcp_request_errors": 5,
+    "control_mcp_calls": 0,
+    "observed_protected_content_reads_in_reviewed_events": 0
+  },
+  "pattern_delivery": {
+    "scheduled_reviews_attempted": [
+      6
+    ],
+    "unattempted_reviews": [
+      11,
+      16
+    ],
+    "request6_completed_batches": 52,
+    "request6_wall_seconds": 120.323,
+    "request6_model_calls": 60,
+    "request6_screened_module_card_pairs": 2394,
+    "request6_detailed_evaluations": 54,
+    "request6_ratings": {
+      "0": 40,
+      "1": 9,
+      "2": 5
+    },
+    "architecture_assessments": {
+      "keep": 40,
+      "unknown": 14,
+      "findings": 0
+    },
+    "ci_recommendations": 1,
+    "ci_input_evidence_complete": false,
+    "successful_assessments_exposed_material_proposals": 0,
+    "prior_named_suite_pairs_among_initial_omissions": 136,
+    "initial_omissions": 320
+  },
+  "historical_fault_uncertainties": {
+    "reference_unknowns": 2,
+    "preserved_charter_steps_and_attempts": [
+      [
+        12,
+        0
+      ],
+      [
+        14,
+        0
+      ]
+    ],
+    "later_different_samples_do_not_resolve_these_cases": true
+  },
+  "private_receipt_sha256": {
+    "outcome-integrity-audit.json": "ac4b791f357c7cda4d7a68475fdff946559c30dc7c9ffbb67198b79f62f64ce1",
+    "cost-tool-audit-20261111T110131.941244Z.json": "ff069623f39dc19fb5f29a5dccd8696bffda140162ad961c39f5cda1659e5a0f",
+    "matched-prefix-5-6-comparison-20261111.json": "186ce6a65e849e23764799dc5daab59c3c5bd752b711cc9198cd0c591cc42cb0",
+    "closed-session-transcript-audit-20261111T105558Z.json": "0f944636adcd07fcd3a1b51f37bf08ee6fcc15b88d77083f8d36a7b5c2ba43ff",
+    "final-freeze-transcript-qualification-20261111.json": "15f41393b804568c0fdb99b361e27c73d06cbdc209defc57339e705de802a1e0",
+    "process.json": "813650b6ae6315cb57191cb691649c046b9e015a732a70e65c57a74e3c3d10d9",
+    "exit.json": "18d252ebfb06710555c6f008bc0cbdb86b05ecb5643208a165670e8cf9fcc134"
+  },
+  "limits": [
+    "One replicate per condition; no statistical or causal winner claim.",
+    "All runs stopped before request20. Later absent results are unattempted, not successes or additional failures.",
+    "Use matched checkpoint5 for qualified architecture/cost comparison. Checkpoint6 includes an unqualified treatment attempt.",
+    "Final per-arm sizes, test populations and total spend describe different attained horizons and cannot rank architectural quality or speed.",
+    "Whole actual-diff inclusion and hypothetical single-source selection are separate checks. Passing current selection does not qualify future omissions.",
+    "Bare final raw recall1/zero omissions accompanies a failed reference baseline and skipped faults. It is not qualified safety evidence.",
+    "Anaxi final1085omitted pairs include182earlier gaps and903pairs from new replay IDs, not1085independent escaped bugs.",
+    "Canonical test identifiers need not represent independent behaviors. Contract replacement equivalence was not verified.",
+    "The repair policy permits widening first and updating actually failed expectations next; some agents began this sequence after using their earlier repair for aliases.",
+    "Coverage execution and sampling impose benchmark measurement costs; selected fractions alone do not establish production CI time.",
+    "Recorded coding usage includes cached context. Worker input/billing is incomplete; no complete billed-spend claim.",
+    "No protected-content reads were observed in reviewed commands/results. Static transcript review is not proof against all unrecorded/adversarial access.",
+    "No Fresh Eyes conclusion is supported: it was not scheduled. Unattempted future reviews cannot be credited."
+  ]
+}
