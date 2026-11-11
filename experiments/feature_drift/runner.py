@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import math
 import os
 import shutil
 import signal
@@ -40,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collect_evidence as collector  # noqa: E402
 import executor_policy  # noqa: E402
 import metrics  # noqa: E402
+import preparation  # noqa: E402
 
 try:
     from experiments.feature_drift import scenarios
@@ -173,7 +175,7 @@ def codex_argv(config, repo: Path, with_anaxigraph: bool) -> list[str]:
         "approval_policy": '"never"',
         "project_doc_max_bytes": "0",
         "mcp_servers": "{}",
-        **executor_policy.settings(),
+        **executor_policy.settings(getattr(config, "private_roots", ())),
     }
     if with_anaxigraph:
         settings.update(
@@ -240,8 +242,9 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
         raise FileExistsError(
             f"Agent session already exists; retain it and use a new session: {log}"
         )
+    private_roots = getattr(config, "private_roots", ())
     executor_receipt = (
-        executor_policy.preflight()
+        (executor_policy.preflight(private_roots) if private_roots else executor_policy.preflight())
         if config.agent != "noop" and not config.agent.startswith(("ref:", "copy:"))
         else None
     )
@@ -262,7 +265,14 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
                 (repo / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, repo / rel)
         return {"status": "copied", "seconds": round(time.monotonic() - started, 1)}
-    env = {"UV_OFFLINE": "1", "UV_NO_SYNC": "1", "PYTHONDONTWRITEBYTECODE": "1"}
+    temporary = repo / ".pytest_cache" / "agent-tmp"
+    temporary.mkdir(parents=True, exist_ok=True)
+    env = {
+        "UV_OFFLINE": "1",
+        "UV_NO_SYNC": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "TMPDIR": str(temporary),
+    }
     session = {
         "status": "running",
         "started": now(),
@@ -373,15 +383,8 @@ def workflow_summary(status: dict) -> dict:
     }
 
 
-def refresh_anaxigraph(config, repo: Path, step: int) -> dict:
-    started = time.monotonic()
-    extra = ["--config", str(config.workflow_config)] if config.workflow_config else []
-    report = {"scan": bool(runtime(config, repo, "scan").get("snapshot"))}
-    kinds = ["mapping"] + (list(config.review_kinds) if step in config.review_steps else [])
-    for kind in kinds:
-        report[kind] = workflow_summary(runtime(config, repo, "run", kind, *extra))
-    report["seconds"] = round(time.monotonic() - started, 1)
-    return report
+def refresh_anaxigraph(config, repo: Path, step: int, directory: Path) -> dict:
+    return preparation.refresh(config, repo, step, directory, runtime, workflow_summary, write_json)
 
 
 # -- evaluation -----------------------------------------------------------------------------
@@ -959,18 +962,47 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
                 "reason": "Interrupted request retained; refusing to overwrite original sessions or reset the repair budget",
             }
         saved_as = f"docs/requests/{request.name}"
-        (repo / "docs" / "requests").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(request, repo / saved_as)
-        base = commit(repo, f"Request {step}")
-        row = {"step": step, "arm": arm_name, "replicate": replicate, "started": now()}
-        row["baseline_inputs"] = collector.inventory(repo)
+        preparation_task = chain / "eval" / f"step-{step:02d}" / "preparation-task.json"
+        if preparation_task.exists():
+            row = json.loads(preparation_task.read_text())
+            base = row["base_commit"]
+            if metrics.git(repo, "rev-parse", "HEAD") != base:
+                raise ValueError(
+                    "Checkout changed during unfinished preparation; preserve its baseline"
+                )
+        else:
+            (repo / "docs" / "requests").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(request, repo / saved_as)
+            base = commit(repo, f"Request {step}")
+            row = {
+                "step": step,
+                "arm": arm_name,
+                "replicate": replicate,
+                "started": now(),
+                "base_commit": base,
+            }
+            row["baseline_inputs"] = collector.inventory(repo)
+            if arm["anaxigraph"]:
+                write_json(preparation_task, row)
         inline = next(
             (probe for probe in config.scenario["inline_probes"] if probe["step"] == step), None
         )
         if inline:
             row["probe_id"] = inline["id"]
         if arm["anaxigraph"] and config.agent not in ("noop",):
-            row["anaxigraph"] = refresh_anaxigraph(config, repo, step)
+            row["anaxigraph"] = refresh_anaxigraph(
+                config, repo, step, chain / "eval" / f"step-{step:02d}" / "preparation"
+            )
+            if not row["anaxigraph"].get("qualified"):
+                write_json(
+                    chain / "eval" / f"step-{step:02d}" / "preparation.json", row["anaxigraph"]
+                )
+                return {
+                    "chain": chain.name,
+                    "status": "blocked_preparation",
+                    "step": step,
+                    "reason": row["anaxigraph"].get("error"),
+                }
         if arm["anaxigraph"]:
             started = time.monotonic()
             scan = runtime(config, repo, "scan")
@@ -1212,6 +1244,7 @@ def provenance(config) -> dict:
                     HERE / "mutation_state.py",
                     HERE / "process_guard.py",
                     HERE / "executor_policy.py",
+                    HERE / "preparation.py",
                     Path(getfile(collector.audit_selection)),
                 )
             }
@@ -1234,11 +1267,12 @@ def provenance(config) -> dict:
         "ci_repair_attempts": config.ci_repair_attempts,
         "ci_gate_protocol": "coverage-consumers-and-actual-diff-v1",
         "evaluation_resource_policy": metrics.RESOURCE_POLICY,
-        "executor_policy": executor_policy.POLICY,
+        "executor_policy": executor_policy.policy(getattr(config, "private_roots", ())),
         "measurement_settings": {
             "mutants": config.mutants,
             "ci_every": config.ci_every,
             "agent_timeout": config.agent_timeout,
+            "reference_timeout": metrics.REFERENCE_TIMEOUT_SECONDS,
         },
     }
 
@@ -1345,6 +1379,19 @@ def main() -> None:
         help="Seconds per coding session; defaults to the track's limit (Switchboard 5400)",
     )
     parser.add_argument("--runtime", type=Path, default=DEFAULT_RUNTIME)
+    parser.add_argument(
+        "--reference-timeout",
+        type=float,
+        default=1800,
+        help="Full reference coverage deadline, uniformly across arms; fault checks remain 900s",
+    )
+    parser.add_argument(
+        "--private-root",
+        action="append",
+        type=Path,
+        default=[],
+        help="Additional benchmark/oracle records denied to every coding arm",
+    )
     parser.add_argument("--workflow-config", type=Path)
     parser.add_argument(
         "--review-steps",
@@ -1373,6 +1420,9 @@ def main() -> None:
     )
     parser.add_argument("--no-probes", dest="probes", action="store_false")
     config = parser.parse_args()
+    if not math.isfinite(config.reference_timeout) or config.reference_timeout <= 0:
+        parser.error("--reference-timeout must be finite and positive")
+    metrics.REFERENCE_TIMEOUT_SECONDS = config.reference_timeout
     if config.list_tracks:
         print(
             json.dumps(
@@ -1404,6 +1454,11 @@ def main() -> None:
     if config.state is None:
         parser.error("--state is required for benchmark execution")
     config.state = config.state.resolve()
+    private = [config.state, HERE.parent.parent, *config.private_root]
+    resolved_runtime = config.runtime.resolve()
+    if resolved_runtime.parent.name == "bin" and resolved_runtime.parent.parent.name == ".venv":
+        private.append(resolved_runtime.parent.parent.parent)
+    config.private_roots = tuple(sorted({str(path.resolve()) for path in private}))
     configure_track(track)
     config.agent_timeout = float(config.agent_timeout or scenarios.layout(track)["agent_timeout"])
     config.scenario = scenarios.requirements(track)
@@ -1442,7 +1497,7 @@ def main() -> None:
     executor_receipt = None
     if config.agent != "noop" and not config.agent.startswith(("ref:", "copy:")):
         try:
-            executor_receipt = executor_policy.preflight()
+            executor_receipt = executor_policy.preflight(config.private_roots)
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             parser.error(str(error))
     config.provenance = provenance(config)

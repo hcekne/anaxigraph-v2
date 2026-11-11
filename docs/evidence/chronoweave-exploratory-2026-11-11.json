@@ -1,0 +1,912 @@
+{
+ "schema_version": 1,
+ "kind": "chronoweave-exploratory-continuation-results",
+ "date": "2026-11-11",
+ "status": {
+  "planned_chains": 9,
+  "completed_chains": 9,
+  "conditions": 3,
+  "repetitions_per_condition": 3,
+  "checkpoints_per_chain": 21,
+  "accepted_checkpoints": 189,
+  "pending_checkpoints": 0,
+  "verdict": "exploratory-continuation",
+  "causal_winner_claim": false
+ },
+ "scenario": {
+  "id": "chronoweave",
+  "version": 1,
+  "ci_measured_step_range_inclusive": [
+   5,
+   20
+  ],
+  "inline_probe_steps": [
+   7,
+   14,
+   20
+  ],
+  "scheduled_patterns_steps": [
+   6,
+   11,
+   16
+  ],
+  "fresh_eyes_exercised": false,
+  "scenario_sha256": "f65daf4335cda12d72d638b19fab881b0f5cda2ec8ec0004f596149a2d04d086",
+  "requests_sha256": "62f35125ac39ff1fd4d4551884ae380ea1eecef22db5011a56fe3ddd149ceb0a",
+  "oracle_sha256": "837f4082c2d3f44a0cfb084b3ba3bec98228f8cd2836a4eb73bee9a368e3c1cb"
+ },
+ "provenance": {
+  "coding_model": "gpt-6.1-sol",
+  "coding_reasoning_effort": "high",
+  "codex_version": "0.166.0",
+  "original_runtime_commit": "d99383c6083d5c0e662a329a63453be8ce0704d1",
+  "original_accepted_checkpoints": 104,
+  "original_repair_allowance": 2,
+  "additional_uniform_repair_allowance": 3,
+  "continuation_phases": [
+   {
+    "phase": 1,
+    "harness_commits": [
+     "3e3aecc3bdf5a3f8d9781bcb8f379e8262b04a55"
+    ],
+    "runtime_commit": "d99383c6083d5c0e662a329a63453be8ce0704d1",
+    "change": "Exploratory fork, extra repairs, durable sessions and baseline pins."
+   },
+   {
+    "phase": 2,
+    "harness_commits": [
+     "a669e17d4f5325f83a295ebc510bfeb35c2aec95",
+     "35c996abca49de4d418b34a9e76dbf0792fce206"
+    ],
+    "runtime_commit": "d99383c6083d5c0e662a329a63453be8ce0704d1",
+    "change": "Mutation restoration journal, process/output guards and qualification fixtures."
+   },
+   {
+    "phase": 3,
+    "harness_commits": [
+     "cd9e3a843e9544628853808f4ad9a338b8596283"
+    ],
+    "runtime_commit": "d99383c6083d5c0e662a329a63453be8ce0704d1",
+    "change": "Required local IPC enabled while external upstream remains denied."
+   },
+   {
+    "phase": 4,
+    "harness_commits": [
+     "c0f6522a1d96028cd309d596c0600277b030761d"
+    ],
+    "runtime_commit": "c0f6522a1d96028cd309d596c0600277b030761d",
+    "change": "Lossless bounded v2 evidence references; corrected failed-request telemetry."
+   }
+  ],
+  "cached_calls_keep_original_execution_phase": true,
+  "report_reader_commit": "c0f6522a1d96028cd309d596c0600277b030761d",
+  "report_reader_sha256": "6d013254b4be40d52edd728412147e0c1c3c576551c82d4eb60303c45edf8f7c",
+  "report_reader_content_equal_to_phase3": true,
+  "subsequent_behavior_label_fix_commit": "f4609aa7ff9926c1d8f4bb667c2172e9bc39dcaa",
+  "subsequent_fix_used_in_comparison": false
+ },
+ "measurement_semantics": {
+  "selection": "Selected canonical stable IDs divided by all canonical IDs for each source file, then arithmetic mean across repetitions. Recorded fractions were rounded tofour decimal places; reconstructed means use saved reference counts.",
+  "raw_vs_canonical_tests": "Raw reference cases may repeat IDs; portable evidence deduplicates IDs. Both denominators are reported.",
+  "selection_fraction_is_ci_elapsed_time": false,
+  "selection_fraction_is_real_multi_file_union": false,
+  "reference_time": "Full reference coverage/test execution, with different test populations. Not normal CI latency or a controlled timing comparison.",
+  "late_edits": "Requests 9 through20; modified existing production files, excluding new files.",
+  "costs": "Absolute checkpoint sums include all attempts/repairs once. Means are separate. No pending/unfolded costs remain. Parallel durations cannot determine campaign wall time.",
+  "analysis": "Preparation/refresh plus validation wall. Validation is already included; overlapping worker durations are not added. MCP activity within coding sessions remains in coding time.",
+  "unknowns": "Three original coding durations and two usage streams missing. Known coding time/tokens are floors, not zero-filled totals.",
+  "tokens": "Coding usage only; cached input is a subset of input. Analysis-worker tokens excluded. No complete billed-spend or currency claim.",
+  "structure": "LOC, module size, cycles and edit surfaces are proxies, not proof of maintainability or causal tool benefit."
+ },
+ "arm_aggregates": [
+  {
+   "arm": "bare",
+   "replicates": 3,
+   "accepted_checkpoints": 63,
+   "first_raw_ci_statuses": {
+    "passed": 44,
+    "incomplete": 3,
+    "failed": 1
+   },
+   "final_ci_statuses": {
+    "passed": 48
+   },
+   "repairs": 4,
+   "descriptive_means": {
+    "prod_loc": 4101.666667,
+    "largest_module_loc": 873,
+    "max_complexity": 28.666667,
+    "max_function_lines": 319.666667,
+    "import_cycles": 1,
+    "mean_late_existing_files_edited": 3.944444,
+    "raw_tests": 1539.666667,
+    "canonical_tests": 1517.333333,
+    "mean_selected_canonical_tests_per_source": 916.245782,
+    "selected_fraction_exact": 0.603316,
+    "reference_coverage_seconds": 467.633333,
+    "known_coding_plus_analysis_minutes_floor": 272.721667,
+    "verification_minutes": 178.928108
+   },
+   "actual_recorded_cost_sums": {
+    "coding_seconds": null,
+    "known_coding_seconds_floor": 49089.9,
+    "analysis_seconds_including_validation": 0,
+    "verification_seconds": 32207.059487,
+    "unknown_coding_duration_sessions": 2,
+    "unknown_coding_usage_sessions": 1,
+    "known_coding_tokens_floor": {
+     "input_tokens": 185474655,
+     "cached_input_tokens": 180627840,
+     "output_tokens": 1584550
+    },
+    "main_coding_known_seconds_floor": 47518.5,
+    "repair_coding_seconds": 1571.4,
+    "validation_seconds_already_in_analysis": 0.0
+   }
+  },
+  {
+   "arm": "charter",
+   "replicates": 3,
+   "accepted_checkpoints": 63,
+   "first_raw_ci_statuses": {
+    "passed": 43,
+    "incomplete": 2,
+    "failed": 3
+   },
+   "final_ci_statuses": {
+    "passed": 48
+   },
+   "repairs": 6,
+   "descriptive_means": {
+    "prod_loc": 4652.333333,
+    "largest_module_loc": 979,
+    "max_complexity": 34,
+    "max_function_lines": 107.333333,
+    "import_cycles": 0.666667,
+    "mean_late_existing_files_edited": 4.75,
+    "raw_tests": 2168.666667,
+    "canonical_tests": 2160.333333,
+    "mean_selected_canonical_tests_per_source": 1283.791407,
+    "selected_fraction_exact": 0.59129,
+    "reference_coverage_seconds": 389.9,
+    "known_coding_plus_analysis_minutes_floor": 275.788333,
+    "verification_minutes": 272.971967
+   },
+   "actual_recorded_cost_sums": {
+    "coding_seconds": null,
+    "known_coding_seconds_floor": 49641.9,
+    "analysis_seconds_including_validation": 0,
+    "verification_seconds": 49134.954086,
+    "unknown_coding_duration_sessions": 1,
+    "unknown_coding_usage_sessions": 1,
+    "known_coding_tokens_floor": {
+     "input_tokens": 160786075,
+     "cached_input_tokens": 155751808,
+     "output_tokens": 1684778
+    },
+    "main_coding_known_seconds_floor": 45989.1,
+    "repair_coding_seconds": 3652.8,
+    "validation_seconds_already_in_analysis": 0.0
+   }
+  },
+  {
+   "arm": "anaxigraph",
+   "replicates": 3,
+   "accepted_checkpoints": 63,
+   "first_raw_ci_statuses": {
+    "failed": 33,
+    "passed": 13,
+    "incomplete": 2
+   },
+   "final_ci_statuses": {
+    "passed": 48
+   },
+   "repairs": 46,
+   "descriptive_means": {
+    "prod_loc": 3984.333333,
+    "largest_module_loc": 703.333333,
+    "max_complexity": 29.666667,
+    "max_function_lines": 145,
+    "import_cycles": 0.333333,
+    "mean_late_existing_files_edited": 3.444444,
+    "raw_tests": 2457,
+    "canonical_tests": 2450.333333,
+    "mean_selected_canonical_tests_per_source": 1061.919862,
+    "selected_fraction_exact": 0.433783,
+    "reference_coverage_seconds": 1101.6,
+    "known_coding_plus_analysis_minutes_floor": 644.426591,
+    "verification_minutes": 622.305113
+   },
+   "actual_recorded_cost_sums": {
+    "coding_seconds": 108556.40000000002,
+    "known_coding_seconds_floor": 108556.4,
+    "analysis_seconds_including_validation": 7440.386378,
+    "verification_seconds": 112014.920347,
+    "unknown_coding_duration_sessions": 0,
+    "unknown_coding_usage_sessions": 0,
+    "known_coding_tokens_floor": {
+     "input_tokens": 431505404,
+     "cached_input_tokens": 422351616,
+     "output_tokens": 2516348
+    },
+    "main_coding_known_seconds_floor": 66592.6,
+    "repair_coding_seconds": 41963.8,
+    "validation_seconds_already_in_analysis": 630.725121
+   }
+  }
+ ],
+ "replicate_outcomes": [
+  {
+   "arm": "bare",
+   "replicate": 0,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "passed": 15,
+    "incomplete": 1
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 1,
+   "repaired_checkpoints": 1,
+   "production_lines": 4024,
+   "largest_module_lines": 1702,
+   "maximum_function_lines": 301,
+   "maximum_complexity": 36,
+   "import_cycles": 1,
+   "mean_late_existing_production_files_edited": 3.5,
+   "raw_reference_cases": 1537,
+   "canonical_obligations": 1516,
+   "mean_selected_canonical_obligations_per_source_file": 942.114286,
+   "mean_selected_fraction_reconstructed": 0.621447,
+   "mean_selected_fraction_recorded": 0.6214,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 10,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 512.8,
+   "costs": {
+    "coding_seconds": 17957.1,
+    "known_coding_seconds_floor": 17957.1,
+    "analysis_seconds_including_validation": 0,
+    "verification_seconds": 10145.17663,
+    "unknown_coding_duration_sessions": 0,
+    "unknown_coding_usage_sessions": 0
+   }
+  },
+  {
+   "arm": "bare",
+   "replicate": 1,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "passed": 13,
+    "incomplete": 2,
+    "failed": 1
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 3,
+   "repaired_checkpoints": 3,
+   "production_lines": 4246,
+   "largest_module_lines": 537,
+   "maximum_function_lines": 351,
+   "maximum_complexity": 23,
+   "import_cycles": 1,
+   "mean_late_existing_production_files_edited": 4.333333,
+   "raw_reference_cases": 1566,
+   "canonical_obligations": 1541,
+   "mean_selected_canonical_obligations_per_source_file": 998.818182,
+   "mean_selected_fraction_reconstructed": 0.648162,
+   "mean_selected_fraction_recorded": 0.6482,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 9,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 337.5,
+   "costs": {
+    "coding_seconds": null,
+    "known_coding_seconds_floor": 16237.5,
+    "analysis_seconds_including_validation": 0,
+    "verification_seconds": 9788.284037,
+    "unknown_coding_duration_sessions": 1,
+    "unknown_coding_usage_sessions": 0
+   }
+  },
+  {
+   "arm": "bare",
+   "replicate": 2,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "passed": 16
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 0,
+   "repaired_checkpoints": 0,
+   "production_lines": 4035,
+   "largest_module_lines": 380,
+   "maximum_function_lines": 307,
+   "maximum_complexity": 27,
+   "import_cycles": 1,
+   "mean_late_existing_production_files_edited": 4,
+   "raw_reference_cases": 1516,
+   "canonical_obligations": 1495,
+   "mean_selected_canonical_obligations_per_source_file": 807.804878,
+   "mean_selected_fraction_reconstructed": 0.540338,
+   "mean_selected_fraction_recorded": 0.5403,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 10,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 552.6,
+   "costs": {
+    "coding_seconds": null,
+    "known_coding_seconds_floor": 14895.3,
+    "analysis_seconds_including_validation": 0,
+    "verification_seconds": 12273.59882,
+    "unknown_coding_duration_sessions": 1,
+    "unknown_coding_usage_sessions": 1
+   }
+  },
+  {
+   "arm": "charter",
+   "replicate": 0,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "passed": 16
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 0,
+   "repaired_checkpoints": 0,
+   "production_lines": 4293,
+   "largest_module_lines": 1513,
+   "maximum_function_lines": 146,
+   "maximum_complexity": 30,
+   "import_cycles": 1,
+   "mean_late_existing_production_files_edited": 3.75,
+   "raw_reference_cases": 1904,
+   "canonical_obligations": 1894,
+   "mean_selected_canonical_obligations_per_source_file": 1122.328767,
+   "mean_selected_fraction_reconstructed": 0.592571,
+   "mean_selected_fraction_recorded": 0.5926,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 9,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 443.9,
+   "costs": {
+    "coding_seconds": 14787.0,
+    "known_coding_seconds_floor": 14787.0,
+    "analysis_seconds_including_validation": 0,
+    "verification_seconds": 12631.443082,
+    "unknown_coding_duration_sessions": 0,
+    "unknown_coding_usage_sessions": 0
+   }
+  },
+  {
+   "arm": "charter",
+   "replicate": 1,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "passed": 14,
+    "incomplete": 1,
+    "failed": 1
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 2,
+   "repaired_checkpoints": 2,
+   "production_lines": 4762,
+   "largest_module_lines": 803,
+   "maximum_function_lines": 101,
+   "maximum_complexity": 34,
+   "import_cycles": 0,
+   "mean_late_existing_production_files_edited": 5.416667,
+   "raw_reference_cases": 2257,
+   "canonical_obligations": 2250,
+   "mean_selected_canonical_obligations_per_source_file": 818.5,
+   "mean_selected_fraction_reconstructed": 0.363778,
+   "mean_selected_fraction_recorded": 0.3638,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 8,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 182.5,
+   "costs": {
+    "coding_seconds": null,
+    "known_coding_seconds_floor": 14528.9,
+    "analysis_seconds_including_validation": 0,
+    "verification_seconds": 6799.670234,
+    "unknown_coding_duration_sessions": 1,
+    "unknown_coding_usage_sessions": 1
+   }
+  },
+  {
+   "arm": "charter",
+   "replicate": 2,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "failed": 2,
+    "passed": 13,
+    "incomplete": 1
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 4,
+   "repaired_checkpoints": 3,
+   "production_lines": 4902,
+   "largest_module_lines": 621,
+   "maximum_function_lines": 75,
+   "maximum_complexity": 38,
+   "import_cycles": 1,
+   "mean_late_existing_production_files_edited": 5.083333,
+   "raw_reference_cases": 2345,
+   "canonical_obligations": 2337,
+   "mean_selected_canonical_obligations_per_source_file": 1910.545455,
+   "mean_selected_fraction_reconstructed": 0.817521,
+   "mean_selected_fraction_recorded": 0.8175,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 9,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 543.3,
+   "costs": {
+    "coding_seconds": 20326.0,
+    "known_coding_seconds_floor": 20326.0,
+    "analysis_seconds_including_validation": 0,
+    "verification_seconds": 29703.84077,
+    "unknown_coding_duration_sessions": 0,
+    "unknown_coding_usage_sessions": 0
+   }
+  },
+  {
+   "arm": "anaxigraph",
+   "replicate": 0,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "failed": 11,
+    "passed": 4,
+    "incomplete": 1
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 16,
+   "repaired_checkpoints": 12,
+   "production_lines": 3947,
+   "largest_module_lines": 824,
+   "maximum_function_lines": 237,
+   "maximum_complexity": 34,
+   "import_cycles": 0,
+   "mean_late_existing_production_files_edited": 3.5,
+   "raw_reference_cases": 2504,
+   "canonical_obligations": 2492,
+   "mean_selected_canonical_obligations_per_source_file": 870.767857,
+   "mean_selected_fraction_reconstructed": 0.349425,
+   "mean_selected_fraction_recorded": 0.3494,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 9,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 1288.1,
+   "costs": {
+    "coding_seconds": 32976.1,
+    "known_coding_seconds_floor": 32976.1,
+    "analysis_seconds_including_validation": 2543.79612,
+    "verification_seconds": 33761.527767,
+    "unknown_coding_duration_sessions": 0,
+    "unknown_coding_usage_sessions": 0
+   }
+  },
+  {
+   "arm": "anaxigraph",
+   "replicate": 1,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "failed": 9,
+    "passed": 7
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 13,
+   "repaired_checkpoints": 9,
+   "production_lines": 4022,
+   "largest_module_lines": 684,
+   "maximum_function_lines": 76,
+   "maximum_complexity": 27,
+   "import_cycles": 1,
+   "mean_late_existing_production_files_edited": 3.25,
+   "raw_reference_cases": 2492,
+   "canonical_obligations": 2484,
+   "mean_selected_canonical_obligations_per_source_file": 1234.586667,
+   "mean_selected_fraction_reconstructed": 0.497016,
+   "mean_selected_fraction_recorded": 0.497,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 9,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 1080.1,
+   "costs": {
+    "coding_seconds": 28975.1,
+    "known_coding_seconds_floor": 28975.1,
+    "analysis_seconds_including_validation": 3000.28977,
+    "verification_seconds": 34817.543133,
+    "unknown_coding_duration_sessions": 0,
+    "unknown_coding_usage_sessions": 0
+   }
+  },
+  {
+   "arm": "anaxigraph",
+   "replicate": 2,
+   "accepted_checkpoints": 21,
+   "final_hidden": {
+    "passed": 96,
+    "total": 96
+   },
+   "observed_inline_probe_files_passed": 3,
+   "observed_inline_probe_cases_passed": 12,
+   "first_raw_ci_statuses": {
+    "failed": 13,
+    "passed": 2,
+    "incomplete": 1
+   },
+   "final_ci_statuses": {
+    "passed": 16
+   },
+   "repairs": 17,
+   "repaired_checkpoints": 14,
+   "production_lines": 3984,
+   "largest_module_lines": 602,
+   "maximum_function_lines": 122,
+   "maximum_complexity": 28,
+   "import_cycles": 0,
+   "mean_late_existing_production_files_edited": 3.583333,
+   "raw_reference_cases": 2375,
+   "canonical_obligations": 2375,
+   "mean_selected_canonical_obligations_per_source_file": 1080.405063,
+   "mean_selected_fraction_reconstructed": 0.454907,
+   "mean_selected_fraction_recorded": 0.4549,
+   "final_observed_consumer_recall": 1.0,
+   "final_omitted_consumer_pairs": 0,
+   "final_sampled_faults": {
+    "planted": 10,
+    "caught_by_suite": 9,
+    "missed_by_selection": 0,
+    "unverified": 0
+   },
+   "final_reference_suite_seconds": 936.6,
+   "costs": {
+    "coding_seconds": 46605.2,
+    "known_coding_seconds_floor": 46605.2,
+    "analysis_seconds_including_validation": 1896.300488,
+    "verification_seconds": 43435.849447,
+    "unknown_coding_duration_sessions": 0,
+    "unknown_coding_usage_sessions": 0
+   }
+  }
+ ],
+ "all_conditions_recorded_costs": {
+  "coding_seconds": null,
+  "known_coding_seconds_floor": 207288.2,
+  "analysis_seconds_including_validation": 7440.386378,
+  "validation_seconds_already_included": 630.725121,
+  "verification_seconds": 193356.93392,
+  "unknown_coding_duration_sessions": 3,
+  "unknown_coding_usage_sessions": 2,
+  "known_coding_tokens_floor": {
+   "input_tokens": 777766134,
+   "cached_input_tokens": 758731264,
+   "output_tokens": 5785676
+  },
+  "unfolded_cost_records": 0,
+  "active_or_unclosed_streams": 0
+ },
+ "tool_use": {
+  "completed_mcp_calls": 1053,
+  "failed_requests": 66,
+  "failure_categories": {
+   "stale-checkout-request": 44,
+   "proposal-id-request": 9,
+   "argument-validation-request": 12,
+   "missing-entity-request": 1
+  },
+  "observed_approval_or_unavailable_failures": 0,
+  "main_calls": 701,
+  "repair_calls": 352,
+  "reply_text_bytes": 8500526,
+  "required_use_treatment_main_sessions": 63,
+  "material_decision_gaps_before_write": 0,
+  "distinct_material_dispositions": {
+   "total": 19,
+   "reject": 18,
+   "adopt": 1
+  },
+  "successful_assessment_disposition_occurrences": {
+   "total": 21,
+   "reject": 20,
+   "adopt": 1
+  },
+  "note": "Failed requests exclude valid blocked/incomplete findings. Disposition does not prove implementation or causality and does not count every informal context use."
+ },
+ "review_delivery": {
+  "mapping_model_calls": 591,
+  "scheduled_patterns_model_calls": 463,
+  "total_recorded_analysis_model_calls": 1054,
+  "by_replicate": [
+   {
+    "replicate": 0,
+    "mapping_statuses": {
+     "completed": 20,
+     "failed": 1
+    },
+    "scheduled_patterns_statuses": {
+     "completed": 3
+    },
+    "mapping_model_calls": 176,
+    "scheduled_patterns_model_calls": 187,
+    "scheduled_patterns_reaching_review_stages": 3
+   },
+   {
+    "replicate": 1,
+    "mapping_statuses": {
+     "completed": 16,
+     "failed": 5
+    },
+    "scheduled_patterns_statuses": {
+     "completed": 3
+    },
+    "mapping_model_calls": 191,
+    "scheduled_patterns_model_calls": 270,
+    "scheduled_patterns_reaching_review_stages": 3
+   },
+   {
+    "replicate": 2,
+    "mapping_statuses": {
+     "completed": 1,
+     "failed": 20
+    },
+    "scheduled_patterns_statuses": {
+     "failed": 3
+    },
+    "mapping_model_calls": 224,
+    "scheduled_patterns_model_calls": 6,
+    "scheduled_patterns_reaching_review_stages": 0
+   }
+  ],
+  "replicate2_failure": "All scheduled Patterns stopped in annotation prerequisites before screening, detailed review, architecture scouts or CI review. A source-identity heuristic rejects a public data-label statement; exact rejected model drafts were not retained.",
+  "interpretation": "Structural facts and partial semantics remained available. Repetition 2 is a full-review delivery failure, not a completed test of all intended review stages."
+ },
+ "probe_metadata_caveat": {
+  "missing_tags": [
+   {
+    "arm": "anaxigraph",
+    "replicate": 1,
+    "step": 7,
+    "probe": "P1"
+   },
+   {
+    "arm": "bare",
+    "replicate": 1,
+    "step": 20,
+    "probe": "P3"
+   }
+  ],
+  "observed_probe_files_passed": 27,
+  "observed_probe_cases_passed": 108,
+  "note": "Saved XML verifies four passing executed cases in each expected file. Missing probe_id tags cause raw-reader warnings and 32/32 instead of 36/36 summaries in two arms. Original rows/statuses preserved."
+ },
+ "safety_history": {
+  "common_external_gate": "All arms receive the same observed-consumer, sampled-fault and baseline checks plus bounded repair feedback. Final passing safety is after repairs, not initial autonomous safety.",
+  "final_recall_each_chain": 1.0,
+  "final_omitted_pairs_each_chain": 0,
+  "final_sampled_selected_fault_misses_each_chain": 0,
+  "final_sampled_selected_fault_unknowns_each_chain": 0,
+  "charter_replicate2_request19": "Initial measured quality passed but evidence exceeded the 1 MB serialization cap. Two infrastructure-triggered repair sessions and all effects/costs remain included; raw status remains incomplete.",
+  "anaxigraph_replicate2_request19": {
+   "attempts": 5,
+   "initial_reference_timeouts": 3,
+   "each_timeout_seconds": 1800.2,
+   "fourth_attempt_omitted_pairs": 25,
+   "accepted_fifth_attempt_reference_seconds": 1135.5
+  },
+  "anaxigraph_replicate2_request20": {
+   "attempts": 2,
+   "initial_omitted_pairs": 6,
+   "accepted_final_omitted_pairs": 0
+  },
+  "historical_sampled_fault_counts": {
+   "saved_attempts": 200,
+   "planted": 1920,
+   "reference_caught": 1799,
+   "reference_and_selected_caught": 1798,
+   "selected_unknowns": 1,
+   "selected_misses": 0,
+   "reference_unknowns": 3,
+   "reference_not_caught_without_reported_error": 118
+  },
+  "historical_unknowns": "One earlier Anaxi selected-test fault outcome and three control reference-fault outcomes remain unknown. Changing samples do not prove earlier logical faults were retested. No intentional evasion inferred.",
+  "postcampaign_diagnostics_rewrite_original_scores": false
+ },
+ "integrity": {
+  "original_parent_manifest_records_verified": 5913,
+  "original_parent_mismatches": 0,
+  "baseline_and_test_retention": "Per-repetition audits and final pinned Git-blob checks found no new mismatch. Frozen-test retention applies to CI repairs, not all ordinary feature edits.",
+  "terminal_mutation_journals": 0,
+  "terminal_index_locks": 0,
+  "final_generated_evidence_matches_saved_all_chains": true
+ },
+ "validity_limits": [
+  "Exploratory continuation with inherited histories, extra repairs and infrastructure/runtime changes; not the original preregistered comparison.",
+  "Three repetitions on one constructed scenario establish no causal winner or broad architectural superiority.",
+  "Two original access flags remain: public tool documentation and control filename/directory metadata. Additional filename-only exposure occurred during a treatment repair. No protected oracle or other-arm content read was observed in recorded commands; logs cannot exclude unrecorded I/O.",
+  "Repetition 2 missed every scheduled full model review.",
+  "Common external repair feedback means final equality cannot establish initially safe autonomous behavior.",
+  "Final-current-sample qualification cannot erase earlier unknown faults or prove complete mutation coverage.",
+  "Final temporary per-test timing records were not retained; complete suite bottleneck attribution is unavailable.",
+  "Fresh Eyes was not scheduled or evaluated."
+ ],
+ "private_receipt_hashes": [
+  {
+   "receipt": "chronoweave-final-outcome-audit-20261111.json",
+   "sha256": "3233ce5652933e4335621b99058f79c335fe0f07d1b12056091a13c09dda52a4"
+  },
+  {
+   "receipt": "completed-anaxigraph-r2-audit-20261111.json",
+   "sha256": "adf657c97778ef45057639674aae2a42a758ffcf35cc917cb695d67186522b2d"
+  },
+  {
+   "receipt": "chronoweave-final-cost-advice-cause-review-20261111.json",
+   "sha256": "94e361074ac06eb702ed101d47c050ffd222959d349018974d0829d8a4917b19"
+  },
+  {
+   "receipt": "final-cost-ledger-20261111T035810.888654Z.json",
+   "sha256": "bdaf3dba37bcae3610d995a9460d23016b4f81bad2e6304d1f0ee6bd829596e3"
+  },
+  {
+   "receipt": "scoped-transcript-adjudication-all189-20261111.json",
+   "sha256": "1a60a1d087972269b6a40ea5f9c94bb4cd57de1a5d68438a9355b3b2008ae20c"
+  },
+  {
+   "receipt": "all-arm-retained-fault-inventory-terminal-20261111.json",
+   "sha256": "2bcc944fb26947c368c8849ff858e09ec50884b7dfcb88de560c5133b68e5d09"
+  },
+  {
+   "receipt": "terminal-original-parent-content-check-20261111.json",
+   "sha256": "aeb40482efc599b2306e87be807f8c1045fab571957fb883b9bec694884354b6"
+  },
+  {
+   "receipt": "terminal-generated-evidence-journals-20261111.json",
+   "sha256": "8015aa512fa50cf1bffecea6c190acbdd499103130dac161a9718b30949c23b2"
+  }
+ ],
+ "post_campaign_diagnostic": {
+  "status": "completed-unscored",
+  "arm": "anaxigraph",
+  "replicate": 1,
+  "request": 19,
+  "retained_logical_fault": "Empty-selection CLI success return changed from 0 to None.",
+  "unmutated_sanity_passed": true,
+  "selected_targets": "ALL",
+  "fault_caught_by_intended_assertion": true,
+  "passing_cases_before_failure": 2289,
+  "selected_check_exit_code": 1,
+  "selected_check_seconds": 404.63,
+  "termination_reason": "completed",
+  "source_and_behavioral_AST_matched": true,
+  "python_and_distribution_metadata_matched": true,
+  "environment_limit": "Interpreter/package bytes, historical OS/load and full ambient environment were not fingerprinted.",
+  "clone_restored_and_removed": true,
+  "historical_source_and_raw_evidence_unchanged": true,
+  "historical_unknown_retained": true,
+  "comparative_scores_and_costs_changed": false,
+  "receipt_sha256": "7a6f64ea7c36ff0072a700292a449174d98a480c709820827c2aeffaade2d9c1"
+ },
+ "model_advice_followthrough": {
+  "scope": "Retained model results and actual coding replies; not all historical model outputs.",
+  "examples": [
+   {
+    "finding": "Bound durable work claims to available worker slots",
+    "rating": 3,
+    "read_in_later_requests": 4,
+    "affected_module_changed_after_review": false,
+    "reason_for_non_adoption": "unknown"
+   },
+   {
+    "finding": "Check combined selector changes preserve individual consumer obligations",
+    "rating": 2,
+    "retained": true,
+    "full_recommendation_found_in_coding_replies": false
+   }
+  ],
+  "assessment_gap": "Formal plan decisions load qualifying architecture findings, not Pattern evaluations.",
+  "reviewer_judgment": "Useful model advice exists; relevance, delivery and follow-through remain distinct from formal extension proposal counts.",
+  "receipt_sha256": "4657184a8a2a93bea63d54d64257784bccb58eefe4adb341615b0ae9042ea433"
+ }
+}

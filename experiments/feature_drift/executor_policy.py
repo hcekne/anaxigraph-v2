@@ -32,15 +32,26 @@ POLICY = {
         "allow_local_binding": False,
     },
     "network_proxy": True,
-    "preflight": "resolved-profile-local-concurrency-and-denied-egress-v1",
+    "preflight": "resolved-profile-local-concurrency-denied-egress-and-reads-v2",
 }
 
 
-def settings() -> dict[str, str]:
+def policy(denied_roots=()) -> dict:
+    return POLICY | {
+        "filesystem": POLICY["filesystem"]
+        | {str(Path(path).resolve()): "deny" for path in denied_roots}
+    }
+
+
+def settings(denied_roots=()) -> dict[str, str]:
+    filesystem = ",".join(
+        f"{json.dumps(path)}={json.dumps(access)}"
+        for path, access in policy(denied_roots)["filesystem"].items()
+    )
     return {
         "default_permissions": json.dumps(PROFILE),
         f"permissions.{PROFILE}": (
-            '{extends=":workspace",filesystem={":root"="read"},'
+            '{extends=":workspace",filesystem={' + filesystem + "},"
             "network={enabled=true,domains={},allow_upstream_proxy=false,"
             "allow_local_binding=false}}"
         ),
@@ -48,7 +59,17 @@ def settings() -> dict[str, str]:
     }
 
 
-PREFLIGHT = """import asyncio, errno, json, os, socket, threading, urllib.error, urllib.request
+PREFLIGHT = """import asyncio, errno, json, os, socket, sys, threading, urllib.error, urllib.request
+from pathlib import Path
+public = Path.cwd() / "allowed-canary"
+public.write_text("allowed")
+assert public.read_text() == "allowed"
+try:
+    Path(sys.argv[1]).read_text()
+except OSError as error:
+    assert error.errno in (errno.EACCES, errno.EPERM, errno.ENOENT), repr(error)
+else:
+    raise AssertionError("Private benchmark canary was readable")
 a, b = socket.socketpair()
 try:
     assert a.send(b"local") == 5 and b.recv(5) == b"local"
@@ -84,17 +105,18 @@ except urllib.error.HTTPError as error:
     assert denial.get("host") == "anaxigraph-preflight.invalid", denial
 else:
     raise AssertionError("Deny-all proxy did not reject the external host")
-print(json.dumps({"socketpair": True, "cross_thread_asyncio": True, "egress_denied": True}))
+print(json.dumps({"socketpair": True, "cross_thread_asyncio": True, "egress_denied": True,
+                  "private_read_denied": True, "workspace_read_write": True}))
 """
 
 _lock = threading.Lock()
 _verified: dict[tuple, dict] = {}
 
 
-def resolved_profile(executable: Path, directory: str) -> dict:
+def resolved_profile(executable: Path, directory: str, denied_roots=()) -> dict:
     """Resolve default_permissions without inference; sandbox's -P is mandatory."""
     argv = [str(executable), "--cd", directory]
-    values = settings() | {
+    values = settings(denied_roots) | {
         "approval_policy": '"never"',
         "project_doc_max_bytes": "0",
         "mcp_servers": "{}",
@@ -137,25 +159,37 @@ def resolved_profile(executable: Path, directory: str) -> dict:
     }
 
 
-def preflight() -> dict:
+def preflight(denied_roots=()) -> dict:
     """Fail before a paid session if this executable cannot uphold the named policy."""
     executable = shutil.which("codex")
     if executable is None:
         raise ValueError("Codex executor preflight failed: codex is not installed")
     path = Path(executable).resolve(strict=True)
     stat = path.stat()
-    key = (str(path), stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    denied_roots = tuple(sorted(str(Path(item).resolve()) for item in denied_roots))
+    key = (str(path), stat.st_ino, stat.st_size, stat.st_mtime_ns, denied_roots)
     with _lock:
         if key in _verified:
             return _verified[key]
-        with tempfile.TemporaryDirectory(prefix="drift-executor-") as directory:
-            resolution = resolved_profile(path, directory)
+        with (
+            tempfile.TemporaryDirectory(prefix="drift-executor-") as directory,
+            tempfile.TemporaryDirectory(prefix="drift-private-") as private,
+        ):
+            resolution = resolved_profile(path, directory, denied_roots)
+            canary = Path(private) / "canary"
+            canary.write_text("synthetic-benchmark-canary")
             argv = [str(path), "sandbox", "-C", directory, "-P", PROFILE]
-            for name, value in settings().items():
+            for name, value in settings((*denied_roots, private)).items():
                 argv.extend(["--config", f"{name}={value}"])
-            argv.extend([sys.executable, "-c", PREFLIGHT])
+            argv.extend([str(Path(sys.executable).resolve()), "-c", PREFLIGHT, str(canary)])
             result = run(argv, Path(directory), 20)
-        expected = {"socketpair": True, "cross_thread_asyncio": True, "egress_denied": True}
+        expected = {
+            "socketpair": True,
+            "cross_thread_asyncio": True,
+            "egress_denied": True,
+            "private_read_denied": True,
+            "workspace_read_write": True,
+        }
         try:
             observed = json.loads(result.stdout.strip())
         except ValueError:
@@ -167,7 +201,7 @@ def preflight() -> dict:
             )
         receipt = {
             "status": "passed",
-            "policy": POLICY,
+            "policy": policy(denied_roots),
             "executable": str(path),
             "checks": observed,
             "profile_resolution": resolution,

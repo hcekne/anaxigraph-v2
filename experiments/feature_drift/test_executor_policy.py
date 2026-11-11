@@ -35,7 +35,13 @@ def fake_executor(monkeypatch):
                 }
             ]
         else:
-            payload = {"socketpair": True, "cross_thread_asyncio": True, "egress_denied": True}
+            payload = {
+                "socketpair": True,
+                "cross_thread_asyncio": True,
+                "egress_denied": True,
+                "private_read_denied": True,
+                "workspace_read_write": True,
+            }
         return SimpleNamespace(
             returncode=0,
             stdout=json.dumps(payload),
@@ -63,7 +69,9 @@ def test_exec_and_sandbox_share_named_deny_all_policy(fake_executor, tmp_path):
     probe, cwd, timeout = fake_executor[1]
     assert probe[1] == "sandbox" and probe[probe.index("-P") + 1] == executor_policy.PROFILE
     for key, value in executor_policy.settings().items():
-        assert f"{key}={value}" in probe
+        if key != f"permissions.{executor_policy.PROFILE}":
+            assert f"{key}={value}" in probe
+    assert '="deny"' in next(x for x in probe if x.startswith("permissions.drift-local="))
     assert "exec" not in probe and timeout == 20
     assert not cwd.exists()
     assert receipt["models_started"] == 0 and receipt["policy"] == executor_policy.POLICY
@@ -159,7 +167,7 @@ def test_main_preflight_failure_keeps_state_and_models_untouched(monkeypatch, tm
         sys, "argv", ["runner", "--state", str(state), "--arms", "bare", "--no-probes"]
     )
 
-    def unsupported():
+    def unsupported(*_):
         raise ValueError("Unsupported executor; no paid session started")
 
     monkeypatch.setattr(executor_policy, "preflight", unsupported)
@@ -169,3 +177,21 @@ def test_main_preflight_failure_keeps_state_and_models_untouched(monkeypatch, tm
         runner.main()
     assert result.value.code == 2
     assert not state.exists()
+
+
+def test_same_private_paths_reach_each_arm_and_preflight(fake_executor, tmp_path):
+    private = (tmp_path / "oracle", tmp_path / "other-arm")
+    config = SimpleNamespace(
+        model="fixture-model",
+        effort="high",
+        runtime=tmp_path / "runtime",
+        private_roots=private,
+    )
+    for treatment in (False, True):
+        argv = runner.codex_argv(config, tmp_path / "repo", treatment)
+        configured = next(x for x in argv if x.startswith("permissions.drift-local="))
+        value = tomllib.loads(configured)["permissions"]["drift-local"]
+        assert all(value["filesystem"][str(path)] == "deny" for path in private)
+    receipt = executor_policy.preflight(private)
+    assert all(receipt["policy"]["filesystem"][str(path)] == "deny" for path in private)
+    assert receipt["checks"]["private_read_denied"]

@@ -26,6 +26,9 @@ state. The drafts remain the origin; `track.json` lists every adaptation, includ
   arm is never told about AnaxiGraph; the CI safety gate applies from step 5;
 - probe requests 7, 14 and 20 do not tell the agent that they are probes.
 
+The [completed ChronoWeave exploratory results](../../../docs/chronoweave-exploratory-results-2026-11-11.md)
+record all nine runs, initial safety failures, repairs, costs and limitations.
+
 Inspect, export or run:
 
 ```bash

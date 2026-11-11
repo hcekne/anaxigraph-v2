@@ -36,6 +36,7 @@ except ImportError:
     import process_guard
 
 RESOURCE_POLICY = process_guard.RESOURCE_POLICY
+REFERENCE_TIMEOUT_SECONDS = 1800
 run = process_guard.run
 
 SKIP_PARTS = {".venv", "node_modules", "__pycache__", "anaxigraph"}
@@ -397,7 +398,7 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
                 "addopts=",
             ],
             repo,
-            1800,
+            REFERENCE_TIMEOUT_SECONDS,
             {**candidate_env(repo), "COVERAGE_FILE": str(data)},
         )
         info = {
@@ -408,6 +409,21 @@ def coverage_by_test(repo: Path) -> tuple[dict[str, dict[int, set[str]]], dict]:
         }
         if junit.exists():
             cases = list(ET.parse(junit).getroot().iter("testcase"))
+            timings = sorted(
+                (
+                    {
+                        "id": f"{case.get('classname')}::{case.get('name')}",
+                        "seconds": float(case.get("time")),
+                    }
+                    for case in cases
+                    if case.get("time")
+                ),
+                key=lambda row: row["seconds"],
+                reverse=True,
+            )
+            info["testcase_duration_count"] = len(timings)
+            info["testcase_duration_seconds_sum"] = sum(row["seconds"] for row in timings)
+            info["slowest_testcases"] = timings[:20]
             failing = [
                 case
                 for case in cases
