@@ -75,7 +75,10 @@ def test_benchmark_refresh_uses_real_runner_cache_and_configured_review_cadence(
     spec = importlib.util.spec_from_file_location("selective_feature_drift_runner", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    application = app(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    application = app(repo)
+    receipts = tmp_path / "preparation"
     calls, kinds = Counter(), []
 
     def provider(request, _worker, **_kwargs):
@@ -98,19 +101,44 @@ def test_benchmark_refresh_uses_real_runner_cache_and_configured_review_cadence(
         )
 
     monkeypatch.setattr(module, "runtime", runtime)
-    first = module.refresh_anaxigraph(config, tmp_path, 1)
+    first = module.refresh_anaxigraph(config, repo, 1, receipts / "step-1")
+    assert first["qualified"]
     assert first["mapping"]["model_calls"] == 2
-    reviewed = module.refresh_anaxigraph(config, tmp_path, 2)
+    reviewed = module.refresh_anaxigraph(config, repo, 2, receipts / "step-2")
+    assert reviewed["qualified"]
     assert reviewed["mapping"]["model_calls"] == 0
     assert reviewed["mapping"]["semantic_refresh"]["reused_modules"] == 2
     assert kinds == ["mapping", "mapping", "patterns"]
     assert calls["delivery"] == 1  # Patterns already schedules CI/CD exactly once.
     total = sum(calls.values())
-    repeated = module.refresh_anaxigraph(config, tmp_path, 2)
+    pattern_receipts = [
+        json.loads(path.read_text())
+        for path in sorted((receipts / "step-2").glob("attempt-*.json"))
+        if json.loads(path.read_text())["kind"] == "patterns"
+    ]
+    repeated = module.refresh_anaxigraph(config, repo, 2, receipts / "step-2")
+    assert repeated["qualified"]
     assert sum(calls.values()) == total
-    assert repeated["patterns"]["model_calls"] == 0
-    config.review_kinds = ("fresh-eyes",)
-    fresh = module.refresh_anaxigraph(config, tmp_path, 2)
+    assert kinds == ["mapping", "mapping", "patterns"]
+    assert repeated["patterns"] == reviewed["patterns"]
+    assert repeated["mapping"]["run_id"] == reviewed["mapping"]["run_id"]
+    retained = [
+        json.loads(path.read_text())
+        for path in sorted((receipts / "step-2").glob("attempt-*.json"))
+        if json.loads(path.read_text())["kind"] == "patterns"
+    ]
+    assert retained == pattern_receipts  # Original invocation/cost is retained, not zeroed.
+    assert repeated["seconds"] == pytest.approx(
+        sum(
+            json.loads(path.read_text())["seconds"]
+            for path in (receipts / "step-2").glob("attempt-*.json")
+        )
+    )
+    fresh_config = SimpleNamespace(
+        workflow_config=config_path, review_steps={2}, review_kinds=("fresh-eyes",)
+    )
+    fresh = module.refresh_anaxigraph(fresh_config, repo, 2, receipts / "fresh-review")
+    assert fresh["qualified"] and fresh["mapping"]["model_calls"] == 0
     assert fresh["fresh-eyes"]["status"] == "completed", fresh
     assert calls["fresh-eyes"] == 2  # Independent subsystem plus product alternatives.
 
