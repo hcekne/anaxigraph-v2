@@ -300,7 +300,8 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
             stdout=stdout,
             stderr=stderr,
             text=True,
-            env={**os.environ, **env},
+            # The agent must not learn where the benchmark lives.
+            env={k: v for k, v in {**os.environ, **env}.items() if k != "ANAXI_EVALS_ROOT"},
             start_new_session=True,
         )
         session["pid"] = process.pid
