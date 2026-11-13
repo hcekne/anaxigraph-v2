@@ -391,12 +391,12 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
     schema = {
         "alternatives": [
             {
-                "name": "distinct design",
-                "design": "concrete explanation",
+                "name": "distinct design (at most 160 characters)",
+                "design": "concrete explanation (at most 6000 characters)",
                 "requirements": ["ALL requirement IDs"],
-                "pros": ["benefit"],
-                "cons": ["cost"],
-                "diagram": "flowchart TB ...",
+                "pros": ["benefit (at most 12 items, each at most 300 characters)"],
+                "cons": ["cost (at most 12 items, each at most 300 characters)"],
+                "diagram": "flowchart TB ... (at most 6000 characters)",
             }
         ],
         "producer": "agent/model identity",
