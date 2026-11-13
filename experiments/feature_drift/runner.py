@@ -332,7 +332,10 @@ def run_agent(config, repo: Path, log: Path, prompt: str, with_anaxigraph: bool)
         "seconds": session["seconds"],
         "usage_unknown_sessions": int(status != "completed" or summary["turns"] == 0),
         # The benchmark lives on the same machine; flag transcripts that touched it.
-        "contaminated": "feature_drift" in raw or "scenario/hidden" in raw,
+        "contaminated": any(
+            marker in raw
+            for marker in ("feature_drift", "scenario/hidden", "anaxi_evals", "track/hidden")
+        ),
         **summary,
         "known_usage": summary["usage"],
         "usage": summary["usage"] if status == "completed" and summary["turns"] else None,
@@ -1066,7 +1069,14 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
             row.update(evaluate(config, chain, repo, step, base, head))
             row["verification_seconds"] = time.monotonic() - started
         row["finished"] = now()
-        if row.get("ci_gate", {}).get("status", "passed") != "passed":
+        if (
+            row.get("ci_gate", {}).get("status", "passed") != "passed"
+            and config.ci_gate == "record"
+        ):
+            # Protocol of the anaxi_evals suite: record the unqualified checkpoint and continue
+            # every scheduled request; the failure stays in the row and is never rescored.
+            row["ci_gate_policy"] = "record-and-continue"
+        elif row.get("ci_gate", {}).get("status", "passed") != "passed":
             write_json(chain / f"pending-step-{step:02d}.json", row)
             return {
                 "chain": chain.name,
@@ -1191,7 +1201,9 @@ def run_probes(config, chain: Path, arm_name: str) -> None:
             "verification_seconds": checked["verification_seconds"],
         }
         row["verification_seconds"] += time.monotonic() - postcheck_started
-        if checked["ci_gate"]["status"] != "passed":
+        if checked["ci_gate"]["status"] != "passed" and config.ci_gate == "record":
+            row["ci_gate_policy"] = "record-and-continue"
+        elif checked["ci_gate"]["status"] != "passed":
             write_json(pending, row)
             raise RuntimeError(f"Probe {request.stem} failed bounded CI safety repair")
         append_jsonl(results, row)
@@ -1286,6 +1298,12 @@ def provenance(config) -> dict:
             "ci_every": config.ci_every,
             "agent_timeout": config.agent_timeout,
             "reference_timeout": metrics.REFERENCE_TIMEOUT_SECONDS,
+            # Recorded only when not the historical default, so earlier chains still resume.
+            **(
+                {"ci_gate": config.ci_gate}
+                if getattr(config, "ci_gate", "block") != "block"
+                else {}
+            ),
         },
     }
 
@@ -1360,7 +1378,7 @@ def main() -> None:
         default=3,
         help="Explicit extra repair allowance for every arm in an exploratory continuation",
     )
-    parser.add_argument("--track", choices=scenarios.TRACK_IDS, default="switchboard")
+    parser.add_argument("--track", choices=scenarios.ALL_TRACK_IDS, default="switchboard")
     parser.add_argument(
         "--list-tracks", action="store_true", help="List executable and draft tracks without models"
     )
@@ -1431,6 +1449,13 @@ def main() -> None:
         default=2,
         help="Maximum fresh repair sessions per failed external CI safety gate (0..3)",
     )
+    parser.add_argument(
+        "--ci-gate",
+        choices=("block", "record"),
+        default="block",
+        help="block: stop a chain whose CI safety stays unqualified after repairs; record: keep "
+        "the failed checkpoint in its row and continue the scheduled requests",
+    )
     parser.add_argument("--no-probes", dest="probes", action="store_false")
     config = parser.parse_args()
     if not math.isfinite(config.reference_timeout) or config.reference_timeout <= 0:
@@ -1441,7 +1466,15 @@ def main() -> None:
             json.dumps(
                 [
                     {key: track[key] for key in ("id", "name", "status", "readiness_note")}
-                    for track in map(scenarios.describe, scenarios.TRACK_IDS)
+                    for track in map(
+                        scenarios.describe,
+                        (
+                            track
+                            for track in scenarios.ALL_TRACK_IDS
+                            if track not in scenarios.EXTERNAL_TRACK_IDS
+                            or scenarios._complete(track)
+                        ),
+                    )
                 ],
                 indent=2,
             )

@@ -9,26 +9,43 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# Tracks authored in the separate anaxi_evals suite: `evals/<id>/track/`. They declare their
+# own step count, carry no inline probes and keep post-history probes beside the requests.
+EXTERNAL_TRACK_IDS = ("relaydesk", "dispatchledger", "caseflow")
 TRACK_IDS = ("switchboard", "chronoweave", "aetherloom")
-COMPARISON_RULES = {track: f"{track}-v1" for track in TRACK_IDS}
+ALL_TRACK_IDS = (*TRACK_IDS, *EXTERNAL_TRACK_IDS)
+COMPARISON_RULES = {track: f"{track}-v1" for track in ALL_TRACK_IDS}
+
+
+def evals_root() -> Path:
+    return Path(os.environ.get("ANAXI_EVALS_ROOT", HERE.parents[2] / "anaxi_evals")).resolve()
 
 
 def root(track_id: str) -> Path:
     """Directory holding the track's seed, requests and hidden acceptance checks."""
+    if track_id in EXTERNAL_TRACK_IDS:
+        return evals_root() / "evals" / track_id / "track"
     return HERE / "scenario" if track_id == "switchboard" else HERE / "tracks" / track_id
+
+
+def _step_count(base: Path) -> int:
+    meta = base / "track.json"
+    return json.loads(meta.read_text()).get("step_count", 21) if meta.is_file() else 21
 
 
 def _complete(track_id: str) -> bool:
     base = root(track_id)
     requests = sorted((base / "requests").glob("*.md"))
+    count = _step_count(base)
     return (
         (base / "track.json").is_file()
         and (base / "seed" / "run.json").is_file()
-        and [int(path.name[:2]) for path in requests] == list(range(21))
-        and all((base / "hidden" / f"step_{n:02d}.py").is_file() for n in range(21))
+        and [int(path.name[:2]) for path in requests] == list(range(count))
+        and all((base / "hidden" / f"step_{n:02d}.py").is_file() for n in range(count))
     )
 
 
@@ -115,7 +132,10 @@ def _executable(track_id: str) -> dict:
     base = root(track_id)
     meta = json.loads((base / "track.json").read_text())
     probes = {int(step): name for step, name in meta["inline_probes"].items()}
-    if meta.get("id") != track_id or probes != {7: "P1", 14: "P2", 20: "P3"}:
+    external = track_id in EXTERNAL_TRACK_IDS
+    if meta.get("id") != track_id or (
+        probes != {7: "P1", 14: "P2", 20: "P3"} and not (external and probes == {})
+    ):
         raise ValueError("Executable track metadata must keep its identity and P1/P2/P3 at 7/14/20")
     steps = []
     for path in sorted((base / "requests").glob("*.md")):
@@ -137,15 +157,24 @@ def _executable(track_id: str) -> dict:
         "specification as listed in adaptations. This catalog is not a run result.",
         "ci_from_step": meta["ci_from_step"],
         "adaptations": meta.get("adaptations", []),
-        "draft_sha256": digest(draft(track_id)),
+        "draft_sha256": digest(
+            (base.parent / "spec.md").read_text() if external else draft(track_id)
+        ),
         "steps": steps,
-        "post_history_probes": [],
+        "post_history_probes": [
+            {"id": path.stem, "prompt": path.read_text(), "acceptance_file": f"probe_{n}.py"}
+            for n, path in enumerate(sorted((base / "probes").glob("*.md")), 1)
+        ]
+        if external
+        else [],
     }
 
 
 def describe(track_id: str = "switchboard") -> dict:
-    if track_id not in TRACK_IDS:
+    if track_id not in ALL_TRACK_IDS:
         raise ValueError(f"Unknown track: {track_id}")
+    if track_id in EXTERNAL_TRACK_IDS and not _complete(track_id):
+        raise ValueError(f"{track_id} has no complete executable track under {root(track_id)}")
     if track_id != "switchboard":
         return _executable(track_id) if _complete(track_id) else draft(track_id)
     base = root(track_id)

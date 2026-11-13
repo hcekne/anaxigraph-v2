@@ -138,9 +138,11 @@ def test_list_tracks_names_readiness_without_executing_them():
     result = cli("--list-tracks")
     assert result.returncode == 0, result.stderr
     rows = json.loads(result.stdout)
-    assert [(row["id"], row["status"]) for row in rows] == [
+    builtin = len(scenarios.TRACK_IDS)
+    assert [(row["id"], row["status"]) for row in rows[:builtin]] == [
         (track, scenarios.describe(track)["status"]) for track in scenarios.TRACK_IDS
     ]
+    assert {row["id"] for row in rows[builtin:]} <= set(scenarios.EXTERNAL_TRACK_IDS)
     assert rows[0]["status"] == "executable"
 
 
@@ -335,3 +337,53 @@ def test_agent_timeout_defaults_to_the_track_limit():
     for track in scenarios.TRACK_IDS[1:]:
         if scenarios.describe(track)["status"] == "executable":
             assert limits[track] == 7200
+
+
+def _external_track(base, steps=16, probes=2):
+    track = base / "evals" / "relaydesk" / "track"
+    (track / "seed").mkdir(parents=True)
+    (track / "seed" / "run.json").write_text('{"command": []}')
+    (track / "requests").mkdir()
+    (track / "hidden").mkdir()
+    (track / "probes").mkdir()
+    (base / "evals" / "relaydesk" / "spec.md").write_text("spec")
+    for n in range(steps):
+        (track / "requests" / f"{n:02d}-r.md").write_text(f"# Request {n}")
+        (track / "hidden" / f"step_{n:02d}.py").write_text("")
+    for n in range(1, probes + 1):
+        (track / "probes" / f"p{n}-x.md").write_text(f"probe {n}")
+    (track / "track.json").write_text(
+        json.dumps(
+            {
+                "id": "relaydesk",
+                "name": "RelayDesk",
+                "version": 1,
+                "product": "RelayDesk",
+                "step_count": steps,
+                "ci_from_step": 3,
+                "inline_probes": {},
+            }
+        )
+    )
+    return track
+
+
+def test_external_track_declares_its_own_length_and_probes(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANAXI_EVALS_ROOT", str(tmp_path))
+    _external_track(tmp_path)
+    track = scenarios.describe("relaydesk")
+    assert [step["number"] for step in track["steps"]] == list(range(16))
+    assert [probe["acceptance_file"] for probe in track["post_history_probes"]] == [
+        "probe_1.py",
+        "probe_2.py",
+    ]
+    assert scenarios.requirements(track)["inline_probes"] == []
+    assert scenarios.layout(track)["ci_from_step"] == 3
+
+
+def test_incomplete_external_track_is_refused(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANAXI_EVALS_ROOT", str(tmp_path))
+    track = _external_track(tmp_path)
+    (track / "hidden" / "step_15.py").unlink()
+    with pytest.raises(ValueError, match="no complete executable track"):
+        scenarios.describe("relaydesk")

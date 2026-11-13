@@ -224,6 +224,21 @@ Set `--review-steps` and `--review-kinds` explicitly to compare other cadences. 
 kind is `patterns`; adding `fresh-eyes` requests independent blind designs at those checkpoints.
 Mapping records needed/reused scope counts and preserves explicit model configurations.
 
+## Tracks from the anaxi_evals suite
+
+RelayDesk, DispatchLedger and CaseFlow are authored in the separate
+[anaxi_evals](https://github.com/hcekne/anaxi_evals) repository under `evals/<id>/track/`.
+Set `ANAXI_EVALS_ROOT` to a checkout (default: a sibling `anaxi_evals` folder). Each track
+declares its own `step_count` (16, requests `00`–`15`), has no inline probes and keeps four
+post-history probes in `probes/`. A track is refused until all requests and hidden files exist.
+Add the suite checkout as a `--private-root` so no coding arm can read it.
+
+That suite's protocol continues every scheduled request after a failed checkpoint. Use
+`--ci-gate record` for it: an unqualified CI safety result stays in the step row, marked
+`record-and-continue`, and the next request starts. The default `block` keeps the historical
+behavior of stopping the chain. With `--ci-repair-attempts 0`, evaluator-only coverage
+omissions are measured and never fed back to an arm.
+
 ## Inspect saved runs without new model calls
 
 ```bash
