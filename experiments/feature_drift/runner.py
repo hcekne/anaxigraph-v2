@@ -982,7 +982,7 @@ def run_chain(config, arm_name: str, replicate: int) -> dict:
         if preparation_task.exists():
             row = json.loads(preparation_task.read_text())
             base = row["base_commit"]
-            if metrics.git(repo, "rev-parse", "HEAD") != base:
+            if metrics.git(repo, "rev-parse", "HEAD").strip() != base:
                 raise ValueError(
                     "Checkout changed during unfinished preparation; preserve its baseline"
                 )
