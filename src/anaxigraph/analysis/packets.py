@@ -378,7 +378,8 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
             "include a minimal option. The charter gives preferences, not current-design evidence. "
             "Each alternative lists every requirement ID, pros/cons and its own Mermaid diagram; "
             "never collapse to a winner or claim tested implementation. Also return functional_summary "
-            "(one purpose sentence), functional_requirements (at most eight behavior-only sentences) "
+            "(one purpose sentence), functional_requirements (at most eight behavior-only sentences, "
+            "each at most 600 characters) "
             "and aligned functional_coverage requirement-ID lists whose union covers EVERY input. "
             "These functional briefs preserve purpose/observable guarantees for an independent "
             "product design; they describe neither existing structure nor proposed implementations."
@@ -399,8 +400,10 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
             }
         ],
         "producer": "agent/model identity",
-        "functional_summary": "one sentence describing observable purpose",
-        "functional_requirements": ["at most eight concise observable requirements"],
+        "functional_summary": "one sentence describing observable purpose (at most 600 characters)",
+        "functional_requirements": [
+            "at most eight concise observable requirements, each at most 600 characters"
+        ],
         "functional_coverage": [["requirement IDs preserved by the aligned brief sentence"]],
     }
     return packet, schema

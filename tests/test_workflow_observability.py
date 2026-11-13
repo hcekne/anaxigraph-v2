@@ -16,9 +16,11 @@ def test_validation_rejection_is_retained_while_retry_runs_and_after_success(tmp
     retry_started, release = threading.Event(), threading.Event()
     calls = 0
 
-    def provider(request, *_args, **_kwargs):
+    def provider(request, *_args, draft=None, **_kwargs):
         nonlocal calls
         if request["kind"] == "fresh-eyes":
+            if draft is not None:  # the in-attempt repair pass also fails
+                return {"producer": "synthetic-incomplete-result"}
             calls += 1
             if calls == 1:
                 return {"producer": "synthetic-incomplete-result"}
@@ -30,7 +32,7 @@ def test_validation_rejection_is_retained_while_retry_runs_and_after_success(tmp
     runner = WorkflowRunner(application, provider)
     first = runner.start("fresh-eyes", background=False)
     assert first["status"] == "failed"
-    assert first["failed_attempts"] == 1
+    assert first["failed_attempts"] == 2  # the output and its one repair pass
     assert first["attempt_failures"][0]["phase"] == "validation"
     assert "functional_summary" in first["attempt_failures"][0]["error"]
     events = application.evidence.events(100)["items"]
@@ -38,7 +40,7 @@ def test_validation_rejection_is_retained_while_retry_runs_and_after_success(tmp
     assert all(row["payload"]["status"] == "completed" for row in transport)
     assert all(row["payload"]["phase"] == "provider" for row in transport)
     outcomes = [row["payload"] for row in events if row["kind"] == "analysis_result"]
-    assert [row["status"] for row in outcomes] == ["accepted", "rejected"]
+    assert [row["status"] for row in outcomes] == ["accepted", "rejected", "rejected"]
     assert outcomes[-1]["stage"] == "fresh-eyes"
     assert outcomes[-1]["attempt"] == 1
     assert outcomes[-1]["run_id"] == first["run_id"]
@@ -51,7 +53,7 @@ def test_validation_rejection_is_retained_while_retry_runs_and_after_success(tmp
         assert active["status"] == "running"
         assert active["failed_batches"] == 0
         assert active["batch_retries"] == 1
-        assert active["failed_attempts"] == 1
+        assert active["failed_attempts"] == 2
         assert active["attempt_history_complete"] is True
         assert active["attempt_failures"] == first["attempt_failures"]
         thread = _RUNNING[(str(application.root), first["run_id"])]
@@ -63,7 +65,7 @@ def test_validation_rejection_is_retained_while_retry_runs_and_after_success(tmp
     assert completed["status"] == "completed", completed
     assert completed["failed_batches"] == 0
     assert completed["batch_retries"] == 1
-    assert completed["failed_attempts"] == 1
+    assert completed["failed_attempts"] == 2
     assert completed["attempt_failures"] == first["attempt_failures"]
     persisted = json.loads(runner._path(first["run_id"]).read_text())
     assert persisted["batches"][1]["attempts"] == 2
@@ -73,7 +75,7 @@ def test_validation_rejection_is_retained_while_retry_runs_and_after_success(tmp
         for row in Evidence(application.root).events(100)["items"]
         if row["kind"] == "analysis_result"
     ]
-    assert results == ["accepted", "rejected", "accepted", "accepted"]
+    assert results == ["accepted", "rejected", "rejected", "accepted", "accepted"]
 
 
 def test_attempt_history_is_bounded_but_counts_survive_resume_and_reload(tmp_path):
@@ -100,10 +102,10 @@ def test_attempt_history_is_bounded_but_counts_survive_resume_and_reload(tmp_pat
     loaded = WorkflowRunner(application, provider).status(result["run_id"])
     assert loaded["status"] == "failed"
     assert loaded["batch_retries"] == 4
-    assert loaded["failed_attempts"] == 5
+    assert loaded["failed_attempts"] == 10  # each attempt and its repair pass
     assert len(loaded["attempt_failures"]) == 3
     assert loaded["attempt_failures_truncated"] is True
-    assert {row["attempt"] for row in loaded["attempt_failures"]} == {3, 4, 5}
+    assert sorted(row["attempt"] for row in loaded["attempt_failures"]) == [4, 5, 5]
     assert all(len(row["error"]) <= 200 for row in loaded["attempt_failures"])
 
 

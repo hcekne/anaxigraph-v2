@@ -584,10 +584,34 @@ class WorkflowRunner:
                         "worker": candidate,
                         "review_passes": executed,
                     }
-                    result["execution"] = execution
-                    for annotation in result.get("annotations", []):
-                        annotation["execution"] = execution
-                    self.application.submit_analysis(request["request_id"], result)
+                    try:
+                        self._submit(request, result, execution)
+                    except Exception as rejected:
+                        if (
+                            getattr(rejected, "model_request_id", None) != request["request_id"]
+                            or candidate is not candidates[-1]
+                        ):
+                            raise
+                        # No stronger fallback is left. Give the same worker one repair pass
+                        # with its rejected output and the reason, instead of letting one
+                        # overlong sentence fail the whole stage.
+                        self._record_failure(run, batch, rejected, phase, candidate)
+                        self._record_result(run, batch, request, candidate, "rejected", rejected)
+                        phase = "provider"
+                        self.application._require_live(graph)
+                        rejected_result = {k: v for k, v in result.items() if k != "execution"}
+                        result = self._call(
+                            run,
+                            batch,
+                            request,
+                            candidate,
+                            draft={
+                                "rejected_result": rejected_result,
+                                "validation_error": _failure_message(rejected, "validation"),
+                            },
+                        )
+                        phase = "validation"
+                        self._submit(request, result, execution)
                     self._record_result(run, batch, request, candidate, "accepted")
                     recorded = False
                     break
@@ -617,6 +641,12 @@ class WorkflowRunner:
             with _MUTEX:
                 finish_batch(batch, started, calls_before)
                 self._save(run)
+
+    def _submit(self, request, result, execution):
+        result["execution"] = execution
+        for annotation in result.get("annotations", []):
+            annotation["execution"] = execution
+        self.application.submit_analysis(request["request_id"], result)
 
     def _record_failure(self, run, batch, error, phase, worker=None):
         with _MUTEX:

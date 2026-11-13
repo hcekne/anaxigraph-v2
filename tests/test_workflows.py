@@ -211,6 +211,35 @@ def test_validation_failure_tries_configured_stronger_model(tmp_path):
     assert models == ["weak", "strong"]
 
 
+def test_last_worker_repairs_a_rejected_output_once_with_the_reason(tmp_path):
+    application = app(tmp_path, count=1)
+    drafts = []
+
+    def provider(request, worker, *, draft=None, **_kwargs):
+        drafts.append(draft)
+        return {"producer": "synthetic-invalid"} if draft is None else answer(request)
+
+    result = WorkflowRunner(application, provider).start("mapping", background=False)
+    assert result["status"] == "completed", result
+    # Default mapping escalates Luna -> Sol first; only the last worker repairs.
+    assert drafts[:-1] == [None, None]
+    assert drafts[-1]["rejected_result"] == {"producer": "synthetic-invalid"}
+    assert drafts[-1]["validation_error"]
+
+
+def test_a_repair_that_is_still_invalid_fails_the_batch(tmp_path):
+    application = app(tmp_path, count=1)
+    calls = []
+
+    def provider(request, worker, **_kwargs):
+        calls.append(worker["model"])
+        return {"producer": "synthetic-invalid"}
+
+    result = WorkflowRunner(application, provider).start("mapping", background=False)
+    assert result["status"] == "failed", result
+    assert calls == ["gpt-6-luna", "gpt-6.1-sol", "gpt-6.1-sol"]
+
+
 def test_patterns_and_blind_hierarchical_design_are_saved_and_reused(tmp_path):
     application = app(tmp_path, count=2)
     calls = Counter()

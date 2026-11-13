@@ -233,7 +233,8 @@ def execute(
         "response_schema example (it describes required fields, not literal answers). "
         "Do not use tools, inspect files, or invent evidence. Preserve every declared member. "
         "For Fresh Eyes also provide functional_summary and functional_requirements (at most "
-        "eight behavior-only statements) for a separate product-level design review.\n"
+        "eight behavior-only statements, each at most 600 characters) for a separate "
+        "product-level design review.\n"
     )
     if draft is not None:
         instruction += (
