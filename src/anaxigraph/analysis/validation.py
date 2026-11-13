@@ -372,7 +372,7 @@ def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -
         if not isinstance(alternative, dict):
             raise ValueError("Each alternative must be an object")
         names.add(_text(alternative.get("name"), "name", 160))
-        designs.add(_text(alternative.get("design"), "design", 6000))
+        designs.add(_text(alternative.get("design"), "design", 12000))
         coverage = alternative.get("requirements")
         if not isinstance(coverage, list) or any(not isinstance(x, str) for x in coverage):
             raise ValueError("Requirement coverage must be a list of requirement IDs")
@@ -384,7 +384,7 @@ def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -
             raise ValueError("Each design must explicitly preserve every requirement")
         _texts(alternative.get("pros"), "pros", required=True)
         _texts(alternative.get("cons"), "cons", required=True)
-        diagram = _text(alternative.get("diagram"), "diagram", 6000)
+        diagram = _text(alternative.get("diagram"), "diagram", 12000)
         if not diagram.startswith(("flowchart ", "graph ")):
             raise ValueError("Each alternative needs a high-level Mermaid flowchart")
     if len(names) != 3 or len(designs) != 3:

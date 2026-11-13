@@ -392,11 +392,11 @@ def _fresh_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], dic
         "alternatives": [
             {
                 "name": "distinct design (at most 160 characters)",
-                "design": "concrete explanation (at most 6000 characters)",
+                "design": "concrete explanation (at most 12000 characters)",
                 "requirements": ["ALL requirement IDs"],
                 "pros": ["benefit (at most 12 items, each at most 300 characters)"],
                 "cons": ["cost (at most 12 items, each at most 300 characters)"],
-                "diagram": "flowchart TB ... (at most 6000 characters)",
+                "diagram": "flowchart TB ... (at most 12000 characters)",
             }
         ],
         "producer": "agent/model identity",
