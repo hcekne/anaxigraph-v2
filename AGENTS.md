@@ -41,9 +41,9 @@ architecture scouts plus CI/CD. Preserve explicit exhaustive/selected reviews an
 identities. Material plan findings need adopt/defer/reject reasons; decisions do not prove implementation.
 
 Use the [recommended routine](docs/usage.md): scan and prepare a substantial task, inspect and
-assess its plan, then scan/check/validate against the original baseline. Run Patterns after
-meaningful changes, Fresh Eyes at milestones and regularly on active projects, and CI review
-when component or pipeline assumptions change. Judge usefulness through actual coding outcomes
+assess its plan, then scan/check/validate against the original baseline. Run Patterns, Fresh
+Eyes or a CI review when the maintainer asks for one or you want a second opinion on the area you
+are changing; nothing schedules them. Judge usefulness through actual coding outcomes
 and feedback from agents. Keep the README introductory and link deeper operational details.
 Respect `completion_allowed`: resolve blocked or incomplete CI evidence before reporting a change
 complete. Keep consumer obligations when narrowing checks; passing local tests alone is insufficient.

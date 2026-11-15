@@ -220,8 +220,10 @@ measurements remain unknown. These evaluator changes are part of frozen harness 
 A full run is about 20 × arms × replicates agent sessions (180 for three arms and three
 replicates) plus 9 probe sessions per replicate, and AnaxiGraph refreshes. Run the pilot first.
 
-Set `--review-steps` and `--review-kinds` explicitly to compare other cadences. The default review
-kind is `patterns`; adding `fresh-eyes` requests independent blind designs at those checkpoints.
+No broad review runs unless `--review-steps` names the steps; campaigns before 15 November 2026
+used `6,11,16`. Reviews are requested work, not a schedule: in the three anaxi_evals pilot runs the
+scheduled rounds took 26 to 38 of the 36 to 51 analysis minutes with no measured effect. The default
+review kind is `patterns`; adding `fresh-eyes` requests independent blind designs at those steps.
 Mapping records needed/reused scope counts and preserves explicit model configurations.
 
 ## Tracks from the anaxi_evals suite

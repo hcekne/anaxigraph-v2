@@ -1427,8 +1427,8 @@ def main() -> None:
     parser.add_argument("--workflow-config", type=Path)
     parser.add_argument(
         "--review-steps",
-        default="6,11,16",
-        help="Broad review checkpoints; blank disables scheduled reviews",
+        default="",
+        help="Steps before which broad reviews run; none unless requested (historical: 6,11,16)",
     )
     parser.add_argument(
         "--review-kinds",

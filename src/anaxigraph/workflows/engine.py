@@ -544,7 +544,7 @@ class WorkflowRunner:
             batch["status"], batch["attempts"] = "running", batch["attempts"] + 1
             batch.pop("error", None)
             self._save(run)
-        phase, recorded = "request", False
+        state: dict[str, Any] = {"phase": "request", "recorded": False}
         try:
             graph = self.application._current()
             request = self._request(batch)
@@ -567,80 +567,60 @@ class WorkflowRunner:
                     batch["status"], batch["reused"] = "completed", True
                     self._save(run)
                 return
-            candidates = [_worker(selected), *selected.get("fallbacks", [])]
-            last_error = None
-            for candidate in candidates:
-                phase = "provider"
-                try:
-                    self.application._require_live(graph)
-                    result = self._call(run, batch, request, candidate)
-                    executed = applied_reviewers(request["kind"], result, reviewers)
-                    for reviewer in executed:
-                        self.application._require_live(graph)
-                        result = self._call(run, batch, request, reviewer, draft=result)
-                    phase = "validation"
-                    execution = {
-                        "pipeline": pipeline,
-                        "worker": candidate,
-                        "review_passes": executed,
-                    }
-                    try:
-                        self._submit(request, result, execution)
-                    except Exception as rejected:
-                        if (
-                            getattr(rejected, "model_request_id", None) != request["request_id"]
-                            or candidate is not candidates[-1]
-                        ):
-                            raise
-                        # No stronger fallback is left. Give the same worker one repair pass
-                        # with its rejected output and the reason, instead of letting one
-                        # overlong sentence fail the whole stage.
-                        self._record_failure(run, batch, rejected, phase, candidate)
-                        self._record_result(run, batch, request, candidate, "rejected", rejected)
-                        phase = "provider"
-                        self.application._require_live(graph)
-                        rejected_result = {k: v for k, v in result.items() if k != "execution"}
-                        result = self._call(
-                            run,
-                            batch,
-                            request,
-                            candidate,
-                            draft={
-                                "rejected_result": rejected_result,
-                                "validation_error": _failure_message(rejected, "validation"),
-                            },
-                        )
-                        phase = "validation"
-                        self._submit(request, result, execution)
-                    self._record_result(run, batch, request, candidate, "accepted")
-                    recorded = False
-                    break
-                except Exception as error:
-                    if getattr(error, "model_request_id", None) != request["request_id"]:
-                        phase = "local"
-                    recorded = True
-                    self._record_failure(run, batch, error, phase, candidate)
-                    if phase == "validation":
-                        self._record_result(run, batch, request, candidate, "rejected", error)
-                    last_error = error
-                    if phase == "local":
-                        raise
-            else:
-                raise ValueError(str(last_error))
-            phase = "progress"
+            self._attempts(run, batch, request, graph, pipeline, state)
+            state["phase"] = "progress"
             with _MUTEX:
                 batch["status"] = "completed"
                 self._save(run)
         except Exception as error:
-            if not recorded:
-                self._record_failure(run, batch, error, phase)
+            if not state["recorded"]:
+                self._record_failure(run, batch, error, state["phase"])
             with _MUTEX:
-                batch["status"], batch["error"] = "failed", _failure_message(error, phase)
+                batch["status"], batch["error"] = "failed", _failure_message(error, state["phase"])
                 self._save(run)
         finally:
             with _MUTEX:
                 finish_batch(batch, started, calls_before)
                 self._save(run)
+
+    def _attempts(self, run, batch, request, graph, pipeline, state) -> None:
+        """Try each worker in turn; a last worker's rejected output gets one repair pass."""
+        selected, reviewers = pipeline["worker"], pipeline["review_passes"]
+        candidates = [_worker(selected), *selected.get("fallbacks", [])]
+        attempts: list[tuple[dict, dict | None]] = [(worker, None) for worker in candidates]
+        executed, last_error = [], None
+        for candidate, repair in attempts:  # The repair pass is appended below.
+            state["phase"] = "provider"
+            try:
+                self.application._require_live(graph)
+                result = self._call(run, batch, request, candidate, draft=repair)
+                if repair is None:
+                    executed = applied_reviewers(request["kind"], result, reviewers)
+                    for reviewer in executed:
+                        self.application._require_live(graph)
+                        result = self._call(run, batch, request, reviewer, draft=result)
+                state["phase"] = "validation"
+                execution = {"pipeline": pipeline, "worker": candidate, "review_passes": executed}
+                self._submit(request, result, execution)
+                self._record_result(run, batch, request, candidate, "accepted")
+                state["recorded"] = False
+                return
+            except Exception as error:
+                if getattr(error, "model_request_id", None) != request["request_id"]:
+                    state["phase"] = "local"
+                state["recorded"] = True
+                self._record_failure(run, batch, error, state["phase"], candidate)
+                if state["phase"] == "validation":
+                    self._record_result(run, batch, request, candidate, "rejected", error)
+                    if repair is None and candidate is candidates[-1]:
+                        rejected = {k: v for k, v in result.items() if k != "execution"}
+                        reason = _failure_message(error, "validation")
+                        draft = {"rejected_result": rejected, "validation_error": reason}
+                        attempts.append((candidate, draft))
+                last_error = error
+                if state["phase"] == "local":
+                    raise
+        raise ValueError(str(last_error))
 
     def _submit(self, request, result, execution):
         result["execution"] = execution

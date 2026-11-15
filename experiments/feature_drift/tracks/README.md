@@ -45,11 +45,12 @@ directory whenever frozen scenario, oracle, runtime or harness inputs change.
 
 ## Running a paid campaign
 
-Earlier Switchboard campaigns used the runner defaults: Codex CLI, model `gpt-6.1-sol`,
-reasoning effort `high`, three arms at concurrency 3, and scheduled AnaxiGraph
+Earlier Switchboard campaigns used the runner defaults of the time: Codex CLI, model
+`gpt-6.1-sol`, reasoning effort `high`, three arms at concurrency 3, and scheduled AnaxiGraph
 Patterns reviews at steps 6, 11 and 16. Only `--state`, `--arms`, `--replicates`
 and `--concurrency` were passed. Runs since the CI safety gate also use its default
-of 2 repair attempts. Keep those defaults for comparability. The agent
+of 2 repair attempts. Since 15 November 2026 no review is scheduled by default; pass
+`--review-steps 6,11,16` to reproduce the earlier protocol. The agent
 timeout defaults to the track's limit: 90 minutes for Switchboard, 2 hours for
 the new tracks, whose requests are about twice as long.
 

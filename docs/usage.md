@@ -2,8 +2,8 @@
 
 AnaxiGraph is most useful when its understanding influences a real change. Use it to find the
 right owner, reuse existing behavior, evaluate a smaller public interface, and choose the checks
-that belong to that change. Run deeper reviews regularly enough to challenge accumulated design
-choices, then give their findings to the coding agent as concrete work.
+that belong to that change. Ask for a deeper review when you want a second opinion on an area,
+then give the findings you accept to the coding agent as concrete work.
 
 ## Install and run
 
@@ -109,20 +109,22 @@ Start a separate task with a new `prepare_change`. Use `continue_task=true` or a
 the pinned baseline. Source changes during a model run require a new run for the new snapshot; compatible accepted
 batches are reused. Stronger models cannot fix stale inputs.
 
-## A practical review cadence
+## Reviews are requested, not scheduled
 
-| Work | Suggested starting cadence | What to do with the result |
+Model reviews cost one or more model calls per module, so run one when you want its answer and
+scope it to the modules in play. Nothing in AnaxiGraph schedules them.
+
+| Work | When it is worth asking | What to do with the result |
 | --- | --- | --- |
-| Structural scan | Task start and after edits | Refresh ownership, references and exact checkout identity. |
-| Semantic Mapping | Initial setup, then changed/stale modules during normal work | Read sentences first; expand only relevant details. |
-| Patterns and architecture | After a feature/refactor, or several times a week during active development | Inspect useful proposals and turn selected ones into implementation tasks. |
-| Fresh Eyes | Milestones and major direction changes; roughly weekly on an active project | Compare all three alternatives with requirements and current source before choosing changes. |
-| CI/CD | When component boundaries, shared build inputs or workflows change; periodically if CI is slowing down | Validate scope, improve the pipeline and update check declarations. |
+| Structural scan | Task start and after edits; no model calls | Ownership, references and exact checkout identity. |
+| Semantic Mapping | When you want written summaries for the modules you are working in | Read sentences first; expand only relevant details. |
+| Patterns and architecture | Before or after reshaping an area, scoped to that area | Inspect useful proposals and turn selected ones into implementation tasks. |
+| Fresh Eyes | A milestone or a change of direction where an independent design is worth its cost | Compare all three alternatives with requirements and current source before choosing changes. |
+| CI/CD | When component boundaries, shared build inputs or workflows change, or CI is slowing down | Validate scope, improve the pipeline and update check declarations. |
 
-Frequency depends on how quickly the code is changing. Small edits usually need a refreshed scan
-and targeted checks, not every model workflow. You can scope Mapping and architectural reviews to
-relevant modules. Completed batches are saved immediately; resume unfinished work instead of
-starting everything again.
+A whole-repository run on a large codebase is a deliberate, paid action: Mapping and pattern
+screening each take one model call per production module. Completed batches are saved
+immediately; resume unfinished work instead of starting everything again.
 
 Default semantic Mapping covers executable production modules. Tests and inert namespace markers
 remain in the structural map; use explicit module scopes or configuration `include_tests: true`
@@ -151,13 +153,13 @@ Use AnaxiGraph for substantial code changes:
 - Assess substantial plans. Record adopt/defer/reject reasons for material architecture findings.
 - Keep components cohesive, public interfaces small, implementation details private and tests independently runnable.
 - After editing, scan, execute the appropriate project checks, then validate against the original baseline.
-- Review Patterns after meaningful features/refactors. Use Fresh Eyes at milestones and regularly during active development.
+- Run Patterns or Fresh Eyes only when asked or when you want a second opinion; scope the run to the modules you are changing.
 - Revisit CI/CD when architecture or shared build inputs change. Use declared check inputs; widen for contracts, consumers and unresolved impact.
 - Turn accepted recommendations into concrete tasks. Report what was changed, deferred or rejected and why.
 - Report whether AnaxiGraph helped: which advice you used, what it changed, wasted output/calls, and anything important it missed.
 ```
 
-Treat cadence as a team convention. You can ask an agent to conduct a review and implement selected
+Reviews are a team decision. You can ask an agent to conduct a review and implement selected
 improvements in one task. It should inspect source, test the change and report the actual result.
 
 ## CI/CD and portable records

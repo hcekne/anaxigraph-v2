@@ -11,7 +11,7 @@ separately. The production budget counts every physical Python, JavaScript, CSS 
 data is reported separately and has its own byte budget. Tests and experiment code are visible in
 the report rather than folded into the production count or omitted from the accounting.
 
-The explicit limits in `quality-budget.json` are 12,050 production lines, 800 lines per
+The explicit limits in `quality-budget.json` are 15,000 production lines, 800 lines per
 production file and 200,000 bytes of package JSON data. New Python functions have a decision-score
 ceiling of 15. Existing functions above that value have named limits equal to their measured debt,
 so they cannot silently become more complex. The score is one plus branch, boolean and comprehension
@@ -62,6 +62,16 @@ This is a new capability, rather than a second implementation of mapping or mode
 It reuses the existing resumable workers and positive-finding review. No function-complexity or
 per-file limit increases. The allowance includes JSON validation, non-executing YAML parsing and
 honest incomplete-scope reporting; no project tests or deployment commands are executed by the planner.
+
+On 15 November 2026 the maintainer set the production ceiling to 15,000 lines while the
+[real-repository plan](real-repository-plan.md) lands: import linking for nested projects,
+per-file incremental storage, TypeScript/JavaScript reading and evidence-based test selection.
+This is headroom, not a target. Each step reports its measured size, and the declared-input CI
+planner leaves when evidence-based selection replaces it. The 13 November Fresh Eyes repair pass
+had pushed the total 34 lines over the previous 13,535-line limit, `workflows/engine.py` to 808
+lines and its batch loop to a decision score of 19, which left `main` failing this check. The
+repair is now one more attempt in the candidate loop instead of a nested second submission:
+the file is 788 lines, both functions score at most 15 and the total is 13,549.
 
 When a check fails, simplify the change or deliberately revise the relevant budget with an
 explanation of the required behavior and tradeoff. CI never rewrites the baseline or raises a limit.
