@@ -69,7 +69,20 @@ implementation and verification; new small benchmark applications.
 
 ## Status
 
-| Step | State | Measured |
+| Step | State | Measured on the target repository |
 | --- | --- | --- |
-| 0 | In progress | CI repaired; ceiling set to 15,000 lines by the maintainer (13,549 used) |
-| 1 to 7 | Not started | |
+| 0 | Done | CI green again; ceiling 15,000 lines by maintainer decision; `map_health` in `scan` and `status`; `scripts/map_health.py`; fixture in `tests/test_real_layouts.py` |
+| 1 | Done | 11,776 of 11,810 internal imports linked (99.7%); the 34 left name a module that two projects both provide. 640 of 700 test files link to code; the other 60 contain no static import of the repository's code (they read files, start subprocesses, import dynamically or test an installed package). Production size 13,733 lines |
+| 2 to 7 | Not started | |
+
+## Evidence for step 5
+
+On 15 November the target's backend suite (6,615 tests) was run once with per-test coverage.
+For the 63 most recent fix/feature pull requests that touch backend code, the tests that executed
+a changed file were a median 10% of tests, 15% of test files and 17% of the suite's time; 34 of
+the 63 needed under 20% of the time and 6 needed over 80%. One backend file is executed by a
+median 0.4% of tests (90th percentile 4.9%). Static imports cannot make this selection: the test
+files that import a changed file directly are a median 60% of those that executed it, and
+following imports transitively finds them but reaches nearly every test file. 57 backend files
+ran only at import time, so a rule based on executed lines alone would miss changes to
+module-level values; step 5 has to broaden for those.

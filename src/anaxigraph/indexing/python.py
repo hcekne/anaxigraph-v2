@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 from collections import defaultdict
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
@@ -23,6 +24,10 @@ def symbol_id(path: str, name: str) -> str:
     return f"symbol:{path}#{name}"
 
 
+def _path(identity: str) -> str:
+    return identity.partition(":")[2].partition("#")[0]
+
+
 def expression(node: ast.AST | None) -> str:
     return ast.unparse(node)[:240] if node is not None else ""
 
@@ -38,6 +43,19 @@ def reference_name(node: ast.AST) -> str:
     if isinstance(node, ast.Subscript):
         return f"{reference_name(node.value)}[...]"
     return "<dynamic>"
+
+
+def package_folders(paths: Iterable[str]) -> set[str]:
+    return {path[: -len("/__init__.py")] for path in paths if path.endswith("/__init__.py")}
+
+
+def import_depth(path: str, packages: Collection[str]) -> int:
+    """Leading path parts above a file's import root: its first ancestor without __init__.py."""
+    parts = path.split("/")[:-1]
+    depth = len(parts)
+    while depth and "/".join(parts[:depth]) in packages:
+        depth -= 1
+    return depth
 
 
 def is_test(path: str) -> bool:
@@ -212,7 +230,7 @@ class Module:
     tree: ast.Module
     name: str
     origin: str
-    names: set[str]
+    names: dict[str, str]  # Importable dotted name -> the folder it is importable from.
     nodes: list[Node] = field(default_factory=list)
     definitions: dict[str, Node] = field(default_factory=dict)
     bindings: dict[str, dict[str, list[tuple[str, str, str]]]] = field(
@@ -234,15 +252,21 @@ class Module:
 
 
 def parse_module(
-    path: str, source: str, fingerprint: str
+    path: str, source: str, fingerprint: str, depth: int | None = None
 ) -> tuple[Module | None, Node, str | None]:
+    """Parse one file. `depth` is its import root (see import_depth); a caller without the
+    checkout's package layout gets the conventional rule: the repository root or a src folder.
+    """
     parts = list(PurePosixPath(path).with_suffix("").parts)
     if parts[-1] == "__init__":
         parts.pop()
-    # Conventional src layouts are import roots, including a nested V2 project.
-    prefix = parts.index("src") + 1 if "src" in parts else 0
-    name = ".".join(parts[prefix:]) or PurePosixPath(path).parent.name
-    origin = "/".join(parts[:prefix])
+    if depth is None:
+        depth = parts.index("src") + 1 if "src" in parts else 0
+    name = ".".join(parts[depth:]) or PurePosixPath(path).parent.name
+    origin = "/".join(parts[:depth])
+    # A folder above the root can also be on the path, as a namespace package or a test rootdir.
+    names = {".".join(parts[i:]): "/".join(parts[:i]) for i in range(depth + 1) if parts[i:]}
+    names.setdefault(name, origin)
     data = {
         "language": "python",
         "fingerprint": fingerprint,
@@ -258,7 +282,7 @@ def parse_module(
     }
     try:
         tree = ast.parse(source, filename=path, type_comments=True)
-        module = Module(path, tree, name, origin, {name, ".".join(parts)})
+        module = Module(path, tree, name, origin, names)
         _populate(module, data)
     except (SyntaxError, ValueError, RecursionError) as exc:
         data["parse_status"] = "error"
@@ -481,7 +505,7 @@ class Relationships(ast.NodeVisitor):
                 )
             )
 
-    def unknown(self, name: str) -> str:
+    def unknown(self, name: str, internal: bool = False) -> str:
         identity = f"external:{self.module.path}#{self.scope or '<module>'}:{name}"
         self.external[identity] = Node(
             identity,
@@ -494,6 +518,8 @@ class Relationships(ast.NodeVisitor):
                 "resolution": "unresolved",
                 "scope": self.scope,
                 "note": "Observed reference; target is external or could not be resolved statically.",
+                # An import that names this checkout's own code but could not be linked.
+                **({"internal": True} if internal else {}),
             },
         )
         return identity
@@ -571,8 +597,9 @@ class Relationships(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             target, status = self.resolver.find_module(alias.name, self.module)
+            local = target is None and self.resolver.local(alias.name, self.module)
             self.emit(
-                module_id(target.path) if target else self.unknown(alias.name),
+                module_id(target.path) if target else self.unknown(alias.name, local),
                 "imports",
                 node.lineno,
                 status,
@@ -581,13 +608,18 @@ class Relationships(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module == "__future__":
             return
+        package = import_module(self.module, node)
+        owner = self.resolver.find_module(package, self.module)[0]
         for alias in node.names:
             target, status = self.resolver.import_target(
-                ("symbol", import_module(self.module, node), alias.name), [], self.module
+                ("symbol", package, alias.name), [], self.module, module_fallback=True
             )
-            self.emit(
-                target or self.unknown("." * node.level + (node.module or "") + "." + alias.name),
-                "imports",
-                node.lineno,
-                status,
-            )
+            if target is None:
+                local = bool(node.level) or self.resolver.local(package, self.module)
+                target = self.unknown(
+                    "." * node.level + (node.module or "") + "." + alias.name, local
+                )
+            elif owner and alias.name in owner.bindings.get("", {}) and owner.path != _path(target):
+                # A re-exported name still loads the module it was imported from.
+                self.emit(module_id(owner.path), "imports", node.lineno)
+            self.emit(target, "imports", node.lineno, status)

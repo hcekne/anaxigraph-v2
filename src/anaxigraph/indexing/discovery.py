@@ -33,7 +33,7 @@ EXCLUDED_DIRS = {
 EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".db", ".db-shm", ".db-wal"}
 MAX_INPUT_BYTES = 2_000_000
 MAX_SOURCE_PACKET_BYTES = MAX_INPUT_BYTES
-INDEX_VERSION = "python-ast-v3-public-surface"
+INDEX_VERSION = "python-ast-v4-import-roots"
 
 
 @dataclass

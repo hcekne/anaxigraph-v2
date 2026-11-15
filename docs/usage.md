@@ -83,6 +83,9 @@ migrate an already running legacy service.
 
 1. **Scan** the exact checkout. A structural scan uses no model calls. If current semantic
    understanding is missing, run Mapping; compatible unchanged understanding is reused.
+   The reply's `map_health` counts the imports between the checkout's own files that were
+   linked and the source files left unread; a `warning` there means dependency, consumer and
+   test answers are incomplete for this checkout.
 2. **Prepare** a substantial task with `prepare_change`. Keep its baseline and task identity.
    The reply opens with a `design_brief`: questions to answer before planning and any closed
    families near the task (see [component principles](component-architecture-principles.md)).

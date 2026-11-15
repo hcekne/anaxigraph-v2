@@ -164,6 +164,11 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 ## Deliberate limits and next choices
 
 Python/PYI is supported first. JavaScript/TypeScript are fingerprinted and explicitly unparsed.
+A Python module is named from its import root, the first ancestor folder without `__init__.py`,
+so several projects in one repository each resolve their own packages; an import prefers the
+root nearest the importing file. An imported value or re-exported name links to the module it
+comes from, and a re-export is followed to its definition. `map_health` reports how many
+internal imports were linked, so a map that links few of them says so.
 Static resolution is incomplete for dynamic dispatch and frameworks; missing edges do not prove
 dead code. No project code or project tests are executed by the service. Check results are
 fingerprint-attributed agent/CI reports, not independently attested executions.

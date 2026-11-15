@@ -8,7 +8,12 @@ from pathlib import Path
 
 from anaxigraph.contracts import Graph, Snapshot
 from anaxigraph.indexing.discovery import SourceCache, capture_sources, discover
-from anaxigraph.indexing.python import Relationships, parse_module
+from anaxigraph.indexing.python import (
+    Relationships,
+    import_depth,
+    package_folders,
+    parse_module,
+)
 from anaxigraph.indexing.resolution import Resolver
 
 
@@ -77,15 +82,17 @@ def index(
     edges = []
     parsed = {}
     parsed_count = 0
+    packages = package_folders(snapshot.files)
     for path, source in contents.items():
         cached = session.parsed.get(path) if session is not None else None
-        fingerprint = snapshot.files[path]
-        if cached is not None and cached[0] == fingerprint:
+        # A module's name depends on where its import root is, not only on its own text.
+        identity = (snapshot.files[path], import_depth(path, packages))
+        if cached is not None and cached[0] == identity:
             module, observation, error = cached[1]
         else:
-            module, observation, error = parse_module(path, source, fingerprint)
+            module, observation, error = parse_module(path, source, *identity)
             parsed_count += 1
-        parsed[path] = (fingerprint, (module, observation, error))
+        parsed[path] = (identity, (module, observation, error))
         nodes.append(observation)
         if error:
             diagnostics.append(error)

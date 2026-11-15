@@ -19,6 +19,7 @@ from anaxigraph.analysis.behavior import annotation_behavior_problems
 from anaxigraph.analysis.changes import change_review, changed_paths
 from anaxigraph.analysis.charter import CHARTER, module_facts
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
+from anaxigraph.analysis.health import map_health
 from anaxigraph.analysis.history import cochange_advice
 from anaxigraph.analysis.patterns import production_modules
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
@@ -252,9 +253,18 @@ class Application:
             "diagnostics": list(graph.diagnostics)[:30] if graph else [],
             "storage": {key: stats[key] for key in ("bytes", "max_bytes", "snapshots", "reviews")},
             "baseline_id": stats.get("pinned_snapshot_id"),
+            "map_health": self._map_health(graph),
             "portable": self.portable_status(),
             "coverage": "Python/PYI syntax and scoped references; dynamic targets may be unresolved",
         }
+
+    def _map_health(self, graph: Graph | None) -> dict[str, Any] | None:
+        if graph is None:
+            return None
+        cached = getattr(self, "_health_cache", None)
+        if cached is None or cached[0] is not graph:
+            cached = self._health_cache = (graph, map_health(graph))
+        return cached[1]
 
     def modules(
         self, sort: str = "path", descending: bool = False, limit: int = 50, offset: int = 0
