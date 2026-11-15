@@ -125,13 +125,21 @@ def test_content_change_staged_change_and_clone_path_change_identity(tmp_path):
 def test_parse_failure_encoding_and_unsupported_language_coverage(tmp_path):
     write(tmp_path, "bad.py", "def broken(:\n")
     write(tmp_path, "frontend.ts", "export const value = 1")
+    write(tmp_path, "broken.ts", "export function half( {\n")
+    write(tmp_path, "native.swift", "let value = 1\n")
     (tmp_path / "latin.py").write_bytes(b"# coding: latin-1\nname = 'caf\xe9'\n")
     graph = index(tmp_path)
     module = next(n for n in graph.nodes if n.path == "bad.py")
     assert module.data["parse_status"] == "error"
     assert any("SyntaxError" in diagnostic for diagnostic in graph.diagnostics)
-    assert any("not parsed" in diagnostic for diagnostic in graph.diagnostics)
-    assert "frontend.ts" in graph.snapshot.files
+    script = next(n for n in graph.nodes if n.path == "frontend.ts")
+    assert script.kind == "module" and script.data["language"] == "typescript"
+    # A script with syntax errors keeps the facts that could be recovered, and says so.
+    assert any(d.startswith("broken.ts: syntax errors") for d in graph.diagnostics)
+    assert any(n.path == "broken.ts" and n.kind == "module" for n in graph.nodes)
+    # Another language is inventory only: fingerprinted, never read.
+    assert "native.swift" in graph.snapshot.files
+    assert not any(n.path == "native.swift" for n in graph.nodes)
     assert any(n.path == "latin.py" for n in graph.nodes)
 
 

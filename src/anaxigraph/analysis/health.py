@@ -5,15 +5,14 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import Any
 
-from anaxigraph.contracts import Graph, Node
-
-_UNREAD = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
+from anaxigraph.contracts import SOURCE_SUFFIXES, Graph, Node
 
 
 def _a_test(node: Node) -> bool:
     """A file of tests, as opposed to a conftest or a helper kept beside them."""
     stem = PurePosixPath(node.path).stem
-    return bool(node.data.get("is_test")) and (stem.startswith("test_") or stem.endswith("_test"))
+    named = stem.startswith("test_") or stem.endswith(("_test", ".test", ".spec"))
+    return bool(node.data.get("is_test")) and named
 
 
 def _imports(graph: Graph, nodes: dict[str, Node]) -> tuple[int, list[dict[str, Any]]]:
@@ -72,8 +71,7 @@ def map_health(graph: Graph) -> dict[str, Any]:
         },
         "modules": {"parsed": statuses.count("parsed"), "parse_errors": statuses.count("error")},
         "unread_source_files": sum(
-            PurePosixPath(path).suffix in _UNREAD and path not in modules
-            for path in graph.snapshot.files
+            path.endswith(SOURCE_SUFFIXES) and path not in modules for path in graph.snapshot.files
         ),
         "test_modules": {
             "linked_to_code": _linked_tests(graph, nodes, modules),

@@ -140,8 +140,20 @@ def test_doc_only_commit_and_fresh_clone_reuse_without_calls_and_keep_provenance
     assert len(calls) == initial_calls
 
 
+@pytest.mark.parametrize("kind,review_count", [("patterns", 5), ("fresh-eyes", 2)])
+def test_a_changed_script_is_checked_like_other_read_source_not_as_an_opaque_resource(
+    tmp_path, kind, review_count
+):
+    original, _provider, calls = fixture(tmp_path, kind)
+    target = clone(original, tmp_path)
+    (target.root / "static/app.js").write_text(CHANGED_RESOURCES["static/app.js"])
+    count = len(calls)
+    assert target.scan()["portable_import"]["analyses_imported"] == review_count
+    assert len(calls) == count
+
+
 @pytest.mark.parametrize("kind", ["patterns", "fresh-eyes"])
-@pytest.mark.parametrize("path", list(RESOURCES))
+@pytest.mark.parametrize("path", [path for path in RESOURCES if not path.endswith(".js")])
 def test_changed_opaque_behavioral_resource_blocks_reuse(tmp_path, kind, path):
     original, _provider, calls = fixture(tmp_path, kind)
     target = clone(original, tmp_path)

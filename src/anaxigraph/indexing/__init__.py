@@ -9,7 +9,8 @@ from pathlib import Path
 from anaxigraph.contracts import FilePart, Graph, Snapshot
 from anaxigraph.indexing import discovery
 from anaxigraph.indexing.discovery import SourceCache, capture_sources, discover, worktrees
-from anaxigraph.indexing.facts import Indexed, restore
+from anaxigraph.indexing.facts import SCRIPT_SUFFIXES, Indexed, restore
+from anaxigraph.indexing.javascript import parse_script
 from anaxigraph.indexing.python import import_depth, package_folders, parse_module
 from anaxigraph.indexing.resolution import Resolver, link
 
@@ -80,10 +81,12 @@ def _read(snapshot: Snapshot, contents: dict[str, str], known: dict[str, Indexed
     packages = package_folders(snapshot.files)
     current = {}
     for path, source in contents.items():
-        identity = (snapshot.files[path], import_depth(path, packages))
+        script = path.endswith(SCRIPT_SUFFIXES)
+        identity = (snapshot.files[path], 0 if script else import_depth(path, packages))
         item = known.get(path)
         if item is None or item.identity != identity:
-            item = Indexed(identity, *parse_module(path, source, *identity))
+            read = parse_script if script else parse_module
+            item = Indexed(identity, *read(path, source, *identity))
         current[path] = item
     return current
 
@@ -106,10 +109,10 @@ def _stale(current: dict[str, Indexed], known: dict[str, Indexed]) -> set[str]:
     }
 
 
-def _link(current: dict[str, Indexed], known: dict[str, Indexed]) -> int:
+def _link(current: dict[str, Indexed], known: dict[str, Indexed], files: dict[str, str]) -> int:
     """Link again the files whose answers could differ; returns how many had facts to link."""
     stale = _stale(current, known)
-    resolver = Resolver([item.module for item in current.values() if item.module])
+    resolver = Resolver([item.module for item in current.values() if item.module], files)
     for path in stale:
         item, saved = current[path], known.get(path)
         if saved is not None and item is saved:  # Same facts, new answers: leave the saved one.
@@ -123,7 +126,7 @@ def _link(current: dict[str, Indexed], known: dict[str, Indexed]) -> int:
 def index(
     root: Path, *, excluded: tuple[str, ...] = (), session: IndexSession | None = None
 ) -> Graph:
-    """Capture source identity and extract Python facts; never execute repository code.
+    """Capture source identity and extract source facts; never execute repository code.
 
     Resolution is lexical, not a proof of runtime reachability. External targets, dynamic
     dispatch, parse failures and unsupported languages remain explicit incomplete evidence.
@@ -150,7 +153,7 @@ def index(
     known = session.files
     current = _read(snapshot, contents, known)
     read = sum(item is not known.get(path) for path, item in current.items())
-    linked = _link(current, known)
+    linked = _link(current, known, snapshot.files)
     parts = tuple(item.part for item in current.values() if item.part is not None)
     diagnostics.extend(item.error for item in current.values() if item.error)
     if previous is not None and session._built and parts == session.last_parts:

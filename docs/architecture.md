@@ -168,7 +168,14 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 
 ## Deliberate limits and next choices
 
-Python/PYI is supported first. JavaScript/TypeScript are fingerprinted and explicitly unparsed.
+Python/PYI is read with its own syntax tree. JavaScript and TypeScript are read with tree-sitter
+into the same per-file facts: imports, re-exports (named and `export *`), top-level
+declarations, and where a file uses a name it imported or declared. A relative specifier resolves
+by path, as written and then without its extension, preferring `.ts`, `.tsx`, `.js`; an index
+file answers for its folder. A bare package specifier stays external, an imported stylesheet or
+text file is an asset rather than a missing module, types are not checked and path aliases are
+not followed. A file with syntax errors keeps the facts that could be recovered and is reported.
+Other languages are fingerprinted and explicitly unread.
 A Python module is named from its import root, the first ancestor folder without `__init__.py`,
 so several projects in one repository each resolve their own packages; an import prefers the
 root nearest the importing file. An imported value or re-exported name links to the module it

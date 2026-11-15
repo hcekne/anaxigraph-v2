@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from anaxigraph.contracts import Snapshot
+from anaxigraph.indexing.facts import SCRIPT_SUFFIXES
 
 EXCLUDED_DIRS = {
     ".git",
@@ -34,7 +35,7 @@ EXCLUDED_DIRS = {
 EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".db", ".db-shm", ".db-wal"}
 MAX_INPUT_BYTES = 2_000_000
 MAX_SOURCE_PACKET_BYTES = MAX_INPUT_BYTES
-INDEX_VERSION = "python-ast-v4-import-roots"
+INDEX_VERSION = "facts-v5-python-and-scripts"
 
 
 @dataclass
@@ -335,6 +336,8 @@ def _capture_inputs(
             if suffix in {".py", ".pyi"}:
                 encoding, _ = tokenize.detect_encoding(io.BytesIO(content).readline)
                 contents[relative] = content.decode(encoding)
+            elif suffix in SCRIPT_SUFFIXES:
+                contents[relative] = content.decode("utf-8")
         except (UnicodeError, SyntaxError) as exc:
             diagnostics.append(f"{relative}: input could not be read ({type(exc).__name__}).")
         if cache is not None and signature is not None:
@@ -362,13 +365,6 @@ def _capture_inputs(
         cache.entries = retained
     if binary_count:
         diagnostics.append(f"{binary_count} binary files excluded from analyzed coverage.")
-    unsupported = sum(
-        Path(path).suffix in {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"} for path in files
-    )
-    if unsupported:
-        diagnostics.append(
-            f"{unsupported} JavaScript/TypeScript files fingerprinted but not parsed in this Python-first milestone."
-        )
     return files, contents
 
 

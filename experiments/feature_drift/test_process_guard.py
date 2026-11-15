@@ -85,7 +85,9 @@ def test_memory_limit_measures_resident_children_without_limiting_virtual_addres
     child = tmp_path / "allocate.py"
     child.write_text(
         "import mmap,time\n"
-        "reserve=mmap.mmap(-1,16*1024**3)\n"
+        # Address space only: without commit accounting a busy runner cannot refuse it.
+        "flags=mmap.MAP_PRIVATE|getattr(mmap,'MAP_NORESERVE',0x4000)\n"
+        "reserve=mmap.mmap(-1,16*1024**3,flags=flags)\n"
         "data=[]\n"
         "while True:\n data.append(bytearray(1024**2));time.sleep(0.01)\n"
     )

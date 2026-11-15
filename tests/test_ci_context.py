@@ -19,7 +19,7 @@ def write(root, path, source):
     target.write_text(source)
 
 
-def test_src_package_components_are_distinct_and_js_areas_are_inventory_only(tmp_path):
+def test_src_package_components_are_distinct_and_script_areas_are_read(tmp_path):
     write(tmp_path, "src/pkg/storage/store.py", "def save():\n    return 1\n")
     write(
         tmp_path,
@@ -29,16 +29,17 @@ def test_src_package_components_are_distinct_and_js_areas_are_inventory_only(tmp
     write(tmp_path, "src/pkg/api.py", "def start():\n    return 1\n")
     write(tmp_path, "web/src/components/Button.tsx", "export const Button = () => null;\n")
     write(tmp_path, "web/src/services/client.ts", "export const load = () => 1;\n")
+    write(tmp_path, "web/src/services/huge.ts", "x" * 2_000_001)
     context = component_context(index(tmp_path))
     areas = {item["root"]: item for item in context["areas"]}
     assert {"src/pkg/analysis", "src/pkg/storage", "src/pkg"} <= areas.keys()
     assert areas["src/pkg/analysis"]["modules"] == 1
-    assert areas["web/src/components"]["modules"] == 0
-    assert areas["web/src/components"]["unparsed_source_count"] == 1
-    assert context["unparsed_source_count"] == 2
+    assert areas["web/src/components"]["modules"] == 1
+    assert areas["web/src/components"]["unparsed_source_count"] == 0
+    assert areas["web/src/services"]["modules"] == 1
+    assert context["unparsed_source_count"] == 0  # A file over the input limit is not inventory.
     assert ("src/pkg/analysis", "src/pkg/storage") in context["area_dependencies"]
     assert not any("web/" in area for link in context["area_dependencies"] for area in link)
-    assert "inventory only" in context["limitations"]
     assert "do not establish interface compatibility" in context["limitations"]
 
 

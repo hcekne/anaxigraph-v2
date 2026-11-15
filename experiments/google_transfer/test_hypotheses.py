@@ -261,7 +261,9 @@ def test_unparsed_inputs_are_fingerprinted_and_unowned_changes_retain_fallback(
     application.scan()
     before = application._current()
     assert path in before.snapshot.files
-    assert not any(node.path == path for node in before.nodes)
+    # TypeScript is read into the map; the others are fingerprinted only. Either way a change
+    # that no declared task owns keeps the fallback below.
+    assert any(node.path == path for node in before.nodes) is path.endswith(".ts")
     application.prepare_change("Change external policy contract")
     write(tmp_path, path, source + "\n")
     application.scan()

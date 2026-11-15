@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any
 
-from anaxigraph.contracts import Edge, FilePart, Node
+from anaxigraph.contracts import SOURCE_SUFFIXES, Edge, FilePart, Node
 
 Binding = tuple[str, str, str]  # ("module" | "symbol", module name, imported member)
 
@@ -27,9 +27,27 @@ def symbol_id(path: str, name: str) -> str:
     return f"symbol:{path}#{name}"
 
 
+SCRIPT_SUFFIXES = SOURCE_SUFFIXES[2:]  # JavaScript and TypeScript, in resolution order.
+
+
 def is_test(path: str) -> bool:
     p = PurePosixPath(path)
-    return "tests" in p.parts or any(map(p.match, ("test_*", "*_test.py", "conftest.py")))
+    if "tests" in p.parts or "__tests__" in p.parts:
+        return True
+    if path.endswith(SCRIPT_SUFFIXES):
+        return ".test." in p.name or ".spec." in p.name
+    return any(map(p.match, ("test_*", "*_test.py", "conftest.py")))
+
+
+def script_names(path: str) -> dict[str, str]:
+    """Names a JavaScript/TypeScript file answers to: its path, with and without extension,
+    and its folder when it is an index. The leading slash keeps them apart from dotted names.
+    """
+    stem = path.rpartition(".")[0]
+    names = {"/" + path: "", "/" + stem: ""}
+    if stem.rpartition("/")[2] == "index":
+        names["/" + stem.rpartition("/")[0]] = ""
+    return names
 
 
 def module_names(path: str, depth: int | None) -> tuple[str, str, dict[str, str]]:
@@ -64,6 +82,7 @@ class Module:
     external: dict[str, Node] = field(default_factory=dict)
     pending: list[list[Any]] = field(default_factory=list)  # Decided by resolution.link.
     interface: str = ""  # Identity of what other files can resolve against.
+    language: str = "python"
     # Used while reading the file, then emptied.
     conditional_bindings: set[tuple[str, str]] = field(default_factory=set)
     bound: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
@@ -144,6 +163,11 @@ class Indexed:
                 "error": self.error,
                 "split": [len(nodes), len(module.edges)],
                 "top": module.bindings.get("", {}),
+                "aliases": {
+                    name: node.id
+                    for name, node in module.definitions.items()
+                    if node.data["qualified_name"] != name
+                },
                 "pending": module.pending,
                 "interface": module.interface,
                 "used": sorted(self.used),
@@ -185,10 +209,15 @@ def restore(part: FilePart, version: str) -> Indexed | None:
         return None
     module = None
     if observed.data.get("parse_status") == "parsed":
-        name, origin, names = module_names(part.path, identity[1])
-        module = Module(part.path, name, origin, names)
+        if part.path.endswith(SCRIPT_SUFFIXES):
+            module = Module(part.path, observed.name, "", script_names(part.path))
+            module.language = "javascript"
+        else:
+            module = Module(part.path, *module_names(part.path, identity[1]))
         module.nodes = [node for node in facts if node.kind != "external"]
         module.definitions = {node.data["qualified_name"]: node for node in module.nodes}
+        known = {node.id: node for node in module.nodes}
+        module.definitions.update({name: known[of] for name, of in state["aliases"].items()})
         module.external = {node.id: node for node in facts if node.kind == "external"}
         module.edges = list(part.edges[:edges_end])
         module.bindings[""] = {

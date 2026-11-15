@@ -6,11 +6,20 @@ each file records which modules and names its answers depended on.
 
 from __future__ import annotations
 
+import posixpath
 import sys
 from collections import defaultdict
+from collections.abc import Collection
 
 from anaxigraph.contracts import Edge, Node
-from anaxigraph.indexing.facts import Binding, Module, edges_for, module_id, unknown_node
+from anaxigraph.indexing.facts import (
+    SCRIPT_SUFFIXES,
+    Binding,
+    Module,
+    edges_for,
+    module_id,
+    unknown_node,
+)
 
 _REEXPORT_HOPS = 4
 
@@ -32,7 +41,8 @@ def _rank(anchor: str, here: list[str]) -> tuple[bool, int]:
 
 
 class Resolver:
-    def __init__(self, modules: list[Module]):
+    def __init__(self, modules: list[Module], files: Collection[str] = ()):
+        self.files = files  # Every path of the checkout, to tell an asset from a missing module.
         self.by_name: dict[str, list[tuple[Module, str]]] = defaultdict(list)
         for module in modules:
             for name, anchor in module.names.items():
@@ -61,7 +71,27 @@ class Resolver:
                 found[module.path] = module
         return found
 
+    def _script(self, spec: str, source: Module) -> tuple[Module | None, str]:
+        """A relative JavaScript/TypeScript specifier: as written, then without its extension,
+        preferring .ts over .tsx over .js. Anything else is a package and stays external."""
+        if not spec.startswith("."):
+            return None, "unresolved"
+        base = posixpath.normpath(posixpath.join(posixpath.dirname(source.path), spec))
+        base = "/" + base.partition("?")[0]
+        for name in dict.fromkeys((base, base.rpartition(".")[0] or base)):
+            self.asked.add(name)
+            found = sorted(
+                self.by_name.get(name, ()),
+                key=lambda item: SCRIPT_SUFFIXES.index("." + item[0].path.rpartition(".")[2]),
+            )
+            if found:
+                self.used.add(found[0][0].path)
+                return found[0][0], "resolved"
+        return None, "unresolved"
+
     def find_module(self, name: str, source: Module) -> tuple[Module | None, str]:
+        if source.language != "python":
+            return self._script(name, source)
         matches = self._candidates(name, source)
         if len(matches) != 1:
             return None, "ambiguous" if matches else "unresolved"
@@ -71,6 +101,9 @@ class Resolver:
 
     def local(self, name: str, source: Module) -> bool:
         """Whether an unlinked import names a package or module of this checkout."""
+        if source.language != "python":  # A relative path that is not a stylesheet or other asset.
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(source.path), name))
+            return name.startswith(".") and target.partition("?")[0] not in self.files
         return bool(self._candidates(name.partition(".")[0], source))
 
     def _module_import(
@@ -103,6 +136,13 @@ class Resolver:
                 target, found = self.import_target(binding, suffix, module, hops=hops - 1)
                 if target:
                     return target, found if len(bindings) == 1 else "ambiguous"
+            for kind, origin, _all in module.bindings.get("", {}).get("*", []) if hops else []:
+                # Everything another module exports is re-exported here.
+                target, found = self.import_target(
+                    (kind, origin, imported), suffix, module, hops=hops - 1
+                )
+                if target:
+                    return target, found
         # `from package import member` can name a submodule instead of a symbol.
         submodule, substatus = self.find_module(f"{module_name}.{imported}".strip("."), source)
         if submodule:
@@ -178,7 +218,9 @@ def _from_import(module: Module, resolver: Resolver, owner: str, rest: list, emi
         emit(item, None, shown, "imports", status, relative or resolver.local(package, module))
         return
     source = resolver.find_module(package, module)[0]
-    if source and alias in source.bindings.get("", {}) and source.path != _path(target):
-        # A re-exported name still loads the module it was imported from.
-        emit(item, module_id(source.path), shown, "imports", "resolved")
+    if source is not None and source.path != _path(target):
+        exports = source.bindings.get("", {})
+        if alias in exports or "*" in exports:
+            # A re-exported name still loads the module it was imported from.
+            emit(item, module_id(source.path), shown, "imports", "resolved")
     emit(item, target, shown, "imports", status)

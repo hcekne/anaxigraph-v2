@@ -7,7 +7,7 @@ import re
 from collections import Counter, defaultdict
 from typing import Any
 
-from anaxigraph.contracts import Graph, Node
+from anaxigraph.contracts import SOURCE_SUFFIXES, Graph, Node
 
 _STOP = set(
     "the and for with from into that this when only keep verify add use support make "
@@ -104,7 +104,7 @@ def rank_owners(
         node.path: node
         for node in graph.nodes
         if node.kind == "module"
-        and node.path.endswith((".py", ".pyi"))
+        and node.path.endswith(SOURCE_SUFFIXES)
         and node.data.get("parse_status", "parsed") == "parsed"
     }
     symbols: dict[str, list[Node]] = defaultdict(list)

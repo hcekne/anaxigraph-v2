@@ -55,7 +55,7 @@ def answer(packet, outcome="finding"):
 
 def test_js_only_unannotated_repo_gets_one_root_request_with_real_ci_evidence(setup):
     graph, context = setup
-    assert not graph.nodes
+    assert [node.id for node in graph.nodes if node.kind == "module"] == ["module:index.js"]
     packet = request(graph, context)
     rebuilt = build_request(graph, "delivery", [], pipeline_paths=None, delivery_context=context)
     assert rebuilt["request_id"] == packet["request_id"]

@@ -284,7 +284,8 @@ class Application:
             "baseline_id": stats.get("pinned_snapshot_id"),
             "map_health": self._map_health(graph),
             "portable": self.portable_status(),
-            "coverage": "Python/PYI syntax and scoped references; dynamic targets may be unresolved",
+            "coverage": "Python syntax and scoped references; JavaScript/TypeScript imports, "
+            "exports, top-level declarations and their uses; dynamic targets may be unresolved",
         }
 
     def _map_health(self, graph: Graph | None) -> dict[str, Any] | None:

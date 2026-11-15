@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 from pathlib import PurePosixPath
 
-from anaxigraph.contracts import Graph
+from anaxigraph.contracts import SOURCE_SUFFIXES, Graph
 
 
 def _area(path: str) -> str:
@@ -33,9 +33,7 @@ def _area_dependencies(graph: Graph) -> list:
 def component_context(graph: Graph) -> dict:
     modules = {node.path: node for node in graph.nodes if node.kind == "module"}
     sources = set(modules) | {
-        path
-        for path in graph.snapshot.files
-        if PurePosixPath(path).suffix in {".js", ".jsx", ".ts", ".tsx"}
+        path for path in graph.snapshot.files if path.endswith(SOURCE_SUFFIXES)
     }
     groups: dict[str, list] = defaultdict(list)
     for path in sorted(sources):
@@ -60,7 +58,7 @@ def component_context(graph: Graph) -> dict:
         "dependencies_truncated": len(links) > 300,
         "observed_test_paths": sorted(tests)[:30],
         "unparsed_source_count": len(sources) - len(modules),
-        "limitations": "JS/TS areas are inventory only. Imports omit dynamic/data dependencies; names and unchanged topology do not establish interface compatibility or test coverage. Use declared task inputs for check selection.",
+        "limitations": "Imports omit dynamic/data dependencies; names and unchanged topology do not establish interface compatibility or test coverage. Use declared task inputs for check selection.",
     }
     return context | {
         "identity": hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()

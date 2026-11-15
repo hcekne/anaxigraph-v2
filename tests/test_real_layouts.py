@@ -69,7 +69,51 @@ LAYOUT = {
     "tests/test_library.py": (
         "from library.core import core\n\n\ndef test_core():\n    assert core()\n"
     ),
+    "frontend/src/lib/api.ts": (
+        'export const BASE = "/api";\n\n'
+        "export async function load(id: string): Promise<string> {\n  return BASE + id;\n}\n"
+    ),
+    "frontend/src/lib/format.ts": (
+        "export function label(value: string): string {\n  return value.trim();\n}\n\n"
+        "export interface Row {\n  id: string;\n}\n"
+    ),
+    "frontend/src/lib/index.ts": 'export { load } from "./api";\nexport * from "./format";\n',
+    "frontend/src/features/chat/ChatPanel.tsx": (
+        'import React, { useState } from "react";\n'
+        'import { load, label } from "../../lib";\n'
+        'import { BASE } from "../../lib/api";\n'
+        'import type { Row } from "../../lib/format";\n'
+        'import * as api from "../../lib/api";\n'
+        'import guide from "./guide.md?raw";\n'
+        'import "./chat.css";\n\n'
+        "/** Shows one conversation. */\n"
+        "export default function ChatPanel(props: { row: Row }) {\n"
+        "  const [text] = useState(label(props.row.id));\n"
+        "  api.load(text);\n"
+        "  return <Message text={text + BASE + guide} onOpen={() => load(text)} />;\n"
+        "}\n\n"
+        "export const Message = (props: { text: string; onOpen: () => void }) => (\n"
+        "  <p>{props.text}</p>\n);\n"
+    ),
+    "frontend/src/features/chat/guide.md": "Guide.\n",
+    "frontend/src/features/chat/chat.css": ".chat {}\n",
+    "frontend/src/features/chat/ChatPanel.test.tsx": (
+        'import { expect, test } from "vitest";\n'
+        'import ChatPanel, { Message } from "./ChatPanel";\n'
+        'import { missing } from "./nowhere";\n\n'
+        'test("renders", () => {\n'
+        "  expect(ChatPanel).toBeDefined();\n"
+        '  expect(<Message text="a" onOpen={() => missing} />).toBeDefined();\n'
+        "});\n"
+    ),
+    "frontend/src/legacy.js": (
+        'const api = require("./lib/api");\n'
+        'const lazy = () => import("./features/chat/ChatPanel");\n\n'
+        "module.exports = { api, lazy };\n"
+    ),
 }
+PYTHON = sum(path.endswith(".py") for path in LAYOUT)
+SCRIPTS = sum(path.endswith((".ts", ".tsx", ".js")) for path in LAYOUT)
 
 
 @pytest.fixture(scope="module")
@@ -143,14 +187,73 @@ def test_a_standard_library_name_is_local_only_beside_the_importing_file(graph):
 def test_health_reports_what_is_linked_and_what_is_not(graph):
     health = map_health(graph)
     imports = health["internal_imports"]
-    # Only scripts/tool.py cannot say which project's `app` it means.
-    assert imports["unlinked"] == 1
-    assert imports["unlinked_examples"][0]["path"] == "scripts/tool.py"
-    assert imports["linked"] >= 14
+    # scripts/tool.py cannot say which project's `app` it means; one script imports nothing real.
+    assert {item["path"] for item in imports["unlinked_examples"]} == {
+        "scripts/tool.py",
+        "frontend/src/features/chat/ChatPanel.test.tsx",
+    }
+    assert imports["unlinked"] == 2
+    assert imports["linked"] >= 26
     assert imports["linked_share"] > 0.9
-    assert health["test_modules"] == {"linked_to_code": 3, "total": 3}
-    assert health["modules"] == {"parsed": len(LAYOUT), "parse_errors": 0}
+    assert health["test_modules"] == {"linked_to_code": 4, "total": 4}
+    assert health["modules"] == {"parsed": PYTHON + SCRIPTS, "parse_errors": 0}
+    assert health["unread_source_files"] == 0
     assert health["warning"] is None
+
+
+def test_scripts_link_through_relative_paths_barrels_and_default_exports(graph):
+    panel = imported(graph, "frontend/src/features/chat/ChatPanel.tsx")
+    assert "symbol:frontend/src/lib/api.ts#load" in panel  # Named re-export in the barrel.
+    assert "symbol:frontend/src/lib/format.ts#label" in panel  # export * in the barrel.
+    assert "module:frontend/src/lib/index.ts" in panel  # The barrel itself is loaded.
+    assert "symbol:frontend/src/lib/format.ts#Row" in panel  # A type-only import.
+    assert "module:frontend/src/lib/api.ts" in panel  # A value export and a namespace import.
+    test = imported(graph, "frontend/src/features/chat/ChatPanel.test.tsx")
+    assert "symbol:frontend/src/features/chat/ChatPanel.tsx#ChatPanel" in test  # Default export.
+    assert "symbol:frontend/src/features/chat/ChatPanel.tsx#Message" in test
+    legacy = imported(graph, "frontend/src/legacy.js")
+    assert legacy == {
+        "module:frontend/src/lib/api.ts",
+        "module:frontend/src/features/chat/ChatPanel.tsx",
+    }
+
+
+def test_script_symbols_carry_what_a_brief_needs_and_their_uses(graph):
+    nodes = {node.id: node for node in graph.nodes}
+    panel = nodes["symbol:frontend/src/features/chat/ChatPanel.tsx#ChatPanel"]
+    assert panel.kind == "function" and panel.data["public"] is True
+    assert panel.data["docstring"].startswith("/** Shows one conversation.")
+    assert panel.data["signature"].startswith("ChatPanel(props:")
+    assert nodes["symbol:frontend/src/lib/format.ts#Row"].kind == "interface"
+    module = nodes["module:frontend/src/features/chat/ChatPanel.tsx"]
+    assert module.data["language"] == "typescript" and module.data["is_test"] is False
+    assert module.data["public_surface"]["names"] == ["ChatPanel", "Message", "default"]
+    assert nodes["module:frontend/src/features/chat/ChatPanel.test.tsx"].data["is_test"]
+    uses = {
+        (edge.kind, edge.target)
+        for edge in graph.edges
+        if edge.source == panel.id and edge.kind != "contains"
+    }
+    assert ("calls", "symbol:frontend/src/lib/format.ts#label") in uses
+    assert ("calls", "symbol:frontend/src/lib/api.ts#load") in uses  # load(...) and api.load(...).
+    assert ("calls", "symbol:frontend/src/features/chat/ChatPanel.tsx#Message") in uses
+    assert ("references", "symbol:frontend/src/lib/format.ts#Row") in uses
+    assert any(
+        edge.kind == "tests" and edge.target == panel.id and edge.path.endswith(".test.tsx")
+        for edge in graph.edges
+    )
+
+
+def test_a_stylesheet_or_text_import_is_not_a_missing_module(graph):
+    panel = "frontend/src/features/chat/ChatPanel.tsx"
+    unresolved = {
+        node.name: node.data.get("internal", False)
+        for node in graph.nodes
+        if node.kind == "external" and node.path == panel
+    }
+    assert unresolved["./chat.css"] is False
+    assert unresolved["./guide.md?raw#default"] is False
+    assert unresolved["react#useState"] is False
 
 
 def test_a_map_that_links_almost_nothing_says_so():

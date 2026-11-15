@@ -64,8 +64,10 @@ After backing up state, upgrade an existing uv tool installation with
 `uv tool upgrade 'anaxigraph>=1.0.0'`. The version constraint also replaces an old 0.9.x pin;
 reconfigure and restart services separately.
 
-Python/PYI parsing is supported. JavaScript/TypeScript files are inventoried and fingerprinted,
-without parsed relationships. The replacement selectively implements useful capabilities; it does
+Python/PYI parsing is supported. JavaScript and TypeScript files are read for their imports,
+exports, top-level declarations and the uses of those names; types are not checked, member calls
+are not resolved and path aliases are not followed. Other languages are fingerprinted only. The
+replacement selectively implements useful capabilities; it does
 not restore the legacy feature set or promise compatibility with old workflow outputs.
 
 If an existing workflow still needs 0.9.x, temporarily run the old pinned package without replacing

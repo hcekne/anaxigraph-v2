@@ -9,6 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# Files read into source facts: Python, then JavaScript/TypeScript in resolution order.
+SOURCE_SUFFIXES = (".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+
 
 @dataclass(frozen=True)
 class Node:

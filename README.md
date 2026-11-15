@@ -7,8 +7,9 @@ It combines a compact code graph with concise module explanations, focused archi
 pattern reviews, implementation-blind Fresh Eyes designs, and CI/CD guidance. Use the module table
 and dependency views yourself, or connect an agent through MCP. Both use the same saved understanding.
 
-The 1.0 line replaces the legacy 0.9.x implementation. It parses Python/PYI; JavaScript/TypeScript
-files are inventoried without parsed code relationships. See the
+The 1.0 line replaces the legacy 0.9.x implementation. Release 1.0.0 parses Python/PYI only. The
+current source also reads JavaScript and TypeScript: imports, exports, top-level declarations and
+their uses, without type checking or path aliases. See the
 [upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/usage.md#upgrading-from-09x)
 for CLI, MCP and state changes, and check the
 [release record](https://github.com/hcekne/anaxigraph-v2/releases/tag/v1.0.0).

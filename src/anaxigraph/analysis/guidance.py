@@ -8,7 +8,7 @@ from collections import Counter, deque
 from dataclasses import asdict
 from typing import Any
 
-from anaxigraph.contracts import Graph, Node
+from anaxigraph.contracts import SOURCE_SUFFIXES, Graph, Node
 
 from .architecture_guidance import brief_proposals as architecture_proposals
 from .architecture_guidance import coverage as architecture_coverage
@@ -296,7 +296,7 @@ def _candidates(modules: dict[str, Node], matches: list[dict[str, Any]]) -> list
         for path in paths
         if path in by_path
         and by_path[path].data.get("parse_status", "parsed") == "parsed"
-        and path.endswith((".py", ".pyi"))
+        and path.endswith(SOURCE_SUFFIXES)
         and (not by_path[path].data.get("is_test") or path in explicit)
     ]
     candidates.sort(key=lambda n: bool(n.data.get("is_test")) and n.path not in explicit)
