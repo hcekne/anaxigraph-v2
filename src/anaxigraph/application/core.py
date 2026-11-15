@@ -32,12 +32,12 @@ from anaxigraph.application.context import (
     context_fingerprints,
     dependency_implementation_fingerprints,
 )
-from anaxigraph.contracts import Graph, Node
+from anaxigraph.contracts import FilePart, Graph, Node
 from anaxigraph.evidence import Evidence
-from anaxigraph.indexing import IndexSession
+from anaxigraph.indexing import IndexSession, worktrees
 from anaxigraph.indexing.history import capture_history
 from anaxigraph.indexing.python import is_test
-from anaxigraph.storage import Store
+from anaxigraph.storage import Store, read_parts
 from anaxigraph.workflows.engine import WorkflowRunner
 
 
@@ -114,6 +114,7 @@ class Application:
             experiment_id=os.environ.get("ANAXIGRAPH_EXPERIMENT_ID"),
         )
         self._graph_cache: tuple[tuple[int, ...], Graph] | None = None
+        self._terms: dict[str, tuple[str, set[str]]] = {}
         self._export_cache: tuple[tuple[Any, ...], dict[str, Any]] | None = None
         self._import_cache: tuple[Any, ...] | None = None
         self._graph_lock, self._scan_lock = threading.RLock(), threading.Lock()
@@ -122,6 +123,44 @@ class Application:
         with self._graph_lock:
             return self._load_current()
 
+    def _live(self) -> Graph:
+        """The map of the checkout as it is now, refreshed first if any file has changed."""
+        with self._scan_lock:
+            self._refresh(lambda phase: None)
+        return self._current()
+
+    def _refresh(self, progress: Callable[[str], None]) -> Graph:
+        """Bring the saved map up to the checkout. The caller holds the scan lock."""
+        root = str(self.root)
+        if self.indexer.last_graph is None:
+            cached = self._graph_cache
+            token = self.store.knowledge_token(root)
+            graph = cached[1] if cached and cached[0] == token else self.store.load_graph(root)
+            self.indexer.restore(graph, lambda: self.store.load_parts(root))
+            if graph is None:
+                self.indexer.seed(self._sibling_parts)
+        graph = self.indexer.scan()
+        if not self.indexer.unchanged or self.store.current_id(root) != graph.snapshot.id:
+            progress("Saving the structural map")
+            version = self.store.save_graph(graph, self.indexer.parts_of(graph))
+            if version is not None:  # Keep what was just built instead of reading it back.
+                token = (self.store.path.stat().st_ino, version)
+                with self._graph_lock:
+                    self._graph_cache = (token, self._decorate(self.store.annotated(graph)))
+        return graph
+
+    def _sibling_parts(self) -> tuple[FilePart, ...] | None:
+        """Facts the most recently mapped other worktree of this repository already saved."""
+        stores = [
+            (path, path / ".anaxigraph-v2" / "knowledge.sqlite")
+            for path in worktrees(self.root)
+            if path.resolve() != self.root
+        ]
+        mapped = [(store.stat().st_mtime, path, store) for path, store in stores if store.is_file()]
+        for _saved, path, store in sorted(mapped, reverse=True)[:1]:
+            return read_parts(store, path, self.store.max_bytes)
+        return None
+
     def _load_current(self) -> Graph:
         token = self.store.knowledge_token(str(self.root))
         if self._graph_cache is not None and self._graph_cache[0] == token:
@@ -129,6 +168,16 @@ class Application:
         graph = self.store.load_graph(str(self.root))
         if graph is None:
             raise ValueError("No map for this checkout; run scan first")
+        current = self._decorate(graph)
+        if self.store.knowledge_token(str(self.root)) == token:
+            self._graph_cache = (token, current)
+        return current
+
+    @staticmethod
+    def _decorate(graph: Graph) -> Graph:
+        """Mark saved annotations whose source, context or behavior evidence has moved on."""
+        if not any("annotation" in node.data for node in graph.nodes):
+            return graph
         contexts = context_fingerprints(graph)
         implementations = dependency_implementation_fingerprints(graph)
         behavior_problems = annotation_behavior_problems(graph)
@@ -151,10 +200,7 @@ class Application:
                 )
                 data["behavioral_validation"] = "not_independently_verified"
             nodes.append(replace(node, data=data))
-        current = replace(graph, nodes=tuple(nodes))
-        if self.store.knowledge_token(str(self.root)) == token:
-            self._graph_cache = (token, current)
-        return current
+        return replace(graph, nodes=tuple(nodes))
 
     def _require_live(self, graph: Graph) -> None:
         # Never accept an old job merely because an edit has not been scanned yet.
@@ -182,24 +228,7 @@ class Application:
     def _scan(self, publish: bool, progress: Callable[[str], None]) -> dict[str, Any]:
         started = time.monotonic()
         progress("Reading source and resolving references")
-        if self.indexer.last_graph is None:
-            cached = self._graph_cache
-            token = self.store.knowledge_token(str(self.root))
-            graph = (
-                cached[1]
-                if cached and cached[0] == token
-                else self.store.load_graph(str(self.root))
-            )
-            self.indexer.restore(graph)
-        graph = self.indexer.scan()
-        # Avoid publishing a captured graph after a concurrent edit.
-        self._require_live(graph)
-        if (
-            not self.indexer.unchanged
-            or self.store.stats(str(self.root))["snapshot_id"] != graph.snapshot.id
-        ):
-            progress("Saving the structural map")
-            self.store.save_graph(graph)
+        graph = self._refresh(progress)
         progress("Reusing saved understanding")
         try:
             imported = self.import_record()
@@ -262,9 +291,9 @@ class Application:
         if graph is None:
             return None
         cached = getattr(self, "_health_cache", None)
-        if cached is None or cached[0] is not graph:
-            cached = self._health_cache = (graph, map_health(graph))
-        return cached[1]
+        if cached is None or cached[0] is not graph.nodes or cached[1] is not graph.edges:
+            cached = self._health_cache = (graph.nodes, graph.edges, map_health(graph))
+        return cached[2]
 
     def modules(
         self, sort: str = "path", descending: bool = False, limit: int = 50, offset: int = 0
@@ -274,7 +303,7 @@ class Application:
             raise ValueError("offset must be a nonnegative integer")
         if sort not in {"path", "loc", "functions", "function_count"}:
             raise ValueError("sort must be path, loc or functions")
-        graph = self._current()
+        graph = self._live()
         nodes = [node for node in graph.nodes if node.kind == "module"]
         key = "function_count" if sort == "functions" else sort
         nodes.sort(
@@ -328,7 +357,7 @@ class Application:
             return _record_view(
                 "charter", "charter", "Architecture principles", {"principles": CHARTER}
             )
-        graph = self._current()
+        graph = self._live()
         if entity_id.startswith("review:"):
             row = next(
                 (
@@ -372,9 +401,10 @@ class Application:
     ) -> dict[str, Any]:
         if not isinstance(task, str) or not task.strip() or len(task) > 4000:
             raise ValueError("task must be nonempty text of at most 4,000 characters")
-        graph = self._current()
+        graph = self._live()
         limit = _bounds(limit, 30)
-        matches = rank_owners(graph, self.indexer.captured_sources(graph.snapshot), task, limit)
+        sources = self.indexer.captured_sources(graph.snapshot)
+        matches = rank_owners(graph, sources, task, limit, self._terms)
         task_key = hashlib.sha256(" ".join(task.casefold().split()).encode()).hexdigest()
         pinned = self.store.pin_baseline(
             str(self.root),
@@ -409,13 +439,12 @@ class Application:
             delivery_advice=delivery.advice(self, graph, sorted(matched_paths)),
         )
         result["baseline_id"] = pinned
-        baseline = (
-            graph if pinned == graph.snapshot.id else self.store.load_graph(str(self.root), pinned)
-        )
         result["historical_associations"] = self._history_advice(
             graph,
             {owner["path"] for owner in result["likely_owners"]},
-            baseline.snapshot.revision if baseline else None,
+            graph.snapshot.revision
+            if pinned == graph.snapshot.id
+            else self.store.revision(str(self.root), pinned),
         )
         result["task_id"] = self.evidence.start_task(
             task, graph.snapshot.revision, graph.snapshot.id, pinned, continue_task=continue_task
@@ -469,10 +498,9 @@ class Application:
         runtime_context: dict[str, Any] | None = None,
         require_ci_evidence: bool = False,
     ) -> dict[str, Any]:
-        graph = self._current()
+        graph = self._live()
         if baseline_id is not None and (not isinstance(baseline_id, str) or not baseline_id):
             raise ValueError("Baseline ID must be a nonempty snapshot identity")
-        self._require_live(graph)
         stats = self.store.stats(str(self.root))
         selected = (
             baseline_id or stats.get("pinned_snapshot_id") or stats.get("previous_snapshot_id")
@@ -556,6 +584,7 @@ class Application:
         scope: list[str] | None = None,
         wait: bool = False,
     ) -> dict[str, Any]:
+        self._live()  # A run belongs to one snapshot: start it from the checkout as it is.
         return self._workflows.start(kind, config, scope, background=not wait)
 
     def workflow_status(

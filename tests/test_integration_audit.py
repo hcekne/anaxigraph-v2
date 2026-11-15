@@ -90,12 +90,15 @@ def test_annotation_cache_patch_does_not_hide_another_process_publication(tmp_pa
     assert annotation["overview"] == "Concurrent understanding must stay visible."
 
 
-def test_change_preparation_rejects_unscanned_source_before_pinning_baseline(tmp_path):
+def test_change_preparation_pins_the_checkout_as_it_is_not_a_stale_scan(tmp_path):
     app = application(tmp_path)
+    stale = app.status()["snapshot"]["id"]
     (app.root / "service.py").write_text("def create(value):\n    return value + 1\n")
-    with pytest.raises(ValueError, match="Checkout changed"):
-        app.prepare_change("Update invoice creation")
-    assert app.store.stats(str(app.root))["pinned_snapshot_id"] is None
+    brief = app.prepare_change("Update invoice creation")
+    live = app.indexer.snapshot().id
+    assert live != stale
+    assert brief["snapshot_id"] == brief["baseline_id"] == live
+    assert app.store.stats(str(app.root))["pinned_snapshot_id"] == live
 
 
 def test_annotation_request_handles_a_real_module_larger_than100kb(tmp_path):

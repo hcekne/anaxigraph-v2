@@ -40,8 +40,9 @@ alternatives. Default Patterns screen cheaply, review selected opportunities, an
 architecture scouts plus CI/CD. Preserve explicit exhaustive/selected reviews and portable
 identities. Material plan findings need adopt/defer/reject reasons; decisions do not prove implementation.
 
-Use the [recommended routine](docs/usage.md): scan and prepare a substantial task, inspect and
-assess its plan, then scan/check/validate against the original baseline. Run Patterns, Fresh
+Use the [recommended routine](docs/usage.md): prepare a substantial task, inspect and assess
+its plan, then check and validate against the original baseline; the map follows the checkout,
+so no scan is needed between edits. Run Patterns, Fresh
 Eyes or a CI review when the maintainer asks for one or you want a second opinion on the area you
 are changing; nothing schedules them. Judge usefulness through actual coding outcomes
 and feedback from agents. Keep the README introductory and link deeper operational details.

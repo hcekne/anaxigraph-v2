@@ -149,15 +149,30 @@ def _relations(graph: Graph, modules: dict[str, Node]):
     return raw, witnesses
 
 
+_LATEST: tuple[weakref.ReferenceType[Graph], tuple[Any, Any, Any]] | None = None
+
+
+def _latest(graph: Graph) -> tuple[Any, Any, Any]:
+    """Modules, relations and witnesses of a graph, derived once for all the answers it gives."""
+    global _LATEST
+    cached = _LATEST
+    if cached is None or cached[0]() is not graph:
+        modules = {node.path: node for node in graph.nodes if node.kind == "module"}
+        cached = _LATEST = (weakref.ref(graph), (modules, *_relations(graph, modules)))
+    return cached[1]
+
+
 def relations(graph: Graph) -> tuple[dict[str, Node], dict[str, dict[str, Any]]]:
-    """Modules by path and their resolved cross-module dependencies, consumers and tests."""
-    modules = {node.path: node for node in graph.nodes if node.kind == "module"}
-    return modules, _relations(graph, modules)[0]
+    """Modules by path and their resolved cross-module dependencies, consumers and tests.
+
+    Shared by every caller for the same graph; treat the result as read-only.
+    """
+    modules, raw, _witnesses = _latest(graph)
+    return modules, raw
 
 
 def _observations(graph: Graph) -> dict[str, dict[str, Any]]:
-    modules = {node.path: node for node in graph.nodes if node.kind == "module"}
-    raw, witnesses = _relations(graph, modules)
+    modules, raw, witnesses = _latest(graph)
     production = {path for path, node in modules.items() if not node.data.get("is_test")}
     cycles = _cycles({path: raw[path]["dependencies"] & production for path in production})
     facts = {}

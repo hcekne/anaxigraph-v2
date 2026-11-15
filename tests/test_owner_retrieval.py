@@ -41,9 +41,9 @@ def test_source_words_find_unmapped_owner_without_project_execution(tmp_path):
     assert app.indexer.sources.files_read == 0
     app.indexer.sources.maximum_bytes = 1
     assert app.prepare_change("quasar reconciliation")["likely_owners"][0]["path"] == "opaque.py"
-    (tmp_path / "opaque.py").write_text("# unscanned edit\n")
-    with pytest.raises(ValueError, match="changed after mapping"):
-        app.prepare_change("quasar reconciliation")
+    (tmp_path / "opaque.py").write_text("# an edit nobody scanned\n")
+    # The brief follows the checkout: the words are gone, so the file is no longer suggested.
+    assert app.prepare_change("quasar reconciliation")["likely_owners"] == []
 
 
 def test_exact_symbol_and_path_outweigh_lexical_noise_and_include_witness():

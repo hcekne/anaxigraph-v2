@@ -1,6 +1,6 @@
-"""The unpublished V2 schema: canonical sets plus small mutable indexes."""
+"""The V2 schema: one record per file of each graph, plus small mutable indexes."""
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -19,20 +19,22 @@ CREATE TABLE IF NOT EXISTS baselines (
 CREATE TABLE IF NOT EXISTS knowledge_versions (
     root TEXT PRIMARY KEY, version INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS node_sets (
-    root TEXT NOT NULL, snapshot_id TEXT NOT NULL, data BLOB NOT NULL,
-    PRIMARY KEY(root, snapshot_id),
-    FOREIGN KEY(root, snapshot_id) REFERENCES snapshots(root, id) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS graph_parts (
+    root TEXT NOT NULL, path TEXT NOT NULL, key TEXT NOT NULL,
+    size INTEGER NOT NULL, data BLOB NOT NULL,
+    PRIMARY KEY(root, path, key)
 );
+CREATE TABLE IF NOT EXISTS snapshot_parts (
+    snapshot_key INTEGER NOT NULL, position INTEGER NOT NULL,
+    path TEXT NOT NULL, key TEXT NOT NULL,
+    PRIMARY KEY(snapshot_key, position),
+    FOREIGN KEY(snapshot_key) REFERENCES snapshots(record_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS snapshot_part_keys ON snapshot_parts(path, key);
 CREATE TABLE IF NOT EXISTS source_nodes (
     snapshot_key INTEGER NOT NULL, id TEXT NOT NULL, fingerprint TEXT NOT NULL,
     PRIMARY KEY(snapshot_key, id),
     FOREIGN KEY(snapshot_key) REFERENCES snapshots(record_id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS edge_sets (
-    root TEXT NOT NULL, snapshot_id TEXT NOT NULL, data BLOB NOT NULL,
-    edge_count INTEGER NOT NULL, PRIMARY KEY(root, snapshot_id),
-    FOREIGN KEY(root, snapshot_id) REFERENCES snapshots(root, id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS annotations (
     root TEXT NOT NULL, node_id TEXT NOT NULL, fingerprint TEXT NOT NULL,

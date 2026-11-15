@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import stat
 import subprocess
 import tokenize
 from dataclasses import dataclass, field
@@ -57,15 +58,37 @@ class SourceCache:
         self.bytes_read = self.files_read = self.files_reused = 0
 
 
-def _signature(root: Path, relative: str) -> tuple[int, ...] | None:
-    path = _regular_input(root, relative)
-    if path is None:
+def _plain_folder(root: Path, folder: str, known: dict[str, bool]) -> bool:
+    """Whether every component of a folder is a real directory; decided once per scan."""
+    if not folder:
+        return True
+    found = known.get(folder)
+    if found is None:
+        parent, _, name = folder.rpartition("/")
+        try:
+            found = (
+                name != ".."
+                and _plain_folder(root, parent, known)
+                and stat.S_ISDIR(os.lstat(root / folder).st_mode)
+            )
+        except OSError:
+            found = False
+        known[folder] = found
+    return found
+
+
+def _signature(root: Path, relative: str, folders: dict[str, bool]) -> tuple[int, ...] | None:
+    """Identity of a regular file reached through no symlink at any component, else None."""
+    folder, _, _name = relative.rpartition("/")
+    if relative.startswith("/") or not _plain_folder(root, folder, folders):
         return None
     try:
-        stat = path.stat()
-        return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+        found = os.lstat(root / relative)
     except OSError:
         return None
+    if not stat.S_ISREG(found.st_mode):
+        return None
+    return found.st_dev, found.st_ino, found.st_size, found.st_mtime_ns, found.st_ctime_ns
 
 
 def _git(root: Path, *args: str) -> bytes | None:
@@ -76,6 +99,16 @@ def _git(root: Path, *args: str) -> bytes | None:
         return result.stdout if result.returncode == 0 else None
     except (OSError, subprocess.TimeoutExpired):
         return None
+
+
+def worktrees(root: Path) -> list[Path]:
+    """Every checkout of this repository that Git knows, the main one included."""
+    listing = _git(root, "worktree", "list", "--porcelain") or b""
+    return [
+        Path(os.fsdecode(line[len(b"worktree ") :]))
+        for line in listing.splitlines()
+        if line.startswith(b"worktree ")
+    ]
 
 
 def _portable_file(parts: tuple[str, ...]) -> bool:
@@ -262,12 +295,13 @@ def _capture_inputs(
     binary_count = 0
     next_entries = {}
     cache_bytes = 0
+    folders: dict[str, bool] = {}
     if cache is not None:
         cache.begin()
     for relative in candidates:
         if _excluded(relative, excluded):
             continue
-        signature = _signature(root, relative) if cache is not None else None
+        signature = _signature(root, relative, folders) if cache is not None else None
         saved = cache.entries.get(relative) if cache is not None else None
         if saved is not None and signature == saved[0]:
             assert cache is not None  # A saved entry can only come from this cache.
@@ -304,7 +338,7 @@ def _capture_inputs(
         except (UnicodeError, SyntaxError) as exc:
             diagnostics.append(f"{relative}: input could not be read ({type(exc).__name__}).")
         if cache is not None and signature is not None:
-            if _signature(root, relative) != signature:
+            if _signature(root, relative, {}) != signature:
                 raise ValueError(f"{relative}: source changed during capture; rescan.")
             source = contents.get(relative)
             size = len(source.encode()) if source is not None else 0

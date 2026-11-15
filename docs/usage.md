@@ -81,11 +81,15 @@ migrate an already running legacy service.
 
 ## Everyday agent loop
 
-1. **Scan** the exact checkout. A structural scan uses no model calls. If current semantic
-   understanding is missing, run Mapping; compatible unchanged understanding is reused.
-   The reply's `map_health` counts the imports between the checkout's own files that were
-   linked and the source files left unread; a `warning` there means dependency, consumer and
-   test answers are incomplete for this checkout.
+1. **No scan is needed.** `prepare_change`, `assess_plan`, `validate_change`, `inspect`,
+   `modules`, `reviews` and `ci_plan` each read the checkout as it is: a file edited since the
+   last call is read again, and only the files its change can affect are linked again. The
+   first call in a checkout reads everything once; a new worktree starts from the facts another
+   worktree of the same repository saved. `scan` remains for an explicit refresh and report:
+   its `map_health` counts the imports between the checkout's own files that were linked and
+   the source files left unread, and a `warning` there means dependency, consumer and test
+   answers are incomplete. Structural reading uses no model calls. If semantic understanding
+   is wanted and missing, run Mapping; compatible unchanged understanding is reused.
 2. **Prepare** a substantial task with `prepare_change`. Keep its baseline and task identity.
    The reply opens with a `design_brief`: questions to answer before planning and any closed
    families near the task (see [component principles](component-architecture-principles.md)).
@@ -101,8 +105,8 @@ migrate an already running legacy service.
 4. **Implement and check** the change. Prefer local behavior and public-contract tests; include
    consumers when contracts, behavior, shared resources or configuration can affect them. Keep the
    project's required checks.
-5. **Scan and validate** the candidate against the original baseline. Supply check commands,
-   exit codes and the candidate snapshot ID. Explain unresolved findings or missing checks.
+5. **Validate** the candidate against the original baseline. Supply check commands, exit
+   codes and the candidate snapshot ID. Explain unresolved findings or missing checks.
    Validation compares observed private accesses, cycles and consumers with the pinned baseline.
    Persisted proposal obligations receive narrow predicate checks where possible; adopting a
    proposal never establishes that its full behavior was implemented.
@@ -119,7 +123,7 @@ scope it to the modules in play. Nothing in AnaxiGraph schedules them.
 
 | Work | When it is worth asking | What to do with the result |
 | --- | --- | --- |
-| Structural scan | Task start and after edits; no model calls | Ownership, references and exact checkout identity. |
+| Structural reading | Automatic on every call; no model calls | Ownership, references and exact checkout identity. |
 | Semantic Mapping | When you want written summaries for the modules you are working in | Read sentences first; expand only relevant details. |
 | Patterns and architecture | Before or after reshaping an area, scoped to that area | Inspect useful proposals and turn selected ones into implementation tasks. |
 | Fresh Eyes | A milestone or a change of direction where an independent design is worth its cost | Compare all three alternatives with requirements and current source before choosing changes. |
@@ -151,11 +155,11 @@ Adapt this block for the target repository's `AGENTS.md` or equivalent instructi
 
 ```text
 Use AnaxiGraph for substantial code changes:
-- Scan this checkout and prepare the task before editing. Keep the original baseline.
+- Prepare the task before editing; no scan is needed first. Keep the original baseline.
 - Inspect likely owners, public contracts and relevant saved recommendations. Reuse existing capabilities.
 - Assess substantial plans. Record adopt/defer/reject reasons for material architecture findings.
 - Keep components cohesive, public interfaces small, implementation details private and tests independently runnable.
-- After editing, scan, execute the appropriate project checks, then validate against the original baseline.
+- After editing, execute the appropriate project checks, then validate against the original baseline.
 - Run Patterns or Fresh Eyes only when asked or when you want a second opinion; scope the run to the modules you are changing.
 - Revisit CI/CD when architecture or shared build inputs change. Use declared check inputs; widen for contracts, consumers and unresolved impact.
 - Turn accepted recommendations into concrete tasks. Report what was changed, deferred or rejected and why.

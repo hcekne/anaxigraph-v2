@@ -254,16 +254,21 @@ def test_symbol_lookup_finds_its_existing_responsibility_owner(app: Application)
     assert any(owner["path"] == "persistence.py" for owner in brief["likely_owners"])
 
 
-def test_unscanned_edits_reject_analysis_and_validation(app: Application) -> None:
+def test_a_result_for_an_edited_checkout_is_refused_while_validation_sees_the_edit(
+    app: Application,
+) -> None:
     request = app.analysis_request("annotate", ["service.py"])
+    before = app.status()["snapshot"]["id"]
     source = app.root / "service.py"
     source.write_text(source.read_text() + "\n# Concurrent edit\n")
+    # An analysis belongs to the snapshot it was requested for and is never saved for another.
     with pytest.raises(ValueError, match="changed after mapping"):
         app.submit_analysis(request["request_id"], annotation_result(request))
-    with pytest.raises(ValueError, match="changed after mapping"):
-        app.validate_change()
+    # Validation needs no scan first: it reads the checkout as it is.
+    validated = app.validate_change()
+    assert validated["candidate_snapshot_id"] != before
+    assert validated["changed_paths"] == ["service.py"]
     assert app.status()["annotations"]["current"] == 0
-    app.scan()
     with pytest.raises(ValueError, match="stale snapshot"):
         app.submit_analysis(request["request_id"], annotation_result(request))
 

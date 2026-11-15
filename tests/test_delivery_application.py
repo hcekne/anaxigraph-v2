@@ -248,8 +248,10 @@ def test_ambiguous_or_invalid_comparison_and_unscanned_changes_fail_without_exec
     with pytest.raises(ValueError, match="local Git revision"):
         application.ci_plan(base_ref="--output=SHOULD_NOT_EXECUTE")
     write(application.root, "payments/charge.py", "raise RuntimeError('never execute source')\n")
-    with pytest.raises(ValueError, match="Checkout changed"):
-        application.ci_plan(changed_paths=["payments/charge.py"])
+    # An edit nobody scanned is planned for as it is, and still nothing is executed.
+    planned = application.ci_plan(changed_paths=["payments/charge.py"])
+    assert planned["candidate_snapshot_id"] == application.indexer.snapshot().id
+    assert "payments" in {item["id"] for item in planned["selected_targets"]}
     assert not (application.root / "SHOULD_NOT_EXECUTE").exists()
 
 
@@ -342,7 +344,9 @@ def test_ci_script_and_policy_changes_invalidate_saved_design_review(application
     assert result["reused_batches"] == 0 and calls == ["delivery", "delivery"]
 
 
-def test_advisory_reports_missing_map_without_suggesting_success(tmp_path):
-    result = delivery.advisory(Application(tmp_path), changed_paths=["service.py"])
-    assert result["status"] == "unresolved" and "No map" in result["reason"]
+def test_advisory_maps_a_never_scanned_checkout_and_does_not_suggest_success(tmp_path):
+    application = Application(tmp_path)
+    result = delivery.advisory(application, changed_paths=["service.py"])
+    assert result["status"] == "not_configured"
     assert not result["execution_ready"] and not result["checks_executed"]
+    assert application.status()["snapshot"] is not None

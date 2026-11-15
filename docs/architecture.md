@@ -129,7 +129,9 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 ## State and bounds
 
 - One local SQLite database per checkout by default: `.anaxigraph-v2/knowledge.sqlite`.
-- Root identity is the exact resolved checkout. Linked worktrees do not share mutable analysis.
+- Root identity is the exact resolved checkout. Linked worktrees do not share mutable analysis,
+  but a worktree without a map starts from the per-file facts the most recently mapped other
+  worktree saved, and reads only the files that differ.
 - Content, revision and analysis identity pin snapshots, including eligible untracked source.
 - Current graph, one previous graph and one pinned change baseline; repeated unchanged scans do not
   append history. A new task or Git HEAD repins by default; explicit continuation preserves the pin.
@@ -137,7 +139,10 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
   Owner retrieval combines verified source, paths/symbols and current annotations at module level.
   The superseded FTS prose index is removed through a backed-up schema upgrade; source and
   annotation text is not copied into a second persistent search representation.
-- Canonical node and interned-edge sets are compressed inside SQLite. Small source indexes support
+- A graph is stored as one compressed part per file, shared by every retained snapshot with the
+  same content, so a change to one file writes one part. Each part also carries the indexer's
+  facts for that file: a new process resumes from them and reads only what changed. A graph
+  given without parts is kept whole. Small source indexes support
   annotations/search. The application keeps at most one materialized current graph in memory;
   knowledge mutations from any process invalidate it. Request bookkeeping does not force a graph
   reload. Own annotation writes update cached modules only when no concurrent writer intervened.
@@ -169,6 +174,16 @@ so several projects in one repository each resolve their own packages; an import
 root nearest the importing file. An imported value or re-exported name links to the module it
 comes from, and a re-export is followed to its definition. `map_health` reports how many
 internal imports were linked, so a map that links few of them says so.
+
+Each file is read once into facts that depend on no other file: its symbols, the references it
+can settle alone, and the references that reach an import, left pending. A link pass settles
+the pending ones against the other files and records, per file, which modules' surfaces and
+which module names its answers depended on. An edit therefore reads one file and links again
+only the files that could answer differently: none for a change inside a function, the
+importers for a changed surface, the files that asked for a name when a module appears or goes.
+Agent-facing calls refresh the map this way before answering, so a changed checkout is read,
+not refused. A result computed for an earlier snapshot, such as a model analysis, is still
+refused rather than saved for a different one.
 Static resolution is incomplete for dynamic dispatch and frameworks; missing edges do not prove
 dead code. No project code or project tests are executed by the service. Check results are
 fingerprint-attributed agent/CI reports, not independently attested executions.

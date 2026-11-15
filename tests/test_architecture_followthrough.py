@@ -1,6 +1,5 @@
 """Source observations, rather than adopted advice, establish narrow predicates."""
 
-import pytest
 from test_extension_points import MEMBER, _closed_repo, _write
 
 from anaxigraph.application import Application
@@ -103,13 +102,10 @@ def test_extension_obligation_requires_actual_source_and_does_not_attest_discove
     assert moved["status"] == "violated"
 
 
-def test_unscanned_source_and_parse_failure_cannot_appear_to_fix_boundary(tmp_path):
+def test_a_parse_failure_cannot_appear_to_fix_a_boundary_and_needs_no_scan_first(tmp_path):
     app = _boundary_repo(tmp_path, broken=True)
     app.assess_plan("fix boundary", ["pkg/a.py", "pkg/b.py"])
     (tmp_path / "pkg/b.py").write_text("this is invalid Python !!\n")
-    with pytest.raises(ValueError, match="scan again"):
-        app.validate_change()
-    app.scan()
     boundary = app.validate_change()["architecture"]["boundary_changes"]
     assert boundary["unresolved_inputs"]
     assert all(

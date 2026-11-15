@@ -211,7 +211,7 @@ def reviews(
     saved = [row for row in app.store.reviews(str(app.root), kind, include_requests=False)]
     if not saved:
         return {"items": [], "total": 0}
-    graph = app._current()
+    graph = app._live()
     rows = [app._review_state(row, graph) for row in saved[offset : offset + limit]]
     # Results are explicit expansions; keep default lists concise.
     return {

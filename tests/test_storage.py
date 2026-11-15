@@ -14,6 +14,7 @@ import pytest
 from anaxigraph.analysis.retrieval import rank_owners
 from anaxigraph.contracts import Edge, Graph, Node, Snapshot
 from anaxigraph.storage import Store
+from anaxigraph.storage.schema import SCHEMA_VERSION
 
 
 def graph(root: Path, identity: str = "one", fingerprint: str = "source-a") -> Graph:
@@ -236,7 +237,7 @@ def test_annotations_are_canonical_not_copied_into_node_rows(tmp_path: Path) -> 
         assert db.execute("SELECT count(*) FROM annotations").fetchone()[0] == 1
         assert all(
             "Unique narrative" not in zlib.decompress(row[0]).decode()
-            for row in db.execute("SELECT data FROM node_sets")
+            for row in db.execute("SELECT data FROM graph_parts")
         )
         assert not db.execute("SELECT 1 FROM sqlite_master WHERE name='search'").fetchone()
 
@@ -352,7 +353,7 @@ def test_annotation_updates_only_its_canonical_document(tmp_path, monkeypatch):
     def forbidden(*args):
         pytest.fail("An annotation write must not materialize the entire graph")
 
-    monkeypatch.setattr(store, "_node_rows", forbidden)
+    monkeypatch.setattr(store, "_parts", forbidden)
     store.annotate(str(tmp_path), "one", "module:a.py", {"overview": "Invoice export."})
     with sqlite3.connect(store.path) as db:
         assert db.execute("SELECT count(*) FROM annotations").fetchone()[0] == 1
@@ -408,10 +409,11 @@ def test_v6_migration_removes_derived_index_and_preserves_canonical_knowledge(tm
     assert migrated.stats(str(tmp_path))["pinned_snapshot_id"] == "one"
     assert migrated.get_review(str(tmp_path), "saved", "patterns")["result"] == {"findings": []}
     with sqlite3.connect(store.path) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         assert not db.execute("SELECT 1 FROM sqlite_master WHERE name LIKE 'search%'").fetchone()
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-    with sqlite3.connect(store.path.with_name("knowledge.sqlite.pre-v7.sqlite")) as db:
+    backup = store.path.with_name(f"knowledge.sqlite.pre-v{SCHEMA_VERSION}.sqlite")
+    with sqlite3.connect(backup) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == 6
         assert db.execute("SELECT overview FROM search").fetchone()[0] == "Invoice export."
 
@@ -499,3 +501,91 @@ def test_completed_review_query_skips_request_payloads_and_tracks_only_proposals
     assert len(rows) == 1 and rows[0]["id"] == "finished"
     with pytest.raises(ValueError, match="compressed JSON"):
         store.get_review(str(tmp_path), "pending", "request")
+
+
+def test_whole_graph_sets_from_schema_seven_become_one_part_and_keep_the_baseline(tmp_path):
+    import json
+
+    store = Store(tmp_path / "knowledge.sqlite")
+    original = graph(tmp_path)
+    store.save_graph(original)
+    store.pin_baseline(str(tmp_path))
+    store.annotate(str(tmp_path), "one", "module:a.py", {"overview": "Invoice export."})
+    nodes = [
+        {"id": n.id, "kind": n.kind, "name": n.name, "path": n.path, "line": n.line, "data": n.data}
+        for n in original.nodes
+    ]
+    edges = {
+        "symbols": ["module:a.py", "module:b.py"],
+        "paths": ["a.py"],
+        "kinds": ["imports"],
+        "resolutions": ["resolved"],
+        "edges": [[0, 1, 0, 0, 1, 0]],
+    }
+    with sqlite3.connect(store.path) as db:
+        db.executescript(
+            "CREATE TABLE node_sets (root TEXT, snapshot_id TEXT, data BLOB);"
+            "CREATE TABLE edge_sets (root TEXT, snapshot_id TEXT, data BLOB, edge_count INTEGER);"
+            "DELETE FROM snapshot_parts; DELETE FROM graph_parts; PRAGMA user_version=7;"
+        )
+        db.execute(
+            "INSERT INTO node_sets VALUES (?,?,?)",
+            (str(tmp_path), "one", zlib.compress(json.dumps(nodes).encode())),
+        )
+        db.execute(
+            "INSERT INTO edge_sets VALUES (?,?,?,1)",
+            (str(tmp_path), "one", zlib.compress(json.dumps(edges).encode())),
+        )
+    migrated = Store(store.path)
+    current = migrated.load_graph(str(tmp_path))
+    assert current is not None
+    assert current.edges == original.edges and current.snapshot == original.snapshot
+    assert annotated(current).data["annotation"]["overview"] == "Invoice export."
+    assert migrated.stats(str(tmp_path))["pinned_snapshot_id"] == "one"
+    with sqlite3.connect(store.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        assert not db.execute("SELECT 1 FROM sqlite_master WHERE name='node_sets'").fetchone()
+    assert store.path.with_name(f"knowledge.sqlite.pre-v{SCHEMA_VERSION}.sqlite").exists()
+
+
+def test_a_change_to_one_file_writes_one_part_and_shares_the_rest(tmp_path):
+    from anaxigraph.contracts import FilePart
+
+    store = Store(tmp_path / "knowledge.sqlite")
+    first = graph(tmp_path)
+
+    def parts(of: Graph, changed: str = "") -> tuple[FilePart, ...]:
+        return tuple(
+            FilePart(
+                path,
+                f"{path}-{changed if path == 'a.py' else ''}",
+                tuple(node for node in of.nodes if node.path == path),
+                tuple(edge for edge in of.edges if edge.path == path),
+                '{"kept":"verbatim"}',
+            )
+            for path in ("a.py", "b.py")
+        )
+
+    ordered = replace(first, nodes=tuple(n for part in parts(first) for n in part.nodes))
+    store.save_graph(ordered, parts(ordered))
+    second = replace(
+        ordered,
+        snapshot=replace(ordered.snapshot, id="two", files={"a.py": "new", "b.py": "source-b"}),
+    )
+    store.save_graph(second, parts(second, "changed"))
+    with sqlite3.connect(store.path) as db:
+        rows = db.execute("SELECT path, key FROM graph_parts ORDER BY path, key").fetchall()
+    assert rows == [("a.py", "a.py-"), ("a.py", "a.py-changed"), ("b.py", "b.py-")]
+    assert store.load_graph(str(tmp_path)) == second
+    assert store.load_graph(str(tmp_path), "one") == ordered
+    saved = store.load_parts(str(tmp_path))
+    assert saved is not None and [part.state for part in saved] == ['{"kept":"verbatim"}'] * 2
+    store.save_graph(
+        replace(second, snapshot=replace(second.snapshot, id="three")), parts(second, "changed")
+    )
+    store.save_graph(
+        replace(second, snapshot=replace(second.snapshot, id="four")), parts(second, "changed")
+    )
+    with sqlite3.connect(store.path) as db:
+        # Parts no kept snapshot refers to are removed with it.
+        assert db.execute("SELECT count(*) FROM graph_parts").fetchone()[0] == 2

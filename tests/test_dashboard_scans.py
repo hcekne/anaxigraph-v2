@@ -209,7 +209,7 @@ def test_restart_unchanged_refresh_restores_cached_facts_without_parsing_or_relo
 
 
 @pytest.mark.parametrize("changed", ["source", "revision", "exclusions"])
-def test_restored_facts_are_not_reused_after_input_identity_changes(tmp_path, changed):
+def test_a_restart_reads_again_only_files_whose_content_changed(tmp_path, changed):
     def git(*args):
         subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
 
@@ -231,4 +231,9 @@ def test_restored_facts_are_not_reused_after_input_identity_changes(tmp_path, ch
     restarted = Application(tmp_path, excluded=exclusions)
     result = restarted.scan()
     assert result["snapshot"]["id"] != before
-    assert result["indexing"]["modules_parsed"] == result["indexing"]["modules_resolved"] == 1
+    # Saved facts belong to a file's content, not to the snapshot they were read in: a new
+    # commit or exclusion list is a new snapshot, but only an edited file is read again.
+    expected = 1 if changed == "source" else 0
+    indexing = result["indexing"]
+    assert indexing["modules_parsed"] == indexing["modules_resolved"] == expected
+    assert restarted.status()["modules"] == 1

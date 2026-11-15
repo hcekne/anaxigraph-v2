@@ -1,31 +1,25 @@
-"""Scoped Python source facts. Dynamic dispatch is explicitly incomplete."""
+"""Read one Python file into facts. Dynamic dispatch is explicitly incomplete."""
 
 from __future__ import annotations
 
 import ast
 import hashlib
-from collections import defaultdict
+from collections import Counter
 from collections.abc import Collection, Iterable
-from dataclasses import dataclass, field
-from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from anaxigraph.contracts import Edge, Node
+from anaxigraph.contracts import Node
+from anaxigraph.indexing.facts import (
+    Module,
+    edges_for,
+    is_test,
+    module_id,
+    module_names,
+    symbol_id,
+    unknown_node,
+)
 
-if TYPE_CHECKING:
-    from anaxigraph.indexing.resolution import Resolver
-
-
-def module_id(path: str) -> str:
-    return f"module:{path}"
-
-
-def symbol_id(path: str, name: str) -> str:
-    return f"symbol:{path}#{name}"
-
-
-def _path(identity: str) -> str:
-    return identity.partition(":")[2].partition("#")[0]
+__all__ = ["Module", "import_depth", "is_test", "module_id", "package_folders", "parse_module"]
 
 
 def expression(node: ast.AST | None) -> str:
@@ -56,11 +50,6 @@ def import_depth(path: str, packages: Collection[str]) -> int:
     while depth and "/".join(parts[:depth]) in packages:
         depth -= 1
     return depth
-
-
-def is_test(path: str) -> bool:
-    p = PurePosixPath(path)
-    return "tests" in p.parts or any(map(p.match, ("test_*", "*_test.py", "conftest.py")))
 
 
 def _public_surface(body: list[ast.stmt], exports: set[str] | None = None) -> list[tuple]:
@@ -224,49 +213,13 @@ def _inert_module(tree: ast.Module) -> bool:
     )
 
 
-@dataclass
-class Module:
-    path: str
-    tree: ast.Module
-    name: str
-    origin: str
-    names: dict[str, str]  # Importable dotted name -> the folder it is importable from.
-    nodes: list[Node] = field(default_factory=list)
-    definitions: dict[str, Node] = field(default_factory=dict)
-    bindings: dict[str, dict[str, list[tuple[str, str, str]]]] = field(
-        default_factory=lambda: defaultdict(dict)
-    )
-    conditional_bindings: set[tuple[str, str]] = field(default_factory=set)
-    bound: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
-    scopes: dict[int, str] = field(default_factory=dict)
-    exports: set[str] | None = None
-    export_basis: str = "naming-convention"
-
-    @property
-    def package(self) -> str:
-        return (
-            self.name
-            if PurePosixPath(self.path).stem == "__init__"
-            else self.name.rpartition(".")[0]
-        )
-
-
 def parse_module(
     path: str, source: str, fingerprint: str, depth: int | None = None
 ) -> tuple[Module | None, Node, str | None]:
-    """Parse one file. `depth` is its import root (see import_depth); a caller without the
+    """Read one file. `depth` is its import root (see import_depth); a caller without the
     checkout's package layout gets the conventional rule: the repository root or a src folder.
     """
-    parts = list(PurePosixPath(path).with_suffix("").parts)
-    if parts[-1] == "__init__":
-        parts.pop()
-    if depth is None:
-        depth = parts.index("src") + 1 if "src" in parts else 0
-    name = ".".join(parts[depth:]) or PurePosixPath(path).parent.name
-    origin = "/".join(parts[:depth])
-    # A folder above the root can also be on the path, as a namespace package or a test rootdir.
-    names = {".".join(parts[i:]): "/".join(parts[:i]) for i in range(depth + 1) if parts[i:]}
-    names.setdefault(name, origin)
+    name, origin, names = module_names(path, depth)
     data = {
         "language": "python",
         "fingerprint": fingerprint,
@@ -282,8 +235,10 @@ def parse_module(
     }
     try:
         tree = ast.parse(source, filename=path, type_comments=True)
-        module = Module(path, tree, name, origin, names)
-        _populate(module, data)
+        module = Module(path, name, origin, names)
+        _populate(module, data, tree)
+        _References(module).visit(tree)
+        module.seal()
     except (SyntaxError, ValueError, RecursionError) as exc:
         data["parse_status"] = "error"
         return (
@@ -294,8 +249,7 @@ def parse_module(
     return module, Node(module_id(path), "module", name, path, 1, data), None
 
 
-def _populate(module: Module, data: dict) -> None:
-    tree = module.tree
+def _populate(module: Module, data: dict, tree: ast.Module) -> None:
     data["inert_module"] = _inert_module(tree)
     # A dependency's comments, whitespace and source locations do not change its
     # semantics. Preserve behavior-sensitive invalidation without fanning out model
@@ -483,51 +437,79 @@ class _Definitions(ast.NodeVisitor):
             )
 
 
-class Relationships(ast.NodeVisitor):
-    def __init__(self, module: Module, resolver: Resolver):
+class _References(ast.NodeVisitor):
+    """Record what each symbol refers to, deciding here whatever this file alone can decide.
+
+    A name that reaches an import is left pending for resolution.link, with the import it
+    reached; everything else is settled without knowing any other file.
+    """
+
+    def __init__(self, module: Module):
         self.module = module
-        self.resolver = resolver
         self.scope = ""
         self.owner = module_id(module.path)
-        self.edges: list[Edge] = []
-        self.external: dict[str, Node] = {}
+        names = [node.data["qualified_name"] for node in module.nodes]
+        self.repeated = {name for name, count in Counter(names).items() if count > 1}
+        self.classes = {
+            node.data["qualified_name"]
+            for node in module.nodes
+            if node.kind in {"class", "interface"}
+        }
+        self.symbols = {(node.line, node.data["qualified_name"]): node for node in module.nodes}
 
     def emit(self, target: str, kind: str, line: int, resolution: str = "resolved") -> None:
-        self.edges.append(Edge(self.owner, target, kind, self.module.path, line, resolution))
-        if (
-            kind in {"calls", "imports"}
-            and is_test(self.module.path)
-            and not target.startswith("external:")
-        ):
-            self.edges.append(
-                Edge(
-                    module_id(self.module.path), target, "tests", self.module.path, line, resolution
-                )
-            )
-
-    def unknown(self, name: str, internal: bool = False) -> str:
-        identity = f"external:{self.module.path}#{self.scope or '<module>'}:{name}"
-        self.external[identity] = Node(
-            identity,
-            "external",
-            name,
-            self.module.path,
-            1,
-            {
-                "basis": "observed",
-                "resolution": "unresolved",
-                "scope": self.scope,
-                "note": "Observed reference; target is external or could not be resolved statically.",
-                # An import that names this checkout's own code but could not be linked.
-                **({"internal": True} if internal else {}),
-            },
+        self.module.edges.extend(
+            edges_for(self.module.path, self.owner, target, kind, line, resolution)
         )
-        return identity
+
+    def _method(self, names: list[str]) -> str | None:
+        if names[0] not in {"self", "cls"} or len(names) != 2 or "." not in self.scope:
+            return None
+        node = self.module.definitions.get(self.scope.rpartition(".")[0] + "." + names[1])
+        return node.id if node else None
+
+    def _local(self, name: str) -> tuple[Any, ...] | None:
+        """("own", id, status), ("imports", bindings, attribute path, ambiguous) or None."""
+        module, names = self.module, name.split(".")
+        method = self._method(names)
+        if method:
+            return "own", method, "ambiguous"  # Only a possible runtime dispatch target.
+        parent = self.scope
+        while True:
+            # Class bodies are not enclosing lexical scopes of methods.
+            if parent == self.scope or parent not in self.classes:
+                if names[0] in module.bound.get(parent, ()):
+                    return None  # Assignments shadow outer lexical names.
+                qualified = f"{parent}.{name}" if parent else name
+                node = module.definitions.get(qualified)
+                if node is not None:
+                    return "own", node.id, "ambiguous" if qualified in self.repeated else "resolved"
+                found = module.bindings.get(parent, {}).get(names[0])
+                if found:
+                    conditional = (parent, names[0]) in module.conditional_bindings
+                    return (
+                        "imports",
+                        [list(item) for item in found],
+                        names[1:],
+                        (len(found) > 1 or conditional),
+                    )
+            if not parent:
+                return None
+            parent = parent.rpartition(".")[0]
 
     def _reference(self, name: str, kind: str, line: int, unknown: bool = True) -> None:
-        for target, status in self.resolver.targets(name, self.module, self.scope):
-            if target or unknown:
-                self.emit(target or self.unknown(name), kind, line, status)
+        found = self._local(name)
+        if found is None:
+            if unknown:
+                node = unknown_node(self.module.path, self.scope, name)
+                self.module.external[node.id] = node
+                self.emit(node.id, kind, line, "unresolved")
+        elif found[0] == "own":
+            self.emit(found[1], kind, line, found[2])
+        else:
+            self.module.pending.append(
+                ["ref", self.owner, kind, line, name, self.scope, *found[1:], unknown]
+            )
 
     def _annotation(self, node: ast.AST | None) -> None:
         pending = [node] if node is not None else []
@@ -554,11 +536,7 @@ class Relationships(ast.NodeVisitor):
 
     def _symbol(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
         qualified = self.module.scopes[id(node)]
-        symbol = next(
-            n
-            for n in self.module.nodes
-            if n.line == node.lineno and n.data["qualified_name"] == qualified
-        )
+        symbol = self.symbols[node.lineno, qualified]
         self.emit(symbol.id, "contains", node.lineno)
         # Decorators/defaults execute in the enclosing scope, not inside the new function.
         for decorator in node.decorator_list:
@@ -596,30 +574,23 @@ class Relationships(ast.NodeVisitor):
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
-            target, status = self.resolver.find_module(alias.name, self.module)
-            local = target is None and self.resolver.local(alias.name, self.module)
-            self.emit(
-                module_id(target.path) if target else self.unknown(alias.name, local),
-                "imports",
-                node.lineno,
-                status,
-            )
+            self.module.pending.append(["import", self.owner, node.lineno, self.scope, alias.name])
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module == "__future__":
             return
         package = import_module(self.module, node)
-        owner = self.resolver.find_module(package, self.module)[0]
+        shown = "." * node.level + (node.module or "") + "."
         for alias in node.names:
-            target, status = self.resolver.import_target(
-                ("symbol", package, alias.name), [], self.module, module_fallback=True
+            self.module.pending.append(
+                [
+                    "from",
+                    self.owner,
+                    node.lineno,
+                    self.scope,
+                    package,
+                    shown + alias.name,
+                    alias.name,
+                    bool(node.level),
+                ]
             )
-            if target is None:
-                local = bool(node.level) or self.resolver.local(package, self.module)
-                target = self.unknown(
-                    "." * node.level + (node.module or "") + "." + alias.name, local
-                )
-            elif owner and alias.name in owner.bindings.get("", {}) and owner.path != _path(target):
-                # A re-exported name still loads the module it was imported from.
-                self.emit(module_id(owner.path), "imports", node.lineno)
-            self.emit(target, "imports", node.lineno, status)

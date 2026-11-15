@@ -1,36 +1,18 @@
-"""Resolve lexical names and imported members while keeping runtime dispatch uncertain."""
+"""Link each file's pending references against the checkout's other files.
+
+Runtime dispatch stays uncertain: only names that reach an import are resolved here, and
+each file records which modules and names its answers depended on.
+"""
 
 from __future__ import annotations
 
 import sys
 from collections import defaultdict
-from collections.abc import Iterator
 
-from anaxigraph.indexing.python import Module, module_id
+from anaxigraph.contracts import Edge, Node
+from anaxigraph.indexing.facts import Binding, Module, edges_for, module_id, unknown_node
 
 _REEXPORT_HOPS = 4
-
-
-def _scopes(source: Module, scope: str) -> Iterator[str]:
-    parent = scope
-    while True:
-        is_class = any(
-            node.kind in {"class", "interface"} and node.data["qualified_name"] == parent
-            for node in source.nodes
-        )
-        if parent == scope or not is_class:
-            yield parent  # Class bodies are not enclosing lexical scopes of methods.
-        if not parent:
-            return
-        parent = parent.rpartition(".")[0]
-
-
-def _method_candidate(names: list[str], source: Module, scope: str) -> str | None:
-    if names[0] not in {"self", "cls"} or len(names) != 2 or "." not in scope:
-        return None
-    qualified = scope.rpartition(".")[0] + "." + names[1]
-    node = source.definitions.get(qualified)
-    return node.id if node else None
 
 
 def _member(module: Module, name: str, status: str) -> tuple[str | None, str]:
@@ -55,12 +37,16 @@ class Resolver:
         for module in modules:
             for name, anchor in module.names.items():
                 self.by_name[name].append((module, anchor))
+        # What the answers given since the last link() started depended on.
+        self.used: set[str] = set()
+        self.asked: set[str] = set()
 
     def _candidates(self, name: str, source: Module) -> dict[str, Module]:
         """Modules importable under this name from the nearest root to the importing file.
 
         A standard-library name is local only when its root contains the importing file.
         """
+        self.asked.add(name)
         here = source.path.split("/")[:-1]
         standard = name.partition(".")[0] in sys.stdlib_module_names
         best: tuple[bool, int] | None = None
@@ -77,11 +63,11 @@ class Resolver:
 
     def find_module(self, name: str, source: Module) -> tuple[Module | None, str]:
         matches = self._candidates(name, source)
-        return (
-            (next(iter(matches.values())), "resolved")
-            if len(matches) == 1
-            else (None, "ambiguous" if matches else "unresolved")
-        )
+        if len(matches) != 1:
+            return None, "ambiguous" if matches else "unresolved"
+        module = next(iter(matches.values()))
+        self.used.add(module.path)
+        return module, "resolved"
 
     def local(self, name: str, source: Module) -> bool:
         """Whether an unlinked import names a package or module of this checkout."""
@@ -127,7 +113,7 @@ class Resolver:
 
     def import_target(
         self,
-        binding: tuple[str, str, str],
+        binding: Binding,
         suffix: list[str],
         source: Module,
         *,
@@ -139,26 +125,60 @@ class Resolver:
             return self._module_import(module_name, suffix, source)
         return self._symbol_import(module_name, imported, suffix, source, module_fallback, hops)
 
-    def targets(
-        self, expression_name: str, source: Module, scope: str
-    ) -> list[tuple[str | None, str]]:
-        names = expression_name.split(".")
-        method = _method_candidate(names, source, scope)
-        if method:
-            return [(method, "ambiguous")]  # Only a possible runtime dispatch target.
-        for parent in _scopes(source, scope):
-            if names[0] in source.bound.get(parent, set()):
-                return [(None, "unresolved")]  # Assignments shadow outer lexical names.
-            qualified = ".".join(part for part in (parent, expression_name) if part)
-            if qualified in source.definitions:
-                node = source.definitions[qualified]
-                count = sum(n.data.get("qualified_name") == qualified for n in source.nodes)
-                return [(node.id, "ambiguous" if count > 1 else "resolved")]
-            bindings = source.bindings.get(parent, {}).get(names[0])
-            if bindings:
-                conditional = (parent, names[0]) in source.conditional_bindings
-                candidates = [self.import_target(item, names[1:], source) for item in bindings]
-                if len(bindings) > 1 or conditional:
-                    return [(target, "ambiguous") for target, _status in candidates]
-                return candidates
-        return [(None, "unresolved")]
+
+def _path(identity: str) -> str:
+    return identity.partition(":")[2].partition("#")[0]
+
+
+def link(
+    module: Module, resolver: Resolver
+) -> tuple[list[Edge], dict[str, Node], frozenset[str], frozenset[str]]:
+    """Decide the references that go through imports.
+
+    Returns the edges and unresolved targets, then the module paths and the module names the
+    answers depended on: a change to any of those is a reason to link this file again.
+    """
+    resolver.used, resolver.asked = set(), set()
+    edges: list[Edge] = []
+    external: dict[str, Node] = {}
+
+    def emit(item, target, name, kind, status, internal=False) -> None:
+        owner, line, scope = item
+        if target is None:
+            node = unknown_node(module.path, scope, name, internal)
+            external[node.id], target = node, node.id
+        edges.extend(edges_for(module.path, owner, target, kind, line, status))
+
+    for kind, owner, *rest in module.pending:
+        if kind == "ref":
+            relation, line, name, scope, bindings, attributes, ambiguous, unknown = rest
+            for binding in bindings:
+                target, status = resolver.import_target(tuple(binding), attributes, module)
+                if target or unknown:
+                    status = "ambiguous" if ambiguous else status
+                    emit((owner, line, scope), target, name, relation, status)
+        elif kind == "import":
+            line, scope, name = rest
+            found, status = resolver.find_module(name, module)
+            target = module_id(found.path) if found else None
+            local = found is None and resolver.local(name, module)
+            emit((owner, line, scope), target, name, "imports", status, local)
+        else:
+            _from_import(module, resolver, owner, rest, emit)
+    return edges, external, frozenset(resolver.used), frozenset(resolver.asked)
+
+
+def _from_import(module: Module, resolver: Resolver, owner: str, rest: list, emit) -> None:
+    line, scope, package, shown, alias, relative = rest
+    item = (owner, line, scope)
+    target, status = resolver.import_target(
+        ("symbol", package, alias), [], module, module_fallback=True
+    )
+    if target is None:
+        emit(item, None, shown, "imports", status, relative or resolver.local(package, module))
+        return
+    source = resolver.find_module(package, module)[0]
+    if source and alias in source.bindings.get("", {}) and source.path != _path(target):
+        # A re-exported name still loads the module it was imported from.
+        emit(item, module_id(source.path), shown, "imports", "resolved")
+    emit(item, target, shown, "imports", status)

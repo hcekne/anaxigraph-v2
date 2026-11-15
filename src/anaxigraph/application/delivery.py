@@ -304,8 +304,7 @@ def plan(
     cadence: str = "change",
     runtime_context: dict[str, Any] | None = None,
 ) -> dict:
-    graph = app._current()
-    app._require_live(graph)
+    graph = app._live()
     declared = policy(app, graph)
     if declared is None:
         return {

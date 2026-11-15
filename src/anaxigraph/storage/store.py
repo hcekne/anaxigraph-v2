@@ -1,8 +1,10 @@
 """Bounded current knowledge, one comparison snapshot, and canonical annotations.
 
-Only the store writes SQL. Repeated scans replace observations atomically; they
-do not append a historical cache. Annotation text is stored once per source
-fingerprint, without a second mutable search index. Source code is never executed here.
+Only the store writes SQL. A graph is kept as one record per file, shared between the
+snapshots that contain the same content, so a change to one file writes one record.
+Repeated scans replace observations atomically; they do not append a historical cache.
+Annotation text is stored once per source fingerprint, without a second mutable search
+index. Source code is never executed here.
 """
 
 from __future__ import annotations
@@ -13,15 +15,17 @@ import sqlite3
 import time
 import zlib
 from collections import Counter
+from collections.abc import Sequence
 from contextlib import contextmanager, nullcontext
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Iterator
 
-from anaxigraph.contracts import Graph, Node, Snapshot
-from anaxigraph.storage.graph_codec import decode_edges, decode_nodes, encode_edges, encode_nodes
+from anaxigraph.contracts import FilePart, Graph, Node, Snapshot
+from anaxigraph.storage.graph_codec import decode_part, encode_part
+from anaxigraph.storage.parts import convert_sets
 from anaxigraph.storage.portable import retention_options
 from anaxigraph.storage.schema import SCHEMA, SCHEMA_VERSION
 
@@ -87,11 +91,12 @@ class Store:
         if type(request_limit) is not int or request_limit < 1:
             raise ValueError("Request retention must be a positive integer")
         self.request_limit = request_limit
+        self._decoded: dict[tuple[str, str, str], FilePart] = {}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connection(write=True) as db:
             db.execute("PRAGMA journal_mode=DELETE")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 3, 4, 5, 6, SCHEMA_VERSION):
+            if version not in (0, 3, 4, 5, 6, 7, SCHEMA_VERSION):
                 raise ValueError(f"Unsupported knowledge-store schema: {version}")
             if version != SCHEMA_VERSION:
                 if version:
@@ -122,6 +127,8 @@ class Store:
                     + after
                     + f"\nPRAGMA user_version={SCHEMA_VERSION};\nCOMMIT;"
                 )
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='node_sets'").fetchone():
+                convert_sets(db, self.max_bytes)
 
     def _backup_before_migration(self, db: sqlite3.Connection) -> None:
         """Keep one recoverable original, and remove incomplete backup output."""
@@ -296,28 +303,60 @@ class Store:
             data["annotation_fingerprint"] = chosen["fingerprint"]
         return data
 
-    def _node_rows(
-        self,
-        db: sqlite3.Connection,
-        root: str,
-        snapshot_id: str,
-        fingerprints: dict[str, str],
-    ) -> list[dict[str, Any]]:
-        row = db.execute(
-            "SELECT data FROM node_sets WHERE root=? AND snapshot_id=?", (root, snapshot_id)
-        ).fetchone()
-        if row is None:
-            raise ValueError("Saved graph is incomplete: its node set is missing")
-        return [
-            node | {"fingerprint": fingerprints.get(node["path"], "")}
-            for node in decode_nodes(row["data"], maximum=self.max_bytes)
-        ]
+    def _parts(self, db: sqlite3.Connection, root: str, snapshot_id: str) -> tuple[FilePart, ...]:
+        """A snapshot's parts in order, decoding only those not already held in memory."""
+        manifest = db.execute(
+            "SELECT p.path, p.key FROM snapshot_parts p JOIN snapshots s "
+            "ON s.record_id=p.snapshot_key WHERE s.root=? AND s.id=? ORDER BY p.position",
+            (root, snapshot_id),
+        ).fetchall()
+        parts = []
+        for path, key in manifest:
+            part = self._decoded.get((root, path, key))
+            if part is None:
+                row = db.execute(
+                    "SELECT data FROM graph_parts WHERE root=? AND path=? AND key=?",
+                    (root, path, key),
+                ).fetchone()
+                if row is None:
+                    raise ValueError("Saved graph is incomplete: one of its parts is missing")
+                part = FilePart(path, key, *decode_part(row[0], maximum=self.max_bytes))
+            parts.append(part)
+        if len(self._decoded) > 2 * len(parts) + 64:
+            self._decoded.clear()  # Bounded: at most this snapshot and one compared with it.
+        self._decoded.update(((root, part.path, part.key), part) for part in parts)
+        return tuple(parts)
+
+    def _attach(
+        self, nodes: Sequence[Node], files: dict[str, str], candidates: dict[str, list[sqlite3.Row]]
+    ) -> tuple[Node, ...]:
+        """Nodes with their saved annotation, current or stale for this source fingerprint."""
+        if not candidates:
+            return tuple(nodes)
+        return tuple(
+            replace(
+                node,
+                data=self._annotation(
+                    {"id": node.id, "fingerprint": files.get(node.path, ""), "data": node.data},
+                    candidates,
+                ),
+            )
+            if node.id in candidates
+            else node
+            for node in nodes
+        )
 
     @staticmethod
     def _prune(db: sqlite3.Connection, root: str, keep: tuple[str, ...]) -> None:
         placeholders = ",".join("?" for _ in keep)
         db.execute(
             f"DELETE FROM snapshots WHERE root=? AND id NOT IN ({placeholders})", (root, *keep)
+        )
+        db.execute(
+            "DELETE FROM graph_parts AS g WHERE root=? AND NOT EXISTS("
+            "SELECT 1 FROM snapshot_parts p JOIN snapshots s ON s.record_id=p.snapshot_key "
+            "WHERE s.root=g.root AND p.path=g.path AND p.key=g.key)",
+            (root,),
         )
         # Keep matching annotations for the two snapshots, plus the latest stale
         # annotation for a surviving node until it has been refreshed.
@@ -334,32 +373,31 @@ class Store:
             (root,),
         )
 
-    def save_graph(self, graph: Graph) -> None:
+    def current_id(self, root: str) -> str | None:
+        with self._connection() as db:
+            row = self._current(db, _root(root))
+        return row["current_id"] if row else None
+
+    def save_graph(self, graph: Graph, parts: Sequence[FilePart] | None = None) -> int | None:
+        """Publish a graph. With the indexer's parts, only files that changed are written;
+        a graph given alone is kept whole, in its own order. Returns the knowledge version
+        written, or None when this exact graph was already current.
+        """
         root = _root(graph.snapshot.root)
         if len({node.id for node in graph.nodes}) != len(graph.nodes):
             raise ValueError("Graph contains duplicate node identities")
         metadata = asdict(graph.snapshot) | {"root": root, "diagnostics": graph.diagnostics}
-        observations = [
-            asdict(node)
-            | {
-                "data": {
-                    key: value
-                    for key, value in node.data.items()
-                    if not key.startswith("annotation")
-                }
-            }
-            for node in graph.nodes
-        ]
-        node_blob, node_bytes = encode_nodes(observations)
-        edge_blob, edge_bytes = encode_edges(graph.edges)
-        if node_bytes + edge_bytes > self.max_bytes * 0.8:
-            raise ValueError(
-                "Graph exceeds its storage budget; the last valid record was preserved"
-            )
+        whole = None
+        if parts is None:
+            whole = encode_part(graph.nodes, graph.edges, "")
+            key = sha256(whole).hexdigest()[:32]
+            parts = (FilePart("", key, graph.nodes, graph.edges),)
+        manifest = [(part.path, part.key) for part in parts]
         metadata["_graph_digest"] = sha256(
-            node_blob + edge_blob + _encode(graph.diagnostics).encode()
+            _encode([manifest, graph.diagnostics]).encode()
         ).hexdigest()
         metadata["_node_counts"] = dict(Counter(node.kind for node in graph.nodes))
+        metadata["_edge_count"] = len(graph.edges)
         with self._connection(write=True) as db:
             db.execute("BEGIN IMMEDIATE")
             old = self._current(db, root)
@@ -377,7 +415,8 @@ class Store:
                     and old["current_id"] == graph.snapshot.id
                     and saved.get("_graph_digest") == metadata["_graph_digest"]
                 ):
-                    return
+                    return None
+            self._write_parts(db, root, parts, whole)
             previous = (
                 None
                 if old is None
@@ -394,6 +433,11 @@ class Store:
             record_id = db.execute(
                 "SELECT record_id FROM snapshots WHERE root=? AND id=?", (root, graph.snapshot.id)
             ).fetchone()[0]
+            db.execute("DELETE FROM snapshot_parts WHERE snapshot_key=?", (record_id,))
+            db.executemany(
+                "INSERT INTO snapshot_parts VALUES (?,?,?,?)",
+                ((record_id, position, *item) for position, item in enumerate(manifest)),
+            )
             db.execute("DELETE FROM source_nodes WHERE snapshot_key=?", (record_id,))
             db.executemany(
                 "INSERT INTO source_nodes VALUES (?,?,?)",
@@ -402,16 +446,6 @@ class Store:
                     for node in graph.nodes
                     if node.kind != "external" and node.path in graph.snapshot.files
                 ),
-            )
-            db.execute(
-                "INSERT INTO node_sets VALUES (?,?,?) ON CONFLICT(root,snapshot_id) "
-                "DO UPDATE SET data=excluded.data",
-                (root, graph.snapshot.id, node_blob),
-            )
-            db.execute(
-                "INSERT INTO edge_sets VALUES (?,?,?,?) ON CONFLICT(root,snapshot_id) "
-                "DO UPDATE SET data=excluded.data,edge_count=excluded.edge_count",
-                (root, graph.snapshot.id, edge_blob, len(graph.edges)),
             )
             db.execute(
                 "INSERT INTO checkouts VALUES (?,?,?) ON CONFLICT(root) DO UPDATE SET current_id=excluded.current_id,previous_id=excluded.previous_id",
@@ -427,44 +461,85 @@ class Store:
             )
             self._prune(db, root, keep)
             self._changed(db, root)
+            version = db.execute(
+                "SELECT version FROM knowledge_versions WHERE root=?", (root,)
+            ).fetchone()[0]
+        self._decoded.update(((root, part.path, part.key), part) for part in parts)
+        return version
+
+    def _write_parts(
+        self, db: sqlite3.Connection, root: str, parts: Sequence[FilePart], whole: bytes | None
+    ) -> None:
+        """Store the parts this checkout does not hold yet, within the storage budget."""
+        sizes = {
+            (row["path"], row["key"]): row["size"]
+            for row in db.execute("SELECT path, key, size FROM graph_parts WHERE root=?", (root,))
+        }
+        fresh = []
+        for part in parts:
+            if (part.path, part.key) not in sizes:
+                blob = whole or encode_part(part.nodes, part.edges, part.state)
+                sizes[part.path, part.key] = len(blob)
+                fresh.append((root, part.path, part.key, len(blob), blob))
+        if sum(sizes[part.path, part.key] for part in parts) > self.max_bytes * 0.8:
+            raise ValueError(
+                "Graph exceeds its storage budget; the last valid record was preserved"
+            )
+        db.executemany("INSERT INTO graph_parts VALUES (?,?,?,?,?)", fresh)
+
+    def _snapshot(
+        self, db: sqlite3.Connection, root: str, snapshot_id: str | None
+    ) -> tuple[str, dict[str, Any]] | None:
+        current = self._current(db, root)
+        snapshot_id = snapshot_id or (current["current_id"] if current else None)
+        row = db.execute(
+            "SELECT metadata FROM snapshots WHERE root=? AND id=?", (root, snapshot_id)
+        ).fetchone()
+        return (snapshot_id, json.loads(row["metadata"])) if row and snapshot_id else None
 
     def load_graph(self, root: str, snapshot_id: str | None = None) -> Graph | None:
         root = _root(root)
         with self._connection() as db:
             db.execute("BEGIN")
-            current = self._current(db, root)
-            if snapshot_id is None:
-                if current is None:
-                    return None
-                snapshot_id = current["current_id"]
-            row = db.execute(
-                "SELECT metadata FROM snapshots WHERE root=? AND id=?", (root, snapshot_id)
-            ).fetchone()
-            if row is None:
+            found = self._snapshot(db, root, snapshot_id)
+            if found is None:
                 return None
-            metadata = json.loads(row["metadata"])
+            snapshot_id, metadata = found
             diagnostics = tuple(metadata.pop("diagnostics", ()))
-            metadata.pop("_graph_digest", None)
-            metadata.pop("_node_counts", None)
+            for key in ("_graph_digest", "_node_counts", "_edge_count"):
+                metadata.pop(key, None)
+            parts = self._parts(db, root, snapshot_id)
             candidates = self._annotation_rows(db, root)
-            nodes = tuple(
-                Node(
-                    row["id"],
-                    row["kind"],
-                    row["name"],
-                    row["path"],
-                    row["line"],
-                    self._annotation(row, candidates),
-                )
-                for row in self._node_rows(db, root, snapshot_id, metadata["files"])
-            )
-            edge_row = db.execute(
-                "SELECT data FROM edge_sets WHERE root=? AND snapshot_id=?", (root, snapshot_id)
-            ).fetchone()
-            if edge_row is None:
-                raise ValueError("Saved graph is incomplete: its edge set is missing")
-            edges = decode_edges(edge_row["data"], maximum=self.max_bytes)
-            return Graph(Snapshot(**metadata), nodes, edges, diagnostics)
+        nodes = [node for part in parts for node in part.nodes]
+        return Graph(
+            Snapshot(**metadata),
+            self._attach(nodes, metadata["files"], candidates),
+            tuple(edge for part in parts for edge in part.edges),
+            diagnostics,
+        )
+
+    def revision(self, root: str, snapshot_id: str) -> str | None:
+        """The Git revision a retained snapshot was taken at, without loading its graph."""
+        with self._connection() as db:
+            found = self._snapshot(db, _root(root), snapshot_id)
+        return found[1].get("revision") if found else None
+
+    def load_parts(self, root: str, snapshot_id: str | None = None) -> tuple[FilePart, ...] | None:
+        """The saved parts of a snapshot, for an indexer that resumes from them."""
+        root = _root(root)
+        with self._connection() as db:
+            db.execute("BEGIN")
+            found = self._snapshot(db, root, snapshot_id)
+            return self._parts(db, root, found[0]) if found else None
+
+    def annotated(self, graph: Graph) -> Graph:
+        """A graph just indexed, with saved annotations attached as load_graph returns it."""
+        root = _root(graph.snapshot.root)
+        with self._connection() as db:
+            candidates = self._annotation_rows(db, root)
+        if not candidates:
+            return graph
+        return replace(graph, nodes=self._attach(graph.nodes, graph.snapshot.files, candidates))
 
     def annotate(
         self,
@@ -675,17 +750,16 @@ class Store:
                 result[table] = db.execute(
                     f"SELECT count(*) FROM {table} WHERE root=?", (root,)
                 ).fetchone()[0]
-            edge_row = db.execute(
-                "SELECT edge_count FROM edge_sets WHERE root=? AND snapshot_id=?",
-                (root, snapshot_id),
-            ).fetchone()
-            result["edges"] = edge_row["edge_count"] if edge_row else 0
+            result["edges"] = (
+                json.loads(metadata["metadata"]).get("_edge_count", 0) if metadata else 0
+            )
             candidates = self._annotation_rows(db, root)
             statuses = [
                 self._annotation(row, candidates).get("annotation_status")
                 for row in db.execute(
                     "SELECT n.id,n.fingerprint,'{}' AS data FROM source_nodes n "
-                    "JOIN snapshots s ON s.record_id=n.snapshot_key WHERE s.root=? AND s.id=?",
+                    "JOIN snapshots s ON s.record_id=n.snapshot_key WHERE s.root=? AND s.id=?"
+                    + ("" if candidates else " AND 0"),  # Nothing annotated: nothing to count.
                     (root, snapshot_id),
                 )
             ]

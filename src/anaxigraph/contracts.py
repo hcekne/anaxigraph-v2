@@ -46,3 +46,18 @@ class Graph:
     nodes: tuple[Node, ...]
     edges: tuple[Edge, ...]
     diagnostics: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class FilePart:
+    """One file's share of a graph, so a change to one file rewrites one record.
+
+    `key` identifies this exact content. `state` belongs to the indexer, which uses it to
+    refresh the part without reading unchanged files again; storage keeps it verbatim.
+    """
+
+    path: str
+    key: str
+    nodes: tuple[Node, ...]
+    edges: tuple[Edge, ...]
+    state: str = ""

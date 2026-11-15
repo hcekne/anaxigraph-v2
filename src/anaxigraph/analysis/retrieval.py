@@ -21,6 +21,8 @@ def _terms(text: str) -> set[str]:
 
 
 def _mentioned(task: str, identity: str) -> bool:
+    if identity.lower() not in task.lower():  # Thousands of identities; few are even present.
+        return False
     return bool(re.search(r"(?<![\w/])" + re.escape(identity) + r"(?![\w/])", task, re.I))
 
 
@@ -68,8 +70,30 @@ def _match(module, symbols, source_terms, task, weights) -> dict[str, Any]:
     }
 
 
+def _documents(
+    graph: Graph, sources: dict[str, str], cache: dict[str, tuple[str, set[str]]] | None
+) -> dict[str, set[str]]:
+    """Each file's terms, taken once per content when the caller keeps a cache."""
+    if cache is None:
+        return {path: _terms(text) for path, text in sources.items()}
+    documents = {}
+    for path, text in sources.items():
+        fingerprint = graph.snapshot.files.get(path, "")
+        known = cache.get(path)
+        if known is None or known[0] != fingerprint:
+            known = cache[path] = (fingerprint, _terms(text))
+        documents[path] = known[1]
+    for path in cache.keys() - sources.keys():
+        del cache[path]
+    return documents
+
+
 def rank_owners(
-    graph: Graph, sources: dict[str, str], task: str, limit: int = 12
+    graph: Graph,
+    sources: dict[str, str],
+    task: str,
+    limit: int = 12,
+    cache: dict[str, tuple[str, set[str]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Aggregate before limiting; repeated symbols cannot crowd out other modules.
 
@@ -88,7 +112,7 @@ def rank_owners(
         if node.kind in {"function", "class", "interface"}:
             symbols[node.path].append(node)
     words = _terms(task)
-    documents = {path: _terms(text) for path, text in sources.items()}
+    documents = _documents(graph, sources, cache)
     frequency = Counter(word for terms in documents.values() for word in words & terms)
     weights = {word: 1 + math.log((1 + len(documents)) / (1 + frequency[word])) for word in words}
     ranked = [

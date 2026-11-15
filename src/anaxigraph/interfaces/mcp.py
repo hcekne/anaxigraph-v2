@@ -36,7 +36,8 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         stateless_http=True,
         json_response=True,
         instructions=(
-            "Prepare, inspect, assess, scan/validate. completion_allowed=False means unqualified work. "
+            "Prepare, inspect, assess, validate; each call reads the checkout as it is, so no scan "
+            "is needed first. completion_allowed=False means unqualified work. "
             "Resolve assess_plan decision_required or scope_incomplete before treating a plan as assessed; "
             "adopt, defer or reject each material proposal with a reason. Dispositions do not prove implementation. "
             "Run complete model workflows using workflow_start; inspect progress with workflow_status. "

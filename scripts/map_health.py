@@ -23,7 +23,7 @@ from typing import Any
 FRESH = (
     "import json,sys,time;t=time.monotonic();"
     "from pathlib import Path;from anaxigraph.application.core import Application;"
-    "a=Application(Path(sys.argv[1]),Path(sys.argv[2]));r=a.scan();"
+    "r=Application(Path(sys.argv[1])).scan();"
     "print(json.dumps({'seconds':round(time.monotonic()-t,2),'indexing':r.get('indexing')}))"
 )
 
@@ -40,10 +40,10 @@ def _timed(function, *arguments, **options) -> tuple[float, Any]:
     return round(time.monotonic() - started, 2), result
 
 
-def _fresh(clone: Path, database: Path) -> dict[str, Any]:
+def _fresh(checkout: Path) -> dict[str, Any]:
     """A new process: what a newly started MCP server pays before its first answer."""
     output = subprocess.run(
-        [sys.executable, "-c", FRESH, str(clone), str(database)],
+        [sys.executable, "-c", FRESH, str(checkout)],
         capture_output=True,
         text=True,
         check=True,
@@ -90,11 +90,11 @@ def measure(checkout: Path, tasks: int) -> dict[str, Any]:
     from anaxigraph.application.core import Application
 
     with tempfile.TemporaryDirectory(prefix="anaxigraph-map-health-") as scratch:
-        clone, database = Path(scratch) / "clone", Path(scratch) / "knowledge.sqlite"
+        clone, worktree = Path(scratch) / "clone", Path(scratch) / "worktree"
         subprocess.run(
             ["git", "clone", "--quiet", "--shared", str(checkout), str(clone)], check=True
         )
-        application = Application(clone, database)
+        application = Application(clone)
         timings: dict[str, Any] = {}
         timings["first_scan"], status = _timed(application.scan)
         timings["rescan_unchanged"], _ = _timed(application.scan)
@@ -106,14 +106,17 @@ def measure(checkout: Path, tasks: int) -> dict[str, Any]:
         timings["rescan_added_function"], _ = _timed(application.scan)
         target.write_text(original)
         # A new server process that meets an edit nobody has scanned yet.
-        timings["new_process_after_edit"] = _fresh(clone, database)["seconds"]
+        timings["new_process_after_edit"] = _fresh(clone)["seconds"]
         application.scan()
         note = clone / "zz-map-health-probe.md"
         note.write_text("probe\n")
         timings["rescan_added_markdown"], _ = _timed(application.scan)
         note.unlink()
         application.scan()
-        timings["new_process_unchanged"] = _fresh(clone, database)["seconds"]
+        timings["new_process_unchanged"] = _fresh(clone)["seconds"]
+        # A second checkout of the same repository starts from what the first one saved.
+        _git(clone, "worktree", "add", "--quiet", "--detach", str(worktree))
+        timings["new_worktree"] = _fresh(worktree)["seconds"]
         subjects = [
             line
             for line in _git(

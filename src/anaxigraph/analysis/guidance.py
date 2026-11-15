@@ -12,7 +12,7 @@ from anaxigraph.contracts import Graph, Node
 
 from .architecture_guidance import brief_proposals as architecture_proposals
 from .architecture_guidance import coverage as architecture_coverage
-from .charter import CHARTER, boundary_findings, module_facts
+from .charter import CHARTER, boundary_findings, module_facts, relations
 
 
 def module_for(graph: Graph, value: str) -> Node | None:
@@ -121,18 +121,13 @@ def neighborhood(
 
 
 def affected_paths(graph: Graph, paths: set[str], depth: int = 2) -> set[str]:
-    owners = {node.id: node.path for node in graph.nodes}
-    reverse: dict[str, set[str]] = {}
-    for edge in graph.edges:
-        source, target = owners.get(edge.source), owners.get(edge.target)
-        if source and target and source != target and edge.resolution == "resolved":
-            reverse.setdefault(target, set()).add(source)
+    consumers = relations(graph)[1]
     pending = deque((path, 0) for path in paths)
     found = set(paths)
     while pending:
         path, level = pending.popleft()
         if level < depth:
-            for caller in reverse.get(path, ()):
+            for caller in consumers[path]["consumers"] if path in consumers else ():
                 if caller not in found:
                     found.add(caller)
                     pending.append((caller, level + 1))
