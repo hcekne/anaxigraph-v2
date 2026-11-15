@@ -124,18 +124,22 @@ a list in the composition root or a hand-written test-selection map is still a f
 provider edits, so it does not. No particular class hierarchy, plugin framework or network
 service is mandatory.
 
-AnaxiGraph checks this structurally. A *closed family* is a set of sibling modules on one shared
-contract that a production module (a composition root or hand-written registry) imports one by
+AnaxiGraph checks this structurally. A *family* is a set of modules in one folder whose classes
+share a base class or protocol defined elsewhere: they implement the same interface. Modules that
+merely import the same helper, settings or errors module are not a family. A family is *closed*
+when a production module (a composition root or hand-written registry) imports its members one by
 one; a module must list at least half of the members to count. A file that names members as paths
-or module strings, such as a CI test-selection map, also counts when a change edits it. Adding a member then edits that registrar, and safe CI for the edit reaches every check that
-imports it. `prepare_change` lists closed families near the task in its `design_brief`;
-`assess_plan` requires a decision when a plan adds a member and edits a registrar. The finding
-states the cost of staying closed, and a defer or reject is refused unless it gives
-`revisit_when`, the member count or date at which the family will be opened. `validate_change`
-reports the same growth from the diff, only for registrar edits that name the new member. The suggested remedy is
-discovery: members export one contract object, a loader finds them, contract tests parametrize
-over discovered members and CI maps each member to its own tests plus the contract tests.
-Detection uses static imports only, so string or configuration wiring is not seen.
+or module strings, such as a CI test-selection map, also counts when a change edits it. Adding a
+member then edits that registrar, and safe CI for the edit reaches every check that imports it.
+`prepare_change` lists closed families near the task in its `design_brief`. When a plan adds a
+member and edits a registrar, `assess_plan` reports the finding with the cost of staying closed
+under `architecture.advisory`. It is advice: no decision is required, and one that is recorded is
+followed through. `validate_change` reports the same growth from the diff, only for registrar
+edits that name the new member. The suggested remedy is discovery: members export one contract
+object, a loader finds them, contract tests parametrize over discovered members and CI maps each
+member to its own tests plus the contract tests. Detection uses resolved inheritance and static
+imports only, so a family built on duck typing, on a base class from an installed package, or
+wired through strings or configuration is not seen.
 
 Test the proposed independence by running a provider's checks without installing unrelated
 providers or bootstrapping the whole application's database. Add consumer checks for the actual

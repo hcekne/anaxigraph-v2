@@ -148,7 +148,7 @@ def test_real_mcp_schema_rejects_malformed_inputs_before_application_work():
             ).json()["result"]
 
         tools = {t["name"]: t for t in rpc("tools/list", {})["tools"]}
-        assert len(tools) == 20
+        assert len(tools) == 15
         receipt = tools["validate_change"]["inputSchema"]["$defs"]["CheckReceipt"]
         assert set(receipt["required"]) == {"command", "exit_code", "snapshot_id"}
         assert receipt["properties"]["exit_code"]["type"] == "integer"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -97,42 +98,40 @@ def coverage(rows: list[dict], owners: set[str]) -> dict:
     }
 
 
-def decide(requirements: list[dict], decisions: Any, *, truncated: bool = False) -> dict:
-    """Require an explicit disposition, never agreement with a model proposal."""
-    expected = {item["proposal_id"] for item in requirements}
+def decide(
+    requirements: list[dict],
+    decisions: Any,
+    *,
+    advisory: Sequence[dict] = (),
+    truncated: bool = False,
+) -> dict:
+    """Require an explicit disposition, never agreement with a model proposal.
+
+    Advisory findings come from structural observation alone: a decision about one is recorded
+    when given and never asked for.
+    """
+    required = {item["proposal_id"] for item in requirements}
+    expected = required | {item["proposal_id"] for item in advisory}
     if decisions is not None and (not isinstance(decisions, list) or len(decisions) > 12):
         raise ValueError("Architecture decisions must be a list of at most twelve dispositions")
-    strict = {item["proposal_id"] for item in requirements if item.get("requires_revisit_when")}
     accepted: list[dict[str, Any]] = []
-    refused: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in decisions or []:
         item = _decision(item, expected - seen)
-        identity = item["proposal_id"]
-        if identity in strict and item["decision"] != "adopt" and not item.get("revisit_when"):
-            refused.append(
-                {
-                    "proposal_id": identity,
-                    "problem": "Deferring or rejecting this needs revisit_when: the member count "
-                    "or date at which the family will be opened. Without it, the cost repeats "
-                    "on every addition with no end.",
-                }
-            )
-            continue
         accepted.append(item)
-        seen.add(identity)
-    pending = sorted(expected - seen)
+        seen.add(item["proposal_id"])
+    pending = sorted(required - seen)
     return {
         "status": "scope_incomplete"
         if truncated
         else "decision_required"
         if pending
         else "decisions_recorded"
-        if expected
+        if accepted
         else "no_current_material_proposals",
         "requirements": requirements,
+        "advisory": list(advisory),
         "decisions": accepted,
-        "refused_decisions": refused,
         "pending_ids": pending,
         "truncated": truncated,
         "implementation_status": "unverified",

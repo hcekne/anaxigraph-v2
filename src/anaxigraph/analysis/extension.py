@@ -1,11 +1,13 @@
 """Open-ended families that grow by editing shared files, and what that costs safe CI.
 
-A family is a set of sibling modules built on one shared contract module. A registrar is a
-module that names most members: a composition root, a hand-written registry, a test that lists
-every member, or a file such as a test-selection map that names members by path or module name.
-Each new member then edits the registrar, and every check that imports the registrar is in scope
-for that edit. Discovery (package scanning, entry points) leaves no static registrar, so an open
-family produces no finding here.
+A family is a set of modules in one folder whose classes share a base class or protocol that
+is defined elsewhere: they implement the same interface. Sharing an imported helper, a
+settings or an errors module is not a family. A registrar is a module that names most members:
+a composition root, a hand-written registry, a test that lists every member, or a file such as
+a test-selection map that names members by path or module name. Each new member then edits the
+registrar, and every check that imports the registrar is in scope for that edit. Discovery
+(package scanning, entry points) leaves no static registrar, so an open family produces no
+finding here.
 """
 
 from __future__ import annotations
@@ -21,13 +23,13 @@ from anaxigraph.analysis.charter import relations
 from anaxigraph.contracts import Graph
 
 _SKIP = {"__init__.py", "__main__.py", "conftest.py"}
-_MEMBER_CONSUMERS = 3
 _TEXT_LIMIT = 1_000_000
 _CACHE: tuple[weakref.ReferenceType[Graph], dict[str, Any]] | None = None
 _LOCK = threading.Lock()
 LIMITATION = (
-    "Families are found from static imports; files that name members as strings are seen only "
-    "when a change edits them. Import reach over-approximates the checks a change can affect."
+    "Families are found from resolved inheritance; a family built on duck typing or on a base "
+    "class from an installed package is not seen. Files that name members as strings are seen "
+    "only when a change edits them. Import reach over-approximates the checks a change can affect."
 )
 
 
@@ -35,51 +37,44 @@ def _directory(path: str) -> str:
     return str(PurePosixPath(path).parent)
 
 
-def _kin(members: set[str], raw: dict, consumers: dict[str, int]) -> tuple[str, set[str]] | None:
-    """The most specific shared dependency of at least two members, and the members using it."""
-    counts = Counter(dep for member in members for dep in raw[member]["dependencies"] - members)
-    shared = [dep for dep, count in counts.items() if count >= 2]
-    if not shared:
-        return None
-    contract = min(shared, key=lambda dep: (-counts[dep], consumers.get(dep, 0), dep))
-    return contract, {member for member in members if contract in raw[member]["dependencies"]}
-
-
-def _leaf_imports(row: dict, production: set[str], consumers: dict[str, int]) -> dict:
-    """Imported leaf-like modules by directory; widely imported modules are infrastructure."""
-    by_directory: dict[str, set[str]] = {}
-    for dep in row["dependencies"] & production:
-        if PurePosixPath(dep).name not in _SKIP and consumers[dep] <= _MEMBER_CONSUMERS:
-            by_directory.setdefault(_directory(dep), set()).add(dep)
-    return by_directory
+def _implementers(graph: Graph, tests: set[str]) -> dict[tuple[str, str], set[str]]:
+    """Production modules by folder and by the base class or protocol their classes share."""
+    bases = {node.id: node for node in graph.nodes if node.kind in {"class", "interface"}}
+    found: dict[tuple[str, str], set[str]] = {}
+    for edge in graph.edges:
+        base = bases.get(edge.target) if edge.kind == "inherits" else None
+        if base is None or edge.resolution != "resolved" or base.path == edge.path:
+            continue
+        if edge.path not in tests and PurePosixPath(edge.path).name not in _SKIP:
+            found.setdefault((_directory(edge.path), base.id), set()).add(edge.path)
+    return found
 
 
 def _analyse(graph: Graph) -> dict[str, Any]:
     modules, raw = relations(graph)
     tests = {path for path, node in modules.items() if node.data.get("is_test")}
-    production = set(modules) - tests
-    consumers = {path: len(raw[path]["consumers"] & production) for path in production}
-    families: dict[tuple[str, str], dict[str, Any]] = {}
-    for registrar in modules:
-        for directory, members in _leaf_imports(raw[registrar], production, consumers).items():
-            found = _kin(members, raw, consumers) if len(members) >= 2 else None
-            if found is None or len(found[1]) < 2:
-                continue
-            contract, kin = found
-            family = families.setdefault(
-                (directory, contract),
-                {"directory": directory, "contract": contract, "members": set(), "listing": {}},
-            )  # fmt: skip
-            family["members"] |= kin
-            family["listing"][registrar] = kin
-    for family in families.values():
+    bases = {node.id: node for node in graph.nodes if node.kind in {"class", "interface"}}
+    closed = []
+    for (directory, base), members in _implementers(graph, tests).items():
+        if len(members) < 2:
+            continue
+        listed = Counter(
+            consumer for member in members for consumer in raw[member]["consumers"] - members
+        )
         # A registrar lists most members; plumbing that uses one or two of them is not one.
-        need = max(2, math.ceil(len(family["members"]) / 2))
-        listing = {path for path, kin in family["listing"].items() if len(kin) >= need}
-        listing -= family["members"]
-        family["registrars"], family["test_registrars"] = listing - tests, listing & tests
-    # Tests that import a few modules are ordinary unit tests unless production also enumerates.
-    closed = [family for family in families.values() if family["registrars"]]
+        need = max(2, math.ceil(len(members) / 2))
+        listing = {path for path, count in listed.items() if count >= need}
+        family = {
+            "directory": directory,
+            "contract": bases[base].path,
+            "interface": bases[base].name,
+            "members": members,
+            "registrars": listing - tests,
+            "test_registrars": listing & tests,
+        }
+        # Tests that import a few modules are ordinary unit tests unless production also enumerates.
+        if family["registrars"]:
+            closed.append(family)
     return {"modules": modules, "raw": raw, "tests": tests, "families": closed}
 
 
@@ -120,9 +115,10 @@ def check_reach(graph: Graph, paths: set[str] | list[str]) -> dict[str, Any]:
 def _view(graph: Graph, family: dict[str, Any]) -> dict[str, Any]:
     registrars = sorted(family["registrars"] | family["test_registrars"])
     return {
-        "family": f"{family['directory']}/ on {family['contract']}",
+        "family": f"{family['directory']}/ implementing {family['interface']}",
         "directory": family["directory"],
         "contract": family["contract"],
+        "interface": family["interface"],
         "members": len(family["members"]),
         "member_examples": sorted(family["members"])[:4],
         "registrars": sorted(family["registrars"])[:6],
@@ -213,7 +209,7 @@ def _finding(graph: Graph, family: dict, joining: list[str], edited: list[str]) 
     directory = family["directory"]
     return {
         "kind": "extension-point",
-        "proposal_id": f"extension:{directory}:{family['contract']}",
+        "proposal_id": f"extension:{directory}:{family['contract']}#{family['interface']}",
         "status": "closed-family",
         "title": f"Adding to {directory}/ edits shared registrars; open the family instead",
         "opportunity": 3,
@@ -227,7 +223,7 @@ def _finding(graph: Graph, family: dict, joining: list[str], edited: list[str]) 
         "the right place to list them, and would every addition still run that much CI?",
         "suggestion": (
             f"Before adding this member, make {directory}/ an open extension point: (1) each member "
-            f"exports one object implementing the family contract ({family['contract']}) that "
+            f"exports one object implementing {family['interface']} ({family['contract']}) that "
             "declares its capabilities, settings and any routes; (2) one loader discovers members "
             "(for example pkgutil.iter_modules over the package, or entry points), so no existing "
             "file names a member; (3) contract tests parametrize over discovered members, and each "
@@ -240,10 +236,10 @@ def _finding(graph: Graph, family: dict, joining: list[str], edited: list[str]) 
         "contract tests. Across 1,000 more members that "
         f"is about {1000 * reach['test_modules']:,} test-module runs and 1,000 edits to the same "
         "shared files.",
-        "decision": "adopt (open the family in this change). An explicit registry or selector "
-        "map is still a hand-written list, so it is not an open family. To defer or reject, "
-        "also give revisit_when: the member count or date at which the family will be opened.",
-        "requires_revisit_when": True,
+        "decision": "Advice, not a gate: nothing is required. You may record adopt, defer or "
+        "reject for this proposal_id in assess_plan; an adopted one is checked at validation. "
+        "An explicit registry or selector map is still a hand-written list, so it is not an "
+        "open family.",
         "limitations": LIMITATION,
     }
 
@@ -260,10 +256,10 @@ def design_brief(graph: Graph, near: set[str]) -> dict[str, Any]:
     for family in families:
         reach = family["registrar_check_reach"]
         questions.append(
-            f"{family['directory']}/ has {family['members']} members on {family['contract']} "
-            f"registered by editing {', '.join(family['registrars'][:3])} (reaches "
-            f"{reach['test_modules']} of {reach['test_modules_total']} test modules). Adding "
-            "another the same way repeats that cost: open the family first; assess_plan will "
-            "ask for a decision."
+            f"{family['directory']}/ has {family['members']} members implementing "
+            f"{family['interface']} ({family['contract']}), registered by editing "
+            f"{', '.join(family['registrars'][:3])} (reaches {reach['test_modules']} of "
+            f"{reach['test_modules_total']} test modules). Adding another the same way repeats "
+            "that cost: consider opening the family first."
         )
     return {"questions": questions, "closed_families": families, "limitations": LIMITATION}

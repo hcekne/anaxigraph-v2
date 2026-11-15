@@ -102,8 +102,11 @@ migrate an already running legacy service.
    `include_brief=true` explicitly repeats the preparation brief.
 3. **Assess the plan** before a substantial edit. `assess_plan` continues the prepared task even
    when its description is reworded. Adopt, defer or reject relevant material architecture findings
-   with a reason, including extension-point findings for plans that add a family member by
-   editing its registrar. Deferring or rejecting one also needs `revisit_when`. An accepted recommendation is a decision to do work, not evidence that it is done.
+   from a review, with a reason. An extension-point finding, for a plan that adds a member to a
+   family by editing its registrar, is advice under `architecture.advisory`: nothing is required,
+   and a decision you do record for it is checked at validation. A family is a set of modules in
+   one folder whose classes share a base class or protocol; sharing a helper module is not one.
+   An accepted recommendation is a decision to do work, not evidence that it is done.
 4. **Implement and check** the change. Prefer local behavior and public-contract tests; include
    consumers when contracts, behavior, shared resources or configuration can affect them. Keep the
    project's required checks.

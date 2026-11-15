@@ -43,8 +43,13 @@ def assess(
     owners.update(node.id for node in graph.nodes if node.kind == "module" and node.path in files)
     rows = owner_reviews(app, graph, tuple(sorted(owners)), limit=19)
     scouted = [item for item in proposals(rows, owners, 57) if item["opportunity"] >= 2]
-    material = [*(structural or []), *scouted]
-    result = decide(material[:12], decisions, truncated=len(rows) > 18 or len(material) > 12)
+    # Observed extension points are advice: only reviewed proposals ask for a decision.
+    result = decide(
+        scouted[:12],
+        decisions,
+        advisory=(structural or [])[:6],
+        truncated=len(rows) > 18 or len(scouted) > 12,
+    )
     event = app.evidence.record(
         "architecture_plan",
         {
@@ -54,7 +59,11 @@ def assess(
             "files": files,
             "status": result["status"],
             "metrics": {key: result[key] for key in ("decisions", "pending_ids", "truncated")}
-            | {"obligations": [obligation(item) for item in result["requirements"]]},
+            | {
+                "obligations": [
+                    obligation(item) for item in (*result["advisory"], *result["requirements"])
+                ]
+            },
         },
     )
     return result | {"recorded": event is not None, "scout_coverage": coverage(rows, owners)}

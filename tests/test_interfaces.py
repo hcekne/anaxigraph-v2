@@ -179,6 +179,8 @@ def test_mcp_tools_dispatch_the_same_arguments() -> None:
 
     async def exercise() -> None:
         tools = await server.list_tools()
+        # An agent is offered what it uses while coding. Record import and status, settings and
+        # trial evidence stay with the CLI and dashboard instead of costing every session context.
         assert {tool.name for tool in tools} == {
             "status",
             "scan",
@@ -194,12 +196,7 @@ def test_mcp_tools_dispatch_the_same_arguments() -> None:
             "workflow_start",
             "workflow_status",
             "workflow_resume",
-            "workflow_configure",
             "export_record",
-            "import_record",
-            "portable_status",
-            "trial_evidence",
-            "export_evidence",
         }
         await server.call_tool("prepare_change", {"task": "Add export", "limit": 3})
         await server.call_tool("analysis_request", {"kind": "fresh-eyes"})

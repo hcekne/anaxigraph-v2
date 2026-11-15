@@ -70,7 +70,7 @@ def test_removed_private_access_and_cycle_are_observed_against_pinned_baseline(t
 def test_extension_obligation_requires_actual_source_and_does_not_attest_discovery(tmp_path):
     app = _closed_repo(tmp_path)
     files = ["app/providers/geo.py", "app/main.py"]
-    [requirement] = app.assess_plan("Add geo", files)["architecture"]["requirements"]
+    [requirement] = app.assess_plan("Add geo", files)["architecture"]["advisory"]
     app.assess_plan(
         "Add geo",
         files,

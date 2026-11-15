@@ -1,4 +1,4 @@
-"""Open-ended families registered by editing shared files become explicit plan decisions."""
+"""Open-ended families registered by editing shared files are pointed out, never gated."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def test_static_registrar_makes_a_closed_family_with_its_check_reach(tmp_path):
     graph = _closed_repo(tmp_path)._current()
     [family] = closed_families(graph)
     assert family["directory"] == "app/providers"
-    assert family["contract"] == "app/contract.py"
+    assert family["contract"] == "app/contract.py" and family["interface"] == "Provider"
     assert family["registrars"] == ["app/main.py"]
     assert family["members"] == 2
     assert check_reach(graph, ["app/main.py"])["test_modules"] == 1
@@ -74,7 +74,32 @@ def test_discovered_family_has_no_static_registrar(tmp_path):
     assert change_findings(graph, {"app/providers/geo.py"}, {"app/main.py"}) == []
 
 
-def test_plan_adding_a_member_through_the_registrar_requires_a_decision(tmp_path):
+def test_modules_that_only_share_a_helper_are_not_a_family(tmp_path):
+    helper = "from app.errors import fail\n\n\ndef {name}():\n    return fail('{name}')\n"
+    _write(
+        tmp_path,
+        {
+            "app/__init__.py": "",
+            "app/errors.py": "def fail(reason):\n    raise ValueError(reason)\n",
+            "app/handlers/__init__.py": "",
+            "app/handlers/orders.py": helper.format(name="orders"),
+            "app/handlers/refunds.py": helper.format(name="refunds"),
+            "app/main.py": (
+                "from app.handlers.orders import orders\n"
+                "from app.handlers.refunds import refunds\n\n\n"
+                "def routes():\n    return [orders, refunds]\n"
+            ),
+        },
+    )
+    app = Application(tmp_path)
+    graph = app._live()
+    assert closed_families(graph) == []
+    plan = app.assess_plan("Add a returns handler", ["app/handlers/returns.py", "app/main.py"])
+    assert plan["architecture"]["advisory"] == [] and plan["status"] == "advisory"
+    assert app.prepare_change("Add a returns handler")["design_brief"]["closed_families"] == []
+
+
+def test_plan_adding_a_member_through_the_registrar_is_advised_and_never_gated(tmp_path):
     app = _closed_repo(tmp_path)
     brief = app.prepare_change("Add a geo provider")
     assert next(iter(brief)) == "design_brief"
@@ -83,8 +108,10 @@ def test_plan_adding_a_member_through_the_registrar_requires_a_decision(tmp_path
 
     files = ["app/providers/geo.py", "app/main.py", "tests/test_geo.py"]
     plan = app.assess_plan("Add a geo provider", files)
-    assert plan["status"] == "decision_required"
-    [requirement] = plan["architecture"]["requirements"]
+    assert plan["status"] == "advisory"
+    assert plan["architecture"]["requirements"] == []
+    assert plan["architecture"]["status"] == "no_current_material_proposals"
+    [requirement] = plan["architecture"]["advisory"]
     assert requirement["kind"] == "extension-point"
     assert requirement["adding"] == ["app/providers/geo.py"]
     assert requirement["editing_registrars"] == ["app/main.py"]
@@ -103,7 +130,7 @@ def test_plan_adding_a_member_through_the_registrar_requires_a_decision(tmp_path
 def test_plan_that_only_adds_files_needs_no_extension_decision(tmp_path):
     app = _closed_repo(tmp_path)
     plan = app.assess_plan("Add a geo provider", ["app/providers/geo.py", "tests/test_geo.py"])
-    assert plan["architecture"]["requirements"] == []
+    assert plan["architecture"]["requirements"] == plan["architecture"]["advisory"] == []
 
 
 def test_validation_reports_closed_family_growth_from_the_diff(tmp_path):
@@ -122,20 +149,17 @@ def test_validation_reports_closed_family_growth_from_the_diff(tmp_path):
     assert review["change_check_reach"]["test_modules"] == 1
 
 
-def test_defer_without_revisit_when_is_refused_and_costs_are_stated(tmp_path):
+def test_a_deferral_is_recorded_without_conditions_and_costs_are_stated(tmp_path):
     app = _closed_repo(tmp_path)
     files = ["app/providers/geo.py", "app/main.py"]
-    [requirement] = app.assess_plan("Add a geo provider", files)["architecture"]["requirements"]
-    assert "1,000 more members" in requirement["cost_of_staying_closed"]
-    pid = requirement["proposal_id"]
-    plain = {"proposal_id": pid, "decision": "defer", "reason": "Later."}
-    refused = app.assess_plan("Add a geo provider", files, [plain])
-    assert refused["status"] == "decision_required"
-    assert refused["architecture"]["refused_decisions"][0]["proposal_id"] == pid
-    timed = app.assess_plan(
-        "Add a geo provider", files, [plain | {"revisit_when": "At 4 members."}]
-    )
-    assert timed["architecture"]["status"] == "decisions_recorded"
+    [advice] = app.assess_plan("Add a geo provider", files)["architecture"]["advisory"]
+    assert "1,000 more members" in advice["cost_of_staying_closed"]
+    assert advice["decision"].startswith("Advice, not a gate")
+    plain = {"proposal_id": advice["proposal_id"], "decision": "defer", "reason": "Later."}
+    deferred = app.assess_plan("Add a geo provider", files, [plain])
+    assert deferred["status"] == "advisory"
+    assert deferred["architecture"]["status"] == "decisions_recorded"
+    assert deferred["architecture"]["decisions"] == [plain]
 
 
 def test_selector_map_naming_members_counts_as_a_registrar(tmp_path):
@@ -149,7 +173,7 @@ def test_selector_map_naming_members_counts_as_a_registrar(tmp_path):
     )
     app.scan()
     plan = app.assess_plan("Add a geo provider", ["app/providers/geo.py", "tools/select_tests.py"])
-    [requirement] = plan["architecture"]["requirements"]
+    [requirement] = plan["architecture"]["advisory"]
     assert requirement["editing_registrars"] == ["tools/select_tests.py"]
 
 
@@ -174,7 +198,7 @@ def test_plumbing_that_uses_few_members_is_not_a_registrar(tmp_path):
     [family] = closed_families(app._current())
     assert family["registrars"] == ["app/main.py"]
     plan = app.assess_plan("Add a geo provider", ["app/providers/geo.py", "app/platform.py"])
-    assert plan["architecture"]["requirements"] == []
+    assert plan["architecture"]["advisory"] == []
 
 
 def test_validation_ignores_registrar_edits_that_do_not_name_the_new_member(tmp_path):

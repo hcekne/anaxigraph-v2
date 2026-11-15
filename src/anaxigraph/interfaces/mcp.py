@@ -50,30 +50,34 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         ),
     )
 
-    def tool(function):
+    def tool(function, *, agents: bool = True):
+        """Every operation serves the dashboard and CLI; an agent is offered only those it
+        uses while coding, because each tool it is offered costs it context in every session.
+        """
         if operations is not None:
             operations[function.__name__] = function
-        return server.tool()(function)
+        return server.tool()(function) if agents else function
 
-    def action(name, description):
+    def action(name, description, agents):
         def invoke() -> dict:
             return getattr(application, name)()
 
         invoke.__name__, invoke.__doc__ = name, description
-        tool(invoke)
+        tool(invoke, agents=agents)
 
-    for name, description in (
-        ("status", "Show checkout identity and independent map/annotation readiness."),
-        ("scan", "Refresh source facts without executing analyzed code."),
-        ("export_record", "Save portable analyses in anaxigraph/; commit and push separately."),
+    for name, description, agents in (
+        ("status", "Show checkout identity and independent map/annotation readiness.", True),
+        ("scan", "Refresh source facts and report map health; analyzed code is never run.", True),
         (
-            "import_record",
-            "Reuse Git-carried analyses matching this checkout's content and context.",
+            "export_record",
+            "Save portable analyses in anaxigraph/; commit and push separately.",
+            True,
         ),
-        ("portable_status", "Distinguish local map, portable record and commit/push state."),
-        ("export_evidence", "Export bounded trial evidence without source or model transcripts."),
+        ("import_record", "Reuse Git-carried analyses matching this checkout.", False),
+        ("portable_status", "Distinguish local map, portable record and commit/push state.", False),
+        ("export_evidence", "Export bounded trial evidence without source or transcripts.", False),
     ):
-        action(name, description)
+        action(name, description, agents)
 
     @tool
     def modules(
@@ -188,14 +192,14 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         """Retry failed or interrupted batches while retaining every completed batch."""
         return application.workflow_resume(run_id)
 
-    @tool
     def workflow_configure(config: dict[str, Any] | None = None) -> dict:
         """Read or save model choices by stage, stronger fallbacks and ordered review passes."""
         return application.workflow_configure(config)
 
-    @tool
     def trial_evidence(limit: EvidenceSize = 50, offset: PageOffset = 0) -> dict:
         """Read local task/context/usage evidence; unknown costs remain unknown."""
         return application.trial_evidence(limit, offset)
 
+    tool(workflow_configure, agents=False)
+    tool(trial_evidence, agents=False)
     return server

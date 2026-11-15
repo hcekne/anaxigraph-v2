@@ -38,7 +38,8 @@ shared contracts, authorization, state and build inputs must widen the affected 
 Fresh Eyes receives behavior only, without source identities or topology, and retains three
 alternatives. Default Patterns screen cheaply, review selected opportunities, and include
 architecture scouts plus CI/CD. Preserve explicit exhaustive/selected reviews and portable
-identities. Material plan findings need adopt/defer/reject reasons; decisions do not prove implementation.
+identities. Material review findings need adopt/defer/reject reasons; structural observations such
+as a closed family are advice and never a gate. Decisions do not prove implementation.
 
 Use the [recommended routine](docs/usage.md): prepare a substantial task, inspect and assess
 its plan, then check and validate against the original baseline; the map follows the checkout,

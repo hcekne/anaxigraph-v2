@@ -43,21 +43,11 @@ def test_dashboard_and_stateless_mcp_share_the_same_application(tmp_path):
                 "params": {},
             },
         )
-        assert {tool["name"] for tool in tools.json()["result"]["tools"]} >= {
-            "status",
-            "prepare_change",
-            "workflow_start",
-            "export_record",
-        }
+        names = {tool["name"] for tool in tools.json()["result"]["tools"]}
+        assert names >= {"status", "scan", "prepare_change", "workflow_start", "export_record"}
+        assert not names & {"import_record", "portable_status", "export_evidence"}
         schemas = {tool["name"]: tool["inputSchema"] for tool in tools.json()["result"]["tools"]}
-        for name in (
-            "status",
-            "scan",
-            "export_record",
-            "import_record",
-            "portable_status",
-            "export_evidence",
-        ):
+        for name in ("status", "scan", "export_record"):
             assert not schemas[name].get("properties"), "Private options must stay outside MCP"
         for name, route, parameter, maximum in (
             ("modules", "/api/modules", "limit", 100),
@@ -65,8 +55,11 @@ def test_dashboard_and_stateless_mcp_share_the_same_application(tmp_path):
             ("workflow_status", "/api/workflows", "batch_limit", 50),
             ("trial_evidence", "/api/evidence", "limit", 1000),
         ):
-            bounds = schemas[name]["properties"][parameter]
-            assert (bounds["minimum"], bounds["maximum"]) == (1, maximum)
+            if (
+                name in schemas
+            ):  # The dashboard keeps the same bounds for what agents are not offered.
+                bounds = schemas[name]["properties"][parameter]
+                assert (bounds["minimum"], bounds["maximum"]) == (1, maximum)
             assert client.get(route, params={parameter: 0}).status_code == 422
             assert client.get(route, params={parameter: maximum + 1}).status_code == 422
         result = client.post(
