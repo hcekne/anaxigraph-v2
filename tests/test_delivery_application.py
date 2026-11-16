@@ -90,7 +90,7 @@ def application(tmp_path):
         "fallback": ["full"],
         "shared_inputs": ["uv.lock", "anaxigraph/ci-policy.json"],
     }
-    write(root, delivery.POLICY_PATH, json.dumps(policy))
+    write(root, planning.POLICY_PATH, json.dumps(policy))
     app = Application(root)
     app.scan()
     return app
@@ -137,13 +137,13 @@ def test_shared_toolchain_change_expands_change_checks_with_periodic_checks_reta
 
 
 def test_missing_and_invalid_policy_are_explicit_and_advisory_preserves_unknown(application):
-    policy = application.root / delivery.POLICY_PATH
+    policy = application.root / planning.POLICY_PATH
     policy.unlink()
     application.scan()
     result = planning.plan(application)
     assert result["status"] == "not_configured"
     assert not result["execution_ready"] and not result["checks_executed"]
-    write(application.root, delivery.POLICY_PATH, '{"version": 1, "targets": []}')
+    write(application.root, planning.POLICY_PATH, '{"version": 1, "targets": []}')
     application.scan()
     with pytest.raises(ValueError, match="Invalid CI policy"):
         planning.plan(application, changed_paths=["payments/charge.py"])

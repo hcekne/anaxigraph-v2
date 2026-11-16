@@ -4,8 +4,10 @@ import json
 
 import pytest
 
-from anaxigraph.analysis.ci_obligations import REPORT_PATH, evidence_inputs
 from anaxigraph.application import Application
+
+from .ci_obligations import REPORT_PATH, evidence_inputs
+from .evidence import validate_change
 
 RUNTIME = {"python": "fixture-python", "dependencies": "locked-fixture"}
 TESTS = ["tests/test_local.py::test_cache", "tests/test_consumer.py::test_tenant"]
@@ -55,7 +57,8 @@ def write_report(app, value):
 
 def validate(candidate, *, runtime=RUNTIME, exit_code=0, require=False):
     app, baseline = candidate
-    return app.validate_change(
+    return validate_change(
+        app,
         [
             {
                 "command": "pytest tests/test_local.py",
@@ -179,8 +182,8 @@ def test_fresh_complete_supplied_ci_and_checks_allow_only_reported_success(candi
 def test_explicit_required_ci_and_absent_receipts_remain_unchecked(candidate):
     app, baseline = candidate
     write_report(app, selection_report(app))
-    result = app.validate_change(
-        baseline_id=baseline, runtime_context=RUNTIME, require_ci_evidence=True
+    result = validate_change(
+        app, baseline_id=baseline, runtime_context=RUNTIME, require_ci_evidence=True
     )
     assert result["validation_status"] == "unchecked"
     assert result["completion_allowed"] is False

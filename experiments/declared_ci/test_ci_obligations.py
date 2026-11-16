@@ -2,19 +2,15 @@
 
 import copy
 import hashlib
-import importlib
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-from anaxigraph.analysis.ci_obligations import REPORT_PATH, audit_selection
 from anaxigraph.application import Application
 
-# The retired declared-input planner lives with the experiments that qualified it.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-planning = importlib.import_module("experiments.declared_ci.planning")
+from . import planning
+from .ci_obligations import REPORT_PATH, audit_selection
+from .evidence import selection_evidence, validate_change
 
 
 def report(files):
@@ -196,18 +192,19 @@ def test_application_ci_report_is_captured_and_stale_after_any_consumer_edit(tmp
     target.write_text(json.dumps(value))
     app.scan()
     prepared = app.prepare_change("Change cache", continue_task=True)
-    assert prepared["delivery"]["selection_evidence"]["status"] == "reported_gap"
+    assert "selection_evidence" not in prepared["delivery"]
+    assert selection_evidence(app, app._live())["status"] == "reported_gap"
     assert prepared["delivery"]["status"] == "not_reviewed"  # No model review required.
     assert (
-        app.analysis_request("delivery")["packet"]["delivery_context"]["test_selection"]["status"]
-        == "reported_gap"
+        app.analysis_request("delivery")["packet"]["delivery_context"]["test_selection"]["basis"]
+        == "recorded-execution-and-reads"
     )
     plan = planning.plan(app, changed_paths=["cache.py"])
     assert plan["selection_evidence"]["findings"][0]["omitted_count"] == 1
     assert not plan["execution_ready"]
     (tmp_path / "tests/test_consumer.py").write_text("value = 2\n")
     app.scan()
-    result = app.validate_change(baseline_id=baseline["baseline_id"])
+    result = validate_change(app, baseline_id=baseline["baseline_id"])
     assert result["ci_selection"]["status"] == "stale"
     assert (
         hashlib.sha256(target.read_bytes()).hexdigest()

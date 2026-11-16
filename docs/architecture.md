@@ -90,8 +90,9 @@ the bounded two-level reference neighborhood and observed test links are not a v
 The [CI/CD workflow](change-request-ci-delivery.md) reads real pipeline declarations for review.
 The declared-input planner that came with it selected component checks from an authored task
 policy; it was retired from the product in November 2026 and lives in `experiments/declared_ci/`,
-because no project in its trials authored that policy. Which tests a change needs is now answered
-from a recorded run (see `tests_for_change` below). Accepted component-rule editing remains
+because no project in its trials authored that policy. The supplied-evidence audit and gate also live with that experiment. Ordinary validation
+attributes check receipts; the experiment applies selector qualification externally. Which tests
+a change needs is now answered from a recorded run (see `tests_for_change` below). Accepted component-rule editing remains
 proposed work.
 The [architecture scouts](change-request-architecture-scouts.md) now perform focused source-aware
 searches, compare local/workspace/separate-repository package options, feed task guidance and

@@ -76,7 +76,7 @@ implementation and verification; new small benchmark applications.
 | 2 | Done | Same graph, edge for edge. Rescan after a one-file edit 0.6 s (was 21 to 31 s); a brief 0.23 s (was 5 s); after a Markdown-only change 0.3 to 0.7 s (was 18.6 s; the target of no cost is not met, a new snapshot is still recorded); a new process on a mapped checkout 2.1 s (was 13.7 s), 3.9 s when it meets an edit nobody scanned; a new worktree 5.1 s; first read 15 s (was 59 s); peak memory 309 MB (was 1,049 MB); no call refused for a changed checkout (was 2 of 2). Production size 14,190 lines |
 | 3 | Done | 979 TypeScript/JavaScript files read (2,380 modules in all); all 3,864 local script imports linked, none missed; 24 asset imports and 3,519 package imports left external; 502 of 507 frontend production files have a known consumer and 332 of the 465 frontend test files link to code (the other 133 are browser specs that import none); four files have syntax the pinned grammar does not accept and are reported. With both languages: first read 19 s (was 15 s), rescan after a one-file edit 0.6 s, brief 0.29 s, new process 2.3 s, new worktree 5.6 s, peak memory 384 MB. Production size 14,585 lines |
 | 4 | Done | A family now needs classes that share a base class or protocol: the target has one closed family (28 model modules on one base class) where the old rule found 38, of which one had an interface. Its finding is advice under `architecture.advisory`; only reviewed proposals ask for a decision, and deferring needs no extra field. Agents are offered 15 tools instead of 20 (8,287 bytes of names, descriptions and schemas instead of 9,604); the other five stay in the CLI and dashboard. Reviews were unscheduled in step 0. Production size 14,584 lines |
-| 5 | Done; one limit measured | `record-tests`, `tests`, `tests --ran`, the `tests_for_change` tool, and a reads recorder that runs in the project's own test process. From one recorded run of the target's backend suite (632 test files, 6,615 tests) and its 70 most recent fix/feature pull requests that touch that scope: no pull request left out a test file that executed or read a changed file or a changed test, and 2 select the whole suite where 31 did before the recorder. Ten faults planted one at a time, the whole suite run for each: nine made test files fail, and every newly failing one was inside the selection (18, 1, 61, 8, 46, 1, 1, 33 and 61 files; the fifth, a changed migration, selects the whole suite); the tenth failed no test. The limit: 86 test files start another process that could read the checkout, they are 39% of suite time and run for every change, so the median pull request runs 69% of suite time (mean 72%). The declared-input planner left the product for `experiments/declared_ci/`; the supplied-evidence audit and gate stay, see below. Production size 14,924 lines |
+| 5 | Implemented; qualification incomplete | `record-tests`, `tests`, `tests --ran`, the `tests_for_change` tool, and a reads recorder that runs in the project's own test process. From one recorded run of the target's backend suite (632 test files, 6,615 tests) and its 70 most recent fix/feature pull requests that touch that scope: no pull request left out a test file that executed or read a changed file or a changed test, and 2 select the whole suite where 31 did before the recorder. Ten faults planted one at a time, the whole suite run for each: nine made test files fail, and every newly failing one was inside the selection (18, 1, 61, 8, 46, 1, 1, 33 and 61 files; the fifth, a changed migration, selects the whole suite); the tenth failed no test. The limit: 86 test files start another process that could read the checkout, they are 39% of suite time and run for every change, so the median pull request runs 69% of suite time (mean 72%). The declared-input planner left the product for `experiments/declared_ci/`; the supplied-evidence audit and gate stay, see below. Production size 14,924 lines |
 | 6 | Measured; nothing shipped | 77 pull requests replayed at their parent commit (13 Python only, 30 TypeScript/JavaScript only, 34 both; a median of six production files really changed). A really changed file is in the top three suggestions for 41, against 43 for plain keyword search (BM25); in the top one for 27 against 21. Reading TypeScript raised the product from 26. Adding files that changed together in history gave 48, with 13 pull requests better and 8 worse than keyword search (sign test p = 0.38), and 23 against 19 on the half it was not tuned on; boosting import neighbours gave 41. By the rule above no signal ships on this evidence. On TypeScript-only pull requests the product is behind keyword search, 14 against 18. Ranking a brief takes 0.17 s |
 | 7 | Not started | Needs a budget decision |
 
@@ -95,9 +95,8 @@ implementation and verification; new small benchmark applications.
   folder.
 - Shadow mode in the target's own CI: a nightly job that records, and `anaxigraph tests --ran`
   on pull requests. These are changes to that repository and its CI cost.
-- The supplied-evidence audit and gate (`analysis/ci_obligations.py`, about 300 lines, and the
-  gate in `application/delivery.py`) serve only the feature-drift runner and should move to
-  it. 76 lines are left under the ceiling.
+- The supplied-evidence audit and gate have moved to `experiments/declared_ci/`. The drift
+  runner applies its own qualification without adding that protocol to ordinary product use.
 - A release: these changes are on `main` only.
 - Step 7.
 
@@ -156,3 +155,26 @@ failing test files are among the 56 that executed it when recorded. The last fau
 test, so its run says nothing about what a selection leaves out; it shows a change that no
 test checks still costing 82% of suite time: a class body runs when its module is imported,
 and 186 test files test the modules that use that one.
+
+## Follow-up qualification — 16 November 2026
+
+The 70-change selection replay applies historical changed paths to one checkout and one recorded
+run. Zero omitted recorded consumers is a consistency result, not 70 independently executed PR
+transitions. Time shares sum recorded JUnit testcase durations; they are not measured CI wall-clock
+savings. The hypothetical 44% median is not delivered subprocess attribution.
+
+Opaque processes started outside a test now retain a whole-suite fallback. Shadow comparison
+uses failed testcase identities instead of subtracting entire already-failing files; legacy
+records without those identities subtract no failures. The focused selection suite passed all
+36 tests locally, together with ruff, mypy and the unchanged source budget (14,939 lines).
+
+Next: bind reports to their source/run and prove worker completeness, then implement attributed
+Python children without removing fallbacks for unobserved work. Refresh the recorder before new
+measurements. Real CI needs prospective shadow comparisons and actual selected runs before savings
+can be claimed. Better architectural advice needs real-task evaluation separately.
+
+The experiment-specific evidence audit and gate now live with the declared CI experiment;
+feature-drift verification applies that gate externally. Ordinary validation preserves failed,
+stale and unchecked receipt states. Product CI reviews still inspect pipeline declarations, and
+recorded selection remains available. Production size after retirement: 14,497 lines, down 442
+from the first safety fixes; the 15,000-line ceiling has not changed.

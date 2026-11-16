@@ -494,9 +494,6 @@ class Application:
         self,
         receipts: list[dict[str, Any]] | None = None,
         baseline_id: str | None = None,
-        *,
-        runtime_context: dict[str, Any] | None = None,
-        require_ci_evidence: bool = False,
     ) -> dict[str, Any]:
         graph = self._live()
         if baseline_id is not None and (not isinstance(baseline_id, str) or not baseline_id):
@@ -526,11 +523,7 @@ class Application:
         result["architecture"] = component_architecture.followthrough(
             self, selected, graph, previous, result["checks"]
         )
-        result.update(
-            delivery.validation(
-                self, graph, previous, result["checks"], runtime_context, require_ci_evidence
-            )
-        )
+        result.update(delivery.validation(result["checks"]))
         result["extension_points"] = _extension_review(graph, previous, self.root)
         result["historical_associations"] = self._history_advice(
             graph,

@@ -66,7 +66,7 @@ See [connection and remote-access instructions](https://github.com/hcekne/anaxig
 | --- | --- |
 | First use or a fresh checkout | Scan and run Mapping. Reuse compatible records carried through Git. |
 | Each substantial coding task | Prepare the change, inspect relevant owners/contracts, then assess the plan. |
-| After editing | Scan again, run appropriate project checks, and validate against the original task baseline. |
+| After editing | Run appropriate project checks and validate against the original task baseline; the map refreshes automatically. |
 | A completed feature or meaningful refactor | Run Patterns to look for better boundaries, packages, tests and applicable patterns. |
 | A milestone, architectural change, or weekly on an active project | Run Fresh Eyes for three alternative designs based on functionality. |
 | Component, shared-build or pipeline changes | Review CI/CD and update the declared check policy where needed. |

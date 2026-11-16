@@ -126,14 +126,6 @@ def parser() -> argparse.ArgumentParser:
         elif name == "validate":
             command.add_argument("--receipts", type=Path, help="JSON array of check receipts")
             command.add_argument("--baseline-id", help="Compare against this retained snapshot")
-            command.add_argument(
-                "--runtime-context", type=Path, help="Current environment fingerprints JSON"
-            )
-            command.add_argument(
-                "--require-ci-evidence",
-                action="store_true",
-                help="Require complete selector verification",
-            )
         elif name == "request":
             command.add_argument(
                 "kind",
@@ -222,8 +214,6 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
         return application.validate_change(
             _read_json(args.receipts, list),
             args.baseline_id,
-            runtime_context=_read_json(args.runtime_context, dict),
-            require_ci_evidence=args.require_ci_evidence,
         )
     if args.command in {"tests", "record-tests"}:
         return _test_dispatch(application, args)
@@ -297,10 +287,7 @@ def main(argv: list[str] | None = None) -> int:
             lines = result.get("_lines")
             shown = json.dumps(result, ensure_ascii=False, indent=2)
             print("\n".join(lines) if lines is not None else shown)
-            if args.command == "validate" and (
-                result.get("ci_selection", {}).get("required")
-                or result.get("validation_status") == "blocked"
-            ):
+            if args.command == "validate" and result.get("validation_status") == "blocked":
                 return 0 if result.get("completion_allowed") else 1
         return 0
     except (ValueError, OSError) as error:

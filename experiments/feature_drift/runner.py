@@ -568,8 +568,7 @@ def fresh_validation(config, repo, out, baseline_id, collected):
             "validation_status": "incomplete",
             "error": "Missing original baseline, current scan or fresh evidence",
         }
-    context, receipts = out / "runtime-context.json", out / "receipts.json"
-    write_json(context, report["environment"])
+    receipts = out / "receipts.json"
     write_json(
         receipts,
         [
@@ -588,12 +587,31 @@ def fresh_validation(config, repo, out, baseline_id, collected):
         "validate",
         "--baseline-id",
         baseline_id,
-        "--runtime-context",
-        str(context),
-        "--require-ci-evidence",
         "--receipts",
         str(receipts),
     )
+    # Selector qualification belongs to this experiment, not the product's agent API.
+    evidence = collector.audit_selection(
+        report,
+        collector.inventory(repo),
+        collector.environment(repo),
+        require_suite=True,
+        actual_changed_paths=report.get("change_selection", {}).get("changed_paths", []),
+    )
+    ready = (
+        evidence["status"] == "reported_passed"
+        and evidence.get("suite_status") == "reported_passed"
+    )
+    status = result.get("validation_status", "incomplete")
+    if evidence["status"] in {"reported_gap", "reported_fault_miss", "reported_failed_suite"}:
+        status = "blocked"
+    elif not ready and status != "blocked":
+        status = "incomplete"
+    result |= {
+        "ci_selection": evidence | {"required": True, "ready": ready},
+        "validation_status": status,
+        "completion_allowed": status == "reported-passed",
+    }
     write_json(out / "validation.json", result)
     return result
 
@@ -1212,7 +1230,7 @@ def run_probes(config, chain: Path, arm_name: str) -> None:
 
 
 def preflight_runtime(config) -> None:
-    """Exercise the required gate before any paid coding session or state publication."""
+    """Check runtime attribution before any paid coding session or state publication."""
     with tempfile.TemporaryDirectory(prefix="anaxigraph-runtime-preflight-") as folder:
         root = Path(folder)
         (root / "service.py").write_text("def operation():\n    return 1\n")
@@ -1227,7 +1245,6 @@ def preflight_runtime(config) -> None:
                 "validate",
                 "--baseline-id",
                 snapshot,
-                "--require-ci-evidence",
             ],
             check=False,
             timeout=30,
@@ -1237,14 +1254,13 @@ def preflight_runtime(config) -> None:
         except ValueError:
             value = {}
         if not (
-            checked.returncode == 1
+            checked.returncode == 0
             and isinstance(value, dict)
             and value.get("completion_allowed") is False
-            and value.get("validation_status") == "incomplete"
-            and value.get("ci_selection", {}).get("required") is True
+            and value.get("validation_status") == "unchecked"
         ):
             raise ValueError(
-                "Runtime lacks the enforced CI safety gate; use the updated AnaxiGraph checkout before starting paid coding"
+                "Runtime cannot attribute unchecked changes; use the updated AnaxiGraph checkout before starting paid coding"
             )
 
 

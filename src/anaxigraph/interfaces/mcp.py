@@ -115,16 +115,9 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
     def validate_change(
         receipts: list[CheckReceipt] | None = None,
         baseline_id: str | None = None,
-        runtime_context: dict[str, Any] | None = None,
-        require_ci_evidence: bool = False,
     ) -> dict:
         """Validate exact inputs; completion_allowed=False requires resolving the evidence gaps."""
-        return application.validate_change(
-            receipts,
-            baseline_id,
-            runtime_context=runtime_context,
-            require_ci_evidence=require_ci_evidence,
-        )
+        return application.validate_change(receipts, baseline_id)
 
     @tool
     def tests_for_change() -> dict:

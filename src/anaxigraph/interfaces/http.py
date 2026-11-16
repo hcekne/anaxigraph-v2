@@ -126,8 +126,6 @@ class PlanInput(Input):
 class ValidationInput(Input):
     receipts: list[CheckReceipt] | None = Field(default=None, max_length=50)
     baseline_id: str | None = Field(default=None, max_length=200)
-    runtime_context: dict[str, Any] | None = None
-    require_ci_evidence: bool = False
 
 
 class AnalysisInput(Input):

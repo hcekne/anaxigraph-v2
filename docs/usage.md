@@ -304,20 +304,15 @@ uv run python experiments/feature_drift/collect_evidence.py \
   --changed src/payments.py --changed tests/test_payments.py --check
 ```
 
-This performs coverage collection once; timing comparisons remain optional. A current gap report
-is preserved for diagnosis and the command exits nonzero. `validate_change` also returns
-`completion_allowed=False` when required CI safety is blocked or incomplete, despite passing local
-receipts. Supply current external `runtime_context` with validation; CLI supports
-`--runtime-context FILE --require-ci-evidence` and fails the CI gate unless completion is allowed.
-See the [selector safety contract](change-request-ci-selector-safety.md) for scope and limitations.
+This experiment performs coverage collection once and fails its own check on gaps; timing
+comparisons remain optional. The supplied-evidence audit, gate and declared planner now live in
+`experiments/declared_ci/`. The feature-drift runner applies that gate to product validation
+externally. Ordinary `prepare_change`, CI review and `validate_change` do not require the
+experiment's `ci.json` or `ci-evidence.json` protocol. The old `--runtime-context` and
+`--require-ci-evidence` validation options have been removed; use the experimental collector's
+`--check` for that protocol. Product validation still attributes current, stale and failed
+check receipts; recorded test selection and prospective shadow checks remain separate evidence.
 
-After scanning, CI review and change validation expose omissions from this versioned
-report. It contains exact input fingerprints, environment fingerprints, one test-ID inventory,
-and per-source executing/selected inventory indices. It excludes itself from input identity.
-Pass current `runtime_context` to `validate_change` when comparing environments. Stale/invalid reports,
-unobserved inputs, omitted consumers and environment uncertainty require review before using that
-report to narrow checks. A declared policy alone does not qualify a selector's consumer coverage.
-Contract substitutions remain supplied claims; sampled fault success does not erase coverage gaps.
 
 Commit `anaxigraph/record.json` after full workflows or explicit export. A nightly cloud job can
 pull a repo, run its selected reviews, export and commit the record. Another clone scans locally

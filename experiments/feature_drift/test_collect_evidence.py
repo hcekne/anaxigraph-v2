@@ -14,9 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collect_evidence as collector  # noqa: E402
 import metrics  # noqa: E402
 
-from anaxigraph.analysis.ci_obligations import REPORT_PATH, audit_selection  # noqa: E402
 from anaxigraph.application import Application  # noqa: E402
 from anaxigraph.indexing import IndexSession  # noqa: E402
+from experiments.declared_ci.ci_obligations import REPORT_PATH, audit_selection  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 planning = importlib.import_module("experiments.declared_ci.planning")

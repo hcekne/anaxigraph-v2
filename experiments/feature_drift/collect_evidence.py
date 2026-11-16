@@ -10,14 +10,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
 
 import metrics
 
-from anaxigraph.analysis.ci_obligations import REPORT_PATH, audit_selection, evidence_inputs
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from anaxigraph.indexing import IndexSession
+from experiments.declared_ci.ci_obligations import REPORT_PATH, audit_selection, evidence_inputs  # noqa: E402
 
 MAX_BYTES = 1_000_000
 _ENVIRONMENT = """

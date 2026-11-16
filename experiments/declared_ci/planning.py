@@ -13,16 +13,16 @@ import re
 import subprocess
 from typing import Any
 
-from anaxigraph.application.delivery import (
+from anaxigraph.indexing import capture_sources
+
+from .ci_policy import plan_ci as select_checks
+from .ci_policy import validate_policy
+from .evidence import (
     POLICY_PATH,
     _selection_validation,
     _validation_status,
     selection_evidence,
 )
-from anaxigraph.indexing import capture_sources
-
-from .ci_policy import plan_ci as select_checks
-from .ci_policy import validate_policy
 
 
 def policy(app: Any, graph) -> dict | None:
