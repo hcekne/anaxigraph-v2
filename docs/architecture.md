@@ -86,18 +86,18 @@ unit of independent development and verification: a cohesive component behind pu
 contracts, usually composed in process. Shared schemas, mutable state, configuration and infrastructure
 can extend a change's scope even when signatures stay stable. Current guidance states these rules;
 the bounded two-level reference neighborhood and observed test links are not a verified CI plan.
-The [CI/CD workflow and declared-input planner](change-request-ci-delivery.md) now read real pipeline
-declarations and select component checks from an authored task policy. The planner distinguishes
-ordering prerequisites from consumed outputs, explains broadening and reports uncovered inputs.
-It does not infer complete test ownership or execute the selected commands. Resource-aware impact
-beyond those declarations and accepted component-rule editing remain proposed work.
+The [CI/CD workflow](change-request-ci-delivery.md) reads real pipeline declarations for review.
+The declared-input planner that came with it selected component checks from an authored task
+policy; it was retired from the product in November 2026 and lives in `experiments/declared_ci/`,
+because no project in its trials authored that policy. Which tests a change needs is now answered
+from a recorded run (see `tests_for_change` below). Accepted component-rule editing remains
+proposed work.
 The [architecture scouts](change-request-architecture-scouts.md) now perform focused source-aware
 searches, compare local/workspace/separate-repository package options, feed task guidance and
 require dispositions for material plan findings. They reuse the shared runner and do not alter
 Fresh Eyes isolation. New Pattern runs also include a separate repository-level delivery specialist;
 CI-only reviews need neither semantic annotations nor a Python application. The model proposes
-pipeline improvements; deterministic check selection requires accepted task inputs in
-`anaxigraph/ci-policy.json`. Both operate through the shared application and runner.
+pipeline improvements. Both operate through the shared application and runner.
 
 Annotation validity includes its own source and public interfaces of resolved outgoing dependencies.
 Comment and body-only dependency edits preserve callers; changed signatures, documentation and

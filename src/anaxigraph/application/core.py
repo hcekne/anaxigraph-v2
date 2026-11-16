@@ -552,7 +552,6 @@ class Application:
     def export_evidence(self) -> dict[str, Any]:
         return self.evidence.export()
 
-    ci_plan = delivery.plan
     record_tests = selection.record_tests
     tests_for_change = selection.tests_for_change
     analysis_request = review_operations.analysis_request

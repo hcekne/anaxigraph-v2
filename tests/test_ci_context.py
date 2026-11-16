@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
+import sys
+from pathlib import Path
 
 from test_workflows import answer
 
@@ -11,6 +14,10 @@ from anaxigraph.analysis.ci_context import component_context
 from anaxigraph.application import Application
 from anaxigraph.indexing import index
 from anaxigraph.workflows.engine import WorkflowRunner
+
+# The retired declared-input planner lives with the experiments that qualified it.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+planning = importlib.import_module("experiments.declared_ci.planning")
 
 
 def write(root, path, source):
@@ -124,7 +131,7 @@ def test_ci_review_reuses_signature_edit_but_new_component_requires_a_new_review
         "changed_paths": ["src/pkg/payments/charge.py"],
         "runtime_context": {"python": "3.12"},
     }
-    before = app.ci_plan(**options)["selected_targets"][0]["cache_key"]
+    before = planning.plan(app, **options)["selected_targets"][0]["cache_key"]
     write(
         tmp_path,
         "src/pkg/payments/charge.py",
@@ -134,7 +141,7 @@ def test_ci_review_reuses_signature_edit_but_new_component_requires_a_new_review
     second = runner.start("ci", background=False)
     assert second["status"] == "completed" and second["reused_batches"] == 1
     assert calls == ["delivery"]
-    after = app.ci_plan(**options)["selected_targets"][0]["cache_key"]
+    after = planning.plan(app, **options)["selected_targets"][0]["cache_key"]
     assert before is not None and after is not None and before != after
     write(tmp_path, "src/pkg/kitchen/fan.py", "def speed():\n    return 1\n")
     app.scan()

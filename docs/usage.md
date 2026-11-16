@@ -84,7 +84,7 @@ migrate an already running legacy service.
 ## Everyday agent loop
 
 1. **No scan is needed.** `prepare_change`, `assess_plan`, `validate_change`, `inspect`,
-   `modules`, `reviews` and `ci_plan` each read the checkout as it is: a file edited since the
+   `modules`, `reviews` and `tests_for_change` each read the checkout as it is: a file edited since the
    last call is read again, and only the files its change can affect are linked again. The
    first call in a checkout reads everything once; a new worktree starts from the facts another
    worktree of the same repository saved. `scan` remains for an explicit refresh and report:
@@ -213,8 +213,9 @@ regardless: a test that depends on a file without executing or importing it is n
 ## CI/CD and portable records
 
 The CI/CD review reads pipeline declarations and proposes improvements. The earlier declared-input
-planner remains in the CLI (`ci-plan`) for projects that authored `anaxigraph/ci-policy.json`;
-agents are offered `tests_for_change` instead.
+planner (`ci-plan`, `anaxigraph/ci-policy.json`) was retired from the product in November 2026:
+no project in its trials authored the policy it needs. Its code and tests live in
+`experiments/declared_ci/` for the drift campaign that qualified it; use `tests_for_change`.
 The [policy reference](change-request-ci-delivery.md#declare-accepted-tasks) explains task inputs,
 ordering, consumed outputs, fallbacks, cache keys and release/scheduled checks.
 
@@ -247,10 +248,10 @@ receipts. Supply current external `runtime_context` with validation; CLI support
 `--runtime-context FILE --require-ci-evidence` and fails the CI gate unless completion is allowed.
 See the [selector safety contract](change-request-ci-selector-safety.md) for scope and limitations.
 
-After scanning, CI review, `ci_plan` and change validation expose omissions from this versioned
+After scanning, CI review and change validation expose omissions from this versioned
 report. It contains exact input fingerprints, environment fingerprints, one test-ID inventory,
 and per-source executing/selected inventory indices. It excludes itself from input identity.
-Pass current `runtime_context` to `ci_plan` or `validate_change` when comparing environments. Stale/invalid reports,
+Pass current `runtime_context` to `validate_change` when comparing environments. Stale/invalid reports,
 unobserved inputs, omitted consumers and environment uncertainty require review before using that
 report to narrow checks. A declared policy alone does not qualify a selector's consumer coverage.
 Contract substitutions remain supplied claims; sampled fault success does not erase coverage gaps.

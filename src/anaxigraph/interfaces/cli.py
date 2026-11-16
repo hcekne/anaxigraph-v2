@@ -49,22 +49,6 @@ def _test_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]
     return result
 
 
-def _ci_plan_parser(commands: Any) -> None:
-    command = commands.add_parser(
-        "ci-plan", help="Preview affected checks from declared task inputs and an explicit change"
-    )
-    _location(command)
-    command.add_argument("--base-ref", help="Git revision to compare with the current checkout")
-    command.add_argument("--base-snapshot-id", help="Retained snapshot to compare")
-    command.add_argument(
-        "--changed-paths", type=Path, help="JSON array of caller-supplied changed paths"
-    )
-    command.add_argument("--cadence", choices=("change", "release", "scheduled"), default="change")
-    command.add_argument(
-        "--runtime-context", type=Path, help="JSON object of declared runtime inputs"
-    )
-
-
 def parser() -> argparse.ArgumentParser:
     from anaxigraph import __version__
 
@@ -72,7 +56,6 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     _location(result)
     commands = result.add_subparsers(dest="command", required=True)
-    _ci_plan_parser(commands)
     _test_parsers(commands)
     for name, help_text in (
         ("scan", "Build or refresh the structural map"),
@@ -204,23 +187,6 @@ def _read_json(path: Path | None, expected: type) -> Any:
     return value
 
 
-def _check_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
-    if args.command == "ci-plan":
-        return application.ci_plan(
-            base_ref=args.base_ref,
-            base_snapshot_id=args.base_snapshot_id,
-            changed_paths=_read_json(args.changed_paths, list),
-            cadence=args.cadence,
-            runtime_context=_read_json(args.runtime_context, dict),
-        )
-    return application.validate_change(
-        _read_json(args.receipts, list),
-        args.baseline_id,
-        runtime_context=_read_json(args.runtime_context, dict),
-        require_ci_evidence=args.require_ci_evidence,
-    )
-
-
 def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     """Keep transport dispatch independent from application implementation."""
     if args.command == "scan":
@@ -239,8 +205,13 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
         return application.assess_plan(
             args.task, args.files, _read_json(args.decisions, list), args.include_brief
         )
-    if args.command in {"validate", "ci-plan"}:
-        return _check_dispatch(application, args)
+    if args.command == "validate":
+        return application.validate_change(
+            _read_json(args.receipts, list),
+            args.baseline_id,
+            runtime_context=_read_json(args.runtime_context, dict),
+            require_ci_evidence=args.require_ci_evidence,
+        )
     if args.command in {"tests", "record-tests"}:
         return _test_dispatch(application, args)
     if args.command == "request":

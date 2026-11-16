@@ -11,9 +11,9 @@ import random
 import sys
 from pathlib import Path
 
-from anaxigraph.analysis.ci_policy import plan_ci
 from experiments.architecture_quality import campaign as provenance
 from experiments.architecture_quality import run as coding
+from experiments.declared_ci.ci_policy import plan_ci
 
 from . import delivery, fixture, oracle
 

@@ -23,7 +23,7 @@ unavailable. That is a bounded import/behavior probe, not a universal architectu
 
 **Deterministic qualification** uses reference edits, real subprocess checks, concrete faults,
 retained opaque serialized state and immutable local build identities. It calls the production
-`anaxigraph.analysis.ci_policy.plan_ci` on the generated accepted policy; it does not implement a
+`experiments.declared_ci.ci_policy.plan_ci` (the product's planner until November 2026) on the generated accepted policy; it does not implement a
 second selector. Reference success validates the evaluator and declared-input scenarios. It does
 not establish that a coding model discovers the right architecture or that production CI is faster.
 

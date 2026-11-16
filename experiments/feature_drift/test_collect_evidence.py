@@ -1,6 +1,7 @@
 """Real qualification collection plus refusal of unknown or changed evidence."""
 
 import copy
+import importlib
 import json
 import os
 import subprocess
@@ -16,6 +17,9 @@ import metrics  # noqa: E402
 from anaxigraph.analysis.ci_obligations import REPORT_PATH, audit_selection  # noqa: E402
 from anaxigraph.application import Application  # noqa: E402
 from anaxigraph.indexing import IndexSession  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+planning = importlib.import_module("experiments.declared_ci.planning")
 
 TEST = "tests/test_lib.py::test_a"
 
@@ -334,7 +338,9 @@ def test_large_observation_fixture_is_published_and_read_by_the_runtime(candidat
     )
     app = Application(candidate)
     app.scan()
-    read = app.ci_plan(changed_paths=["lib.py"], runtime_context=context)["selection_evidence"]
+    read = planning.plan(app, changed_paths=["lib.py"], runtime_context=context)[
+        "selection_evidence"
+    ]
     assert read["status"] == "reported_passed"
     assert read["tests_total"] == 2000 and read["files_total"] == 100
     assert read["report_fingerprint"] == app._current().snapshot.files[REPORT_PATH]

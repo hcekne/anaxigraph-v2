@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import copy
+import importlib
+import sys
+from pathlib import Path
 
 import pytest
 
-from anaxigraph.analysis.ci_policy import plan_ci, validate_policy
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+ci_policy = importlib.import_module("experiments.declared_ci.ci_policy")
+plan_ci, validate_policy = ci_policy.plan_ci, ci_policy.validate_policy
 
 
 def target(identity, inputs, **options):

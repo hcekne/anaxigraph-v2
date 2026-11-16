@@ -7,11 +7,12 @@ import json
 import threading
 from collections import Counter
 
+import pytest
 from fastapi.testclient import TestClient
 from test_workflows import answer, app
 
 from anaxigraph.application import Application
-from anaxigraph.interfaces.cli import dispatch, parser
+from anaxigraph.interfaces.cli import parser
 from anaxigraph.interfaces.http import create_app
 from anaxigraph.interfaces.mcp import create_mcp
 from anaxigraph.workflows.engine import WorkflowRunner
@@ -243,45 +244,17 @@ class Recording:
         return call
 
 
-def test_ci_plan_transports_preserve_declared_changes_and_runtime_inputs(tmp_path):
-    paths, runtime = ["payments/charge.py"], {"platform": "linux", "python": "3.12"}
-    path_file, context_file = tmp_path / "paths.json", tmp_path / "context.json"
-    path_file.write_text(json.dumps(paths))
-    context_file.write_text(json.dumps(runtime))
-    expected = {
-        "operation": "ci_plan",
-        "args": [],
-        "options": {
-            "base_ref": None,
-            "base_snapshot_id": None,
-            "changed_paths": paths,
-            "cadence": "release",
-            "runtime_context": runtime,
-        },
-    }
+def test_ci_review_is_offered_everywhere_and_the_declared_plan_nowhere(tmp_path):
     application = Recording()
-    result = dispatch(
-        application,
-        parser().parse_args(
-            [
-                "ci-plan",
-                "--changed-paths",
-                str(path_file),
-                "--cadence",
-                "release",
-                "--runtime-context",
-                str(context_file),
-            ]
-        ),
-    )
-    assert result == expected
+    with pytest.raises(SystemExit):  # The declared-input planner left the command line.
+        parser().parse_args(["ci-plan"])
     client = TestClient(
         create_app(application), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)
     )
-    assert client.post("/api/ci/plan", json=expected["options"]).json() == expected
-    assert client.post("/api/ci/plan", json={"cadence": "never"}).status_code == 422
+    assert client.post("/api/ci/plan", json={}).status_code in {404, 405}
+    assert client.get("/api/tests").json()["operation"] == "tests_for_change"
     assert "Review CI/CD" in client.get("/").text
-    assert "Preview affected checks" in client.get("/").text
+    assert "Preview affected checks" not in client.get("/").text
     assert "When to widen checks" in client.get("/assets/ci.js").text
 
     async def exercise():

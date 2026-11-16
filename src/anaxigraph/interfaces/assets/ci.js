@@ -18,40 +18,8 @@ window.AnaxiGraphCI = (() => {
     }
     view.reviewTradeoffs(parent, "Review uncertainty", result.uncertainty);
   }
-  function renderPlan(result) {
-    const parent = view.$("#ci-plan-summary");
-    parent.replaceChildren();
-    view.$("#ci-plan-json").textContent = view.formatJSON(result);
-    const labels = { planned: "Declared check plan", ready: "Declared check plan", incomplete: "Check scope is incomplete", not_configured: "Declare component tasks before selecting checks", no_baseline: "Choose a comparison base", missing_baseline: "Choose a comparison base" };
-    parent.append(view.textElement("h3", labels[result.status] || "Review check-plan status"));
-    parent.append(view.textElement("p", "This selection is based on the supplied change and declared inputs. It does not report passed tests or completed deployment."));
-    if (result.message) parent.append(view.textElement("p", result.message));
-    if (result.next_step) parent.append(view.textElement("p", result.next_step));
-    for (const target of result.selected_targets || []) {
-      const card = view.textElement("article", "", "alternative-card");
-      card.append(view.textElement("h4", target.id), view.textElement("p", target.command || "Declared target"));
-      view.reviewTradeoffs(card, "Why this check is included", target.reasons || []);
-      card.append(view.textElement("p", target.cache_eligible ? "Input fingerprint available for trusted cache validation; no cache hit is claimed." : "No reusable check result has been established.", "section-note"));
-      parent.append(card);
-    }
-    if (result.uncovered_paths?.length) view.reviewTradeoffs(parent, "Paths needing ownership or broader checks", result.uncovered_paths);
-    if (result.expansion_reasons?.length) view.reviewTradeoffs(parent, "Why the scope widens", result.expansion_reasons);
-    if (result.layers?.length) view.reviewTradeoffs(parent, "Execution order; each group can run in parallel", result.layers.map((layer) => layer.join(", ")));
-    if (result.reevaluation_reasons?.length) view.reviewTradeoffs(parent, "CI/CD architecture review needed", result.reevaluation_reasons);
-    if (result.critical_path_seconds != null) parent.append(view.textElement("p", `Declared critical path: ${result.critical_path_seconds} seconds. ${result.critical_path_basis || ""}`, "section-note"));
-  }
-  function bindPlanForm(helpers) {
+  function bind(helpers) {
     view = helpers;
-    view.$("#ci-plan-form").addEventListener("submit", (event) => {
-      event.preventDefault();
-      view.action(event.submitter, async () => {
-        const paths = view.lines(view.$("#ci-changed-paths").value);
-        const base = view.$("#ci-base-ref").value.trim();
-        if (paths.length && base) throw new Error("Choose a base revision or supplied paths, not both.");
-        const request = { base_ref: base || null, changed_paths: paths.length ? paths : null, cadence: view.$("#ci-cadence").value };
-        renderPlan(await view.api("/api/ci/plan", request));
-      });
-    });
   }
-  return { renderReview, bindPlanForm };
+  return { renderReview, bind };
 })();

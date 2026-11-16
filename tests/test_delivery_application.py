@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import shutil
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from test_workflows import answer
 
 from anaxigraph.application import Application, delivery
 from anaxigraph.workflows.engine import WorkflowRunner
+
+# The retired declared-input planner lives with the experiments that qualified it.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+planning = importlib.import_module("experiments.declared_ci.planning")
 
 
 def write(root, path, text):
@@ -100,8 +107,8 @@ def git(root, *args):
 
 
 def test_declared_payment_plan_is_narrow_but_requires_selection_evidence(application):
-    plan = application.ci_plan(
-        changed_paths=["payments/charge.py"], runtime_context={"python": "3.12"}
+    plan = planning.plan(
+        application, changed_paths=["payments/charge.py"], runtime_context={"python": "3.12"}
     )
     assert selected(plan) == {"contracts", "payments"}
     assert plan["layers"] == [["contracts"], ["payments"]]
@@ -115,14 +122,14 @@ def test_declared_payment_plan_is_narrow_but_requires_selection_evidence(applica
 
 
 def test_declared_public_contract_widens_to_its_consumers_not_other_components(application):
-    plan = application.ci_plan(changed_paths=["payments/api.py"])
+    plan = planning.plan(application, changed_paths=["payments/api.py"])
     assert selected(plan) == {"contracts", "payments", "public-api", "checkout"}
     assert plan["layers"].index(["contracts", "public-api"]) == 0
     assert not plan["checks_executed"]
 
 
 def test_shared_toolchain_change_expands_change_checks_with_periodic_checks_retained(application):
-    plan = application.ci_plan(changed_paths=["uv.lock"])
+    plan = planning.plan(application, changed_paths=["uv.lock"])
     assert selected(plan) == {"payments", "contracts", "checkout", "kitchen", "public-api"}
     assert plan["reevaluation_required"]
     assert "full" in plan["retained_periodic"]
@@ -133,14 +140,14 @@ def test_missing_and_invalid_policy_are_explicit_and_advisory_preserves_unknown(
     policy = application.root / delivery.POLICY_PATH
     policy.unlink()
     application.scan()
-    result = application.ci_plan()
+    result = planning.plan(application)
     assert result["status"] == "not_configured"
     assert not result["execution_ready"] and not result["checks_executed"]
     write(application.root, delivery.POLICY_PATH, '{"version": 1, "targets": []}')
     application.scan()
     with pytest.raises(ValueError, match="Invalid CI policy"):
-        application.ci_plan(changed_paths=["payments/charge.py"])
-    result = delivery.advisory(application, changed_paths=["payments/charge.py"])
+        planning.plan(application, changed_paths=["payments/charge.py"])
+    result = planning.advisory(application, changed_paths=["payments/charge.py"])
     assert result["status"] == "unresolved" and "Invalid CI policy" in result["reason"]
     assert not result["execution_ready"] and not result["checks_executed"]
 
@@ -150,7 +157,7 @@ def test_ci_comparison_requires_a_pin_and_does_not_drift_after_repeated_scans(ap
     path.write_text(path.read_text().replace("+ 1", "+ 2"))
     application.scan()
     with pytest.raises(ValueError, match="explicit base, pinned task baseline"):
-        application.ci_plan()
+        planning.plan(application)
     unpinned = application.validate_change()
     assert unpinned["baseline_basis"] == "previous-scan"
     # Validation answers from recorded test runs, not from the declared planner.
@@ -160,13 +167,13 @@ def test_ci_comparison_requires_a_pin_and_does_not_drift_after_repeated_scans(ap
     application.scan()
     write(application.root, "kitchen/fan.py", "def speed():\n    return 2\n")
     application.scan()
-    result = application.ci_plan()
+    result = planning.plan(application)
     assert result["changed_paths"] == ["kitchen/fan.py", "payments/charge.py"]
     assert result["comparison"] == {
         "basis": "pinned-change-baseline",
         "base_snapshot_id": baseline,
     }
-    explicit = application.ci_plan(base_snapshot_id=baseline)
+    explicit = planning.plan(application, base_snapshot_id=baseline)
     assert explicit["changed_paths"] == result["changed_paths"]
     assert explicit["comparison"]["basis"] == "explicit-snapshot"
 
@@ -176,7 +183,7 @@ def test_the_declared_plan_is_available_on_request_but_not_pushed_into_agent_rep
     assert "proposed_ci_plan" not in proposed
     baseline = proposed["baseline_id"]
     write(application.root, "payments/charge.py", "def calculate(amount):\n    return amount + 2\n")
-    planned = application.ci_plan()
+    planned = planning.plan(application)
     assert selected(planned) == {"payments", "contracts"}
     assert planned["comparison"]["base_snapshot_id"] == baseline
     assert not planned["checks_executed"]
@@ -227,7 +234,7 @@ def test_explicit_git_base_includes_deletions_untracked_and_unindexed_tracked_fi
     write(root, "payments/fresh.py", "def fresh():\n    return 1\n")
     (root / "opaque.bin").write_bytes(b"\0new")
     application.scan()
-    result = application.ci_plan(base_ref="HEAD")
+    result = planning.plan(application, base_ref="HEAD")
     assert result["changed_paths"] == [
         "opaque.bin",
         "payments/fresh.py",
@@ -241,12 +248,12 @@ def test_explicit_git_base_includes_deletions_untracked_and_unindexed_tracked_fi
 
 def test_ambiguous_or_invalid_comparison_and_unscanned_changes_fail_without_execution(application):
     with pytest.raises(ValueError, match="Select one CI comparison"):
-        application.ci_plan(base_ref="HEAD", changed_paths=[])
+        planning.plan(application, base_ref="HEAD", changed_paths=[])
     with pytest.raises(ValueError, match="local Git revision"):
-        application.ci_plan(base_ref="--output=SHOULD_NOT_EXECUTE")
+        planning.plan(application, base_ref="--output=SHOULD_NOT_EXECUTE")
     write(application.root, "payments/charge.py", "raise RuntimeError('never execute source')\n")
     # An edit nobody scanned is planned for as it is, and still nothing is executed.
-    planned = application.ci_plan(changed_paths=["payments/charge.py"])
+    planned = planning.plan(application, changed_paths=["payments/charge.py"])
     assert planned["candidate_snapshot_id"] == application.indexer.snapshot().id
     assert "payments" in {item["id"] for item in planned["selected_targets"]}
     assert not (application.root / "SHOULD_NOT_EXECUTE").exists()
@@ -315,10 +322,8 @@ def test_ci_design_review_reuses_body_only_edit_without_another_model_call(appli
     )
 
 
-@pytest.mark.parametrize(
-    "path", [".github/workflows/checks.yml", "scripts/ci.sh", delivery.POLICY_PATH]
-)
-def test_ci_script_and_policy_changes_invalidate_saved_design_review(application, path):
+@pytest.mark.parametrize("path", [".github/workflows/checks.yml", "scripts/ci.sh"])
+def test_ci_declaration_and_script_changes_invalidate_saved_design_review(application, path):
     calls = []
 
     def provider(request, *_args, **_kwargs):
@@ -328,12 +333,7 @@ def test_ci_script_and_policy_changes_invalidate_saved_design_review(application
     runner = WorkflowRunner(application, provider)
     assert runner.start("ci", background=False)["status"] == "completed"
     target = application.root / path
-    if path == delivery.POLICY_PATH:
-        policy = json.loads(target.read_text())
-        policy["targets"][0]["estimated_seconds"] = 18
-        target.write_text(json.dumps(policy))
-    else:
-        target.write_text(target.read_text() + "\n# changed declaration or script\n")
+    target.write_text(target.read_text() + "\n# changed declaration or script\n")
     application.scan()
     assert delivery.advice(application, application._current())["status"] == "stale"
     result = runner.start("ci", background=False)
@@ -343,7 +343,7 @@ def test_ci_script_and_policy_changes_invalidate_saved_design_review(application
 
 def test_advisory_maps_a_never_scanned_checkout_and_does_not_suggest_success(tmp_path):
     application = Application(tmp_path)
-    result = delivery.advisory(application, changed_paths=["service.py"])
+    result = planning.advisory(application, changed_paths=["service.py"])
     assert result["status"] == "not_configured"
     assert not result["execution_ready"] and not result["checks_executed"]
     assert application.status()["snapshot"] is not None

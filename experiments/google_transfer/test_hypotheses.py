@@ -7,13 +7,19 @@ calling a model. They do not implement or grade the prototype's fictional produc
 
 from __future__ import annotations
 
+import importlib
 import json
+import sys
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
 from anaxigraph.application import Application
 from anaxigraph.workflows.engine import WorkflowRunner
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+planning = importlib.import_module("experiments.declared_ci.planning")
 
 
 def write(root, path, source):
@@ -120,12 +126,12 @@ def test_dynamic_dispatch_keeps_uncertainty_and_observed_consumer_gap(tmp_path, 
         and edge.target in {"symbol:provider.py#run", "symbol:dispatcher.py#run"}
         for edge in dispatch_calls
     )
-    declared = application.ci_plan(changed_paths=["dispatcher.py"])
+    declared = planning.plan(application, changed_paths=["dispatcher.py"])
     assert declared["selection_evidence"]["status"] == "not_supplied"
     assert declared["checks_executed"] is False
     assert "not proof of behavioral compatibility" in declared["assurance"]
     runtime = supply_omitted_consumer(application, "dispatcher.py")
-    observed = application.ci_plan(changed_paths=["dispatcher.py"], runtime_context=runtime)
+    observed = planning.plan(application, changed_paths=["dispatcher.py"], runtime_context=runtime)
     assert observed["status"] == "selection_review_required"
     assert observed["execution_ready"] is False
     assert observed["selection_evidence"]["findings"][0]["omitted_tests"] == [
@@ -268,7 +274,7 @@ def test_unparsed_inputs_are_fingerprinted_and_unowned_changes_retain_fallback(
     write(tmp_path, path, source + "\n")
     application.scan()
     assert application._current().snapshot.files[path] != before.snapshot.files[path]
-    plan = application.ci_plan()
+    plan = planning.plan(application)
     assert plan["changed_paths"] == [path]
     assert plan["uncovered_paths"] == [path]
     assert [row["id"] for row in plan["selected_targets"]] == ["full"]

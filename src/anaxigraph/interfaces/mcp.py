@@ -126,24 +126,6 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
             require_ci_evidence=require_ci_evidence,
         )
 
-    def ci_plan(
-        base_ref: str | None = None,
-        base_snapshot_id: str | None = None,
-        changed_paths: list[str] | None = None,
-        cadence: Literal["change", "release", "scheduled"] = "change",
-        runtime_context: dict[str, Any] | None = None,
-    ) -> dict:
-        """Explain selected checks from declared task inputs, ordering and data dependencies."""
-        return application.ci_plan(
-            base_ref=base_ref,
-            base_snapshot_id=base_snapshot_id,
-            changed_paths=changed_paths,
-            cadence=cadence,
-            runtime_context=runtime_context,
-        )
-
-    tool(ci_plan, agents=False)
-
     @tool
     def tests_for_change() -> dict:
         """Test files this checkout needs, from a recorded run of which test executed which file."""

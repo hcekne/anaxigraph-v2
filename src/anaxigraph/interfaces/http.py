@@ -130,14 +130,6 @@ class ValidationInput(Input):
     require_ci_evidence: bool = False
 
 
-class CIPlanInput(Input):
-    base_ref: str | None = Field(default=None, max_length=200)
-    base_snapshot_id: str | None = Field(default=None, max_length=200)
-    changed_paths: list[str] | None = Field(default=None, max_length=10000)
-    cadence: str = Field(default="change", pattern="^(change|release|scheduled)$")
-    runtime_context: dict[str, Any] | None = None
-
-
 class AnalysisInput(Input):
     kind: str = Field(
         pattern="^(annotate|pattern-screen|patterns|architecture|delivery|fresh-eyes)$"
@@ -179,7 +171,6 @@ def _body_routes(server, operations):
         ("prepare", TaskInput, "prepare", "prepare_change"),
         ("assess", PlanInput, "assess", "assess_plan"),
         ("validate", ValidationInput, "validate", "validate_change"),
-        ("ci/plan", CIPlanInput, "ci_plan", "ci_plan"),
         ("analysis/request", AnalysisInput, "analysis_request", "analysis_request"),
         ("analysis/submit", SubmissionInput, "submit", "submit_analysis"),
         ("workflows/config", ConfigurationInput, "save_workflow_config", "workflow_configure"),

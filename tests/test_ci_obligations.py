@@ -2,12 +2,19 @@
 
 import copy
 import hashlib
+import importlib
 import json
+import sys
+from pathlib import Path
 
 import pytest
 
 from anaxigraph.analysis.ci_obligations import REPORT_PATH, audit_selection
 from anaxigraph.application import Application
+
+# The retired declared-input planner lives with the experiments that qualified it.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+planning = importlib.import_module("experiments.declared_ci.planning")
 
 
 def report(files):
@@ -195,7 +202,7 @@ def test_application_ci_report_is_captured_and_stale_after_any_consumer_edit(tmp
         app.analysis_request("delivery")["packet"]["delivery_context"]["test_selection"]["status"]
         == "reported_gap"
     )
-    plan = app.ci_plan(changed_paths=["cache.py"])
+    plan = planning.plan(app, changed_paths=["cache.py"])
     assert plan["selection_evidence"]["findings"][0]["omitted_count"] == 1
     assert not plan["execution_ready"]
     (tmp_path / "tests/test_consumer.py").write_text("value = 2\n")
@@ -227,13 +234,13 @@ def test_configured_planner_never_uses_a_gap_as_authority_to_skip_consumers(tmp_
     value = report(dict(app._current().snapshot.files))
     (data / "ci-evidence.json").write_text(json.dumps(value))
     app.scan()
-    result = app.ci_plan(changed_paths=["cache.py"], runtime_context=value["environment"])
+    result = planning.plan(app, changed_paths=["cache.py"], runtime_context=value["environment"])
     assert result["status"] == "selection_review_required" and not result["execution_ready"]
     assert result["selection_evidence"]["status"] == "reported_gap"
     for invalid_source in ("null", "[" * 1500 + "0" + "]" * 1500):
         (data / "ci-evidence.json").write_text(invalid_source)
         app.scan()
-        invalid = app.ci_plan(changed_paths=["cache.py"])
+        invalid = planning.plan(app, changed_paths=["cache.py"])
         assert invalid["selection_evidence"]["status"] == "invalid"
         assert not invalid["execution_ready"]
 

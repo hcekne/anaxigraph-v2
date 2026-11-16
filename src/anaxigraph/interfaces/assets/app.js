@@ -636,7 +636,7 @@ $("#validate-change").addEventListener("click", () => action($("#validate-change
   const receipts = $("#receipts").value.trim() ? JSON.parse($("#receipts").value) : null;
   $("#change-validation").textContent = formatJSON(await api("/api/validate", { receipts }));
 }));
-AnaxiGraphCI.bindPlanForm({ $, api, action, textElement, formatJSON, lines, notice, reviewTradeoffs });
+AnaxiGraphCI.bind({ $, api, action, textElement, formatJSON, lines, notice, reviewTradeoffs });
 AnaxiGraphWorkspace.bind().then(() => Promise.all([
   refresh(), api("/api/workflows/config").then(renderModelSettings), refreshWorkflows(), AnaxiGraphWorkspace.scan(),
 ])).catch((error) => notice(error.message, true));
