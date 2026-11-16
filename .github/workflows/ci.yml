@@ -30,7 +30,17 @@ jobs:
           uv sync --locked --extra dev --python ${{ matrix.python }}
       - name: Check V2 behavior and boundaries
         run: |
-          uv run pytest
+          uv run anaxigraph record-tests --start --suite unit --scope src tests scripts
+          export ANAXIGRAPH_RECORDING="${GITHUB_WORKSPACE}/.anaxigraph-v2/recordings/unit.json"
+          export ANAXIGRAPH_READS="${RUNNER_TEMP}/unit-reads.json"
+          export COVERAGE_FILE="${RUNNER_TEMP}/unit.coverage"
+          PYTHONPATH="$(uv run anaxigraph tests --recorder)" uv run pytest \
+            -p anaxigraph_reads --cov=anaxigraph --cov-context=test --cov-report= \
+            --junitxml="${RUNNER_TEMP}/unit.xml"
+          uv run anaxigraph record-tests --suite unit --scope src tests scripts \
+            --coverage "$COVERAGE_FILE" --reads "$ANAXIGRAPH_READS" \
+            --junit "${RUNNER_TEMP}/unit.xml"
+          unset ANAXIGRAPH_RECORDING ANAXIGRAPH_READS COVERAGE_FILE
           uv run pytest experiments
           uv run ruff check src tests scripts experiments
           uv run ruff format --check src tests scripts experiments
@@ -41,6 +51,12 @@ jobs:
           node --check src/anaxigraph/interfaces/assets/workspace.js
           node --check experiments/dashboard_evals/assets/evals.js
           node --test experiments/dashboard_evals/validation.test.cjs
+      - name: Retain source-bound unit-test evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: unit-test-record-${{ matrix.python }}
+          path: .anaxigraph-v2/test-records/unit.json
+          include-hidden-files: true
       - name: Qualify sequential drift behavior and verification selection
         if: matrix.python == '3.12'
         run: |

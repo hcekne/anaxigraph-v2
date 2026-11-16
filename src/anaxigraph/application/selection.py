@@ -3,16 +3,63 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
 from anaxigraph.analysis.test_selection import select_tests
 from anaxigraph.indexing import worktrees
 from anaxigraph.indexing.test_record import FORMAT, junit_cases, record_from_coverage
+from anaxigraph.indexing.test_run import FORMAT as RUN_FORMAT
 
 _FOLDER = Path(".anaxigraph-v2") / "test-records"
 _SHOWN = 200
+
+
+def _save(path: Path, value: dict) -> None:
+    raw = json.dumps(value, separators=(",", ":")).encode()
+    if len(raw) > 10_000_000:
+        raise ValueError("Test evidence exceeds its 10 MB per-file budget")
+    for folder in (path.parent.parent, path.parent):
+        if folder.is_symlink() or path.is_symlink():
+            raise ValueError("Test evidence cannot use symlinked storage")
+        folder.mkdir(exist_ok=True)
+    temporary = path.with_name(uuid.uuid4().hex + ".tmp")
+    try:
+        with temporary.open("xb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def start_recording(app: Any, suite: str) -> dict:
+    _suite_name(suite)
+    graph = app._live()
+    target = app.root / ".anaxigraph-v2" / "recordings" / f"{suite}.json"
+    _save(
+        target,
+        {
+            "format": RUN_FORMAT,
+            "run_id": uuid.uuid4().hex,
+            "root": str(app.root),
+            "revision": graph.snapshot.revision,
+            "files": graph.snapshot.files,
+        },
+    )
+    return {
+        "manifest": str(target),
+        "next_step": "Set ANAXIGRAPH_RECORDING to this manifest before running pytest with the reads recorder.",
+    }
+
+
+def _suite_name(suite: str) -> None:
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", suite):
+        raise ValueError("A suite name is lowercase letters, digits and hyphens")
 
 
 def record_tests(
@@ -26,8 +73,7 @@ def record_tests(
     reads: Path | None = None,
 ) -> dict[str, Any]:
     """Save a record of one suite's run, taken at the checkout as it is now."""
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", suite):
-        raise ValueError("A suite name is lowercase letters, digits and hyphens")
+    _suite_name(suite)
     if not scope or any(not isinstance(item, str) or not item.strip("/") for item in scope):
         raise ValueError("Give at least one folder the suite depends on, such as backend/")
     record = record_from_coverage(
@@ -43,10 +89,7 @@ def record_tests(
     if not record["tests"]:
         raise ValueError("The run names no test file of this checkout; check --run-root")
     target = app.root / _FOLDER / f"{suite}.json"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_suffix(".tmp")
-    temporary.write_text(json.dumps(record, separators=(",", ":")))
-    temporary.replace(target)
+    _save(target, record)
     return {
         "suite": suite,
         "path": str(target),
@@ -55,6 +98,7 @@ def record_tests(
         "files_compared": len(record["files"]),
         "ran_at_import": len(record["ran_at_import"]),
         "reads_recorded": record["reads"] is not None,
+        "provenance": record["provenance"],
         "bytes": target.stat().st_size,
     }
 

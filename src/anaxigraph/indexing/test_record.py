@@ -19,6 +19,7 @@ from xml.etree import ElementTree
 
 from anaxigraph.contracts import Graph
 from anaxigraph.indexing.python import runs_bodies
+from anaxigraph.indexing.test_run import verify
 
 FORMAT = "anaxigraph-test-record-v2"
 READS = "anaxigraph-reads-v1"
@@ -140,6 +141,32 @@ def _report(part: Path) -> dict[str, Any]:
     return found
 
 
+def _reports(report: Path) -> list[dict[str, Any]]:
+    controller = _report(report)
+    if not controller.get("recording"):
+        return [
+            controller,
+            *(_report(part) for part in sorted(report.parent.glob(report.name + ".*"))),
+        ]
+    names = controller.get("workers", [])
+    if len(set(names)) != len(names) or any(
+        not name.startswith("gw") or not name[2:].isdigit() for name in names
+    ):
+        raise ValueError("Invalid recording worker inventory")
+    found = [controller, *(_report(report.with_name(report.name + "." + name)) for name in names)]
+    for name, worker in zip([None, *names], found):
+        if (
+            worker.get("worker") != name
+            or not worker.get("complete")
+            or any(
+                worker.get(key) != controller.get(key)
+                for key in ("run_id", "session_id", "environment")
+            )
+        ):
+            raise ValueError("Missing, incomplete or mixed recording workers")
+    return found
+
+
 def _reads(report: Path, known: dict[str, str]) -> dict[str, dict[str, set[str]]]:
     """What was read besides code, per file or folder, from the recorder and its workers."""
     folders = {""}
@@ -150,8 +177,7 @@ def _reads(report: Path, known: dict[str, str]) -> dict[str, dict[str, set[str]]
             folder = posixpath.dirname(folder)
     kept = {"opened": known, "listed": folders, "started": {""}, "loaded": known}
     merged: dict[str, dict[str, set[str]]] = {kind: {} for kind in kept}
-    for part in [report, *sorted(report.parent.glob(report.name + ".*"))]:
-        found = _report(part)
+    for found in _reports(report):
         for kind, paths in merged.items():
             for path in found[kind].keys() & kept[kind]:  # Only what the checkout holds.
                 paths.setdefault(path, set()).update(found[kind][path])
@@ -275,10 +301,12 @@ def record_from_coverage(
     `junit` and `reads` are the JUnit reports and the reads recorder's report of that run.
     """
     known = graph.snapshot.files
+    reports = junit or []
     prefix = (recorded_root or graph.snapshot.root).rstrip("/") + "/"
     folders = tuple(item.rstrip("/") + "/" for item in scope)
+    provenance = verify(reads, graph, database, reports)
     executed, loaded, measured = _executed(database, known, prefix, folders, run_root)
-    seconds, failed = junit_cases(junit or [], run_root, known)
+    seconds, failed = junit_cases(reports, run_root, known)
     read = _reads(reads, known) if reads else None
     idle = _unloaded(Path(graph.snapshot.root), folders, known, set(loaded), measured, read)
     tests = _test_files(seconds, executed, read or {}, known)
@@ -288,6 +316,7 @@ def record_from_coverage(
     compared = known if read else {path: known[path] for path in known if path.startswith(folders)}
     return {
         "format": FORMAT,
+        "provenance": provenance,
         "suite": suite,
         "scope": list(folders),
         "run_root": run_root,

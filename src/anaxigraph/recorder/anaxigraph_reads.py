@@ -15,10 +15,12 @@ nearest folder upwards with a .git entry; set $ANAXIGRAPH_ROOT where there is no
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import posixpath
 import sys
+import uuid
 from typing import Any
 
 import pytest
@@ -55,6 +57,43 @@ _IMPORTS, _RUNNER = "<frozen importlib", os.sep + "_pytest" + os.sep
 # Git options that take their value as the next word, and commands that read no tracked file.
 _VALUED = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
 _REFS = {"rev-parse", "symbolic-ref", "update-ref", "for-each-ref", "show-ref"}
+_SESSION = uuid.uuid4().hex
+_WORKERS: list[str] = []
+_FINISHED: set[str] = set()
+_AUDITING = True
+
+
+def _manifest() -> dict:
+    try:
+        with open(os.environ["ANAXIGRAPH_RECORDING"]) as stream:
+            value = json.load(stream)
+        return value if isinstance(value, dict) else {}
+    except (KeyError, OSError, ValueError):
+        return {}
+
+
+def _digest(path: str) -> str | None:
+    try:
+        with open(path, "rb") as stream:
+            return hashlib.file_digest(stream, "sha256").hexdigest()
+    except OSError:
+        return None
+
+
+def _same_source(run: dict) -> bool:
+    if run.get("format") != "anaxigraph-test-run-v1" or run.get("root") != _ROOT:
+        return False
+    for name, fingerprint in run.get("files", {}).items():
+        path = os.path.join(_ROOT, name)
+        if os.path.realpath(path) != path or not path.startswith(_ROOT + os.sep):
+            return False
+        if _digest(path) != fingerprint:
+            return False
+    return bool(run.get("files"))
+
+
+_RECORDING = _manifest()
+_UNCHANGED = _same_source(_RECORDING)
 
 
 def _relative(path: Any) -> str | None:
@@ -182,7 +221,7 @@ def _note(kind: str, event: str, args: tuple, frame: Any) -> None:
 
 def _audit(event: str, args: tuple) -> None:
     kind = _EVENTS.get(event)
-    if kind is not None:
+    if _AUDITING and kind is not None:
         try:
             _note(kind, event, args, sys._getframe(1))
         except Exception:  # noqa: BLE001 - never break the run that is being observed.
@@ -200,8 +239,23 @@ def pytest_runtest_protocol(item: Any) -> Any:
     _TEST[0] = None
 
 
-def pytest_sessionfinish() -> None:
-    worker = os.environ.get("PYTEST_XDIST_WORKER")
+@pytest.hookimpl(optionalhook=True)
+def pytest_configure_node(node: Any) -> None:
+    node.workerinput["anaxigraph_session"] = _SESSION
+    _WORKERS.append(node.workerinput["workerid"])
+
+
+def pytest_configure(config: Any) -> None:
+    global _SESSION
+    _SESSION = getattr(config, "workerinput", {}).get("anaxigraph_session", _SESSION)
+
+
+def pytest_runtest_logreport(report: Any) -> None:
+    if report.when == "teardown":
+        _FINISHED.add(report.nodeid)
+
+
+def _observations() -> dict:
     for module in list(sys.modules.values()):  # Also what was imported before this plugin.
         try:
             name = getattr(module, "__file__", None)
@@ -209,7 +263,7 @@ def pytest_sessionfinish() -> None:
             continue
         if isinstance(name, str) and name.endswith(".py") and _relative(name):
             _SEEN["loaded"].setdefault(str(_relative(name)), set())
-    found = {
+    return {
         kind: {
             path: sorted(readers)
             for path, readers in list(seen.items())
@@ -217,5 +271,53 @@ def pytest_sessionfinish() -> None:
         }
         for kind, seen in _SEEN.items()
     }
-    with open(f"{_TARGET}.{worker}" if worker else _TARGET, "w") as handle:
-        json.dump({"format": FORMAT, "root": _ROOT, **found}, handle)
+
+
+def _completion(session: Any, exitstatus: int, worker: str | None) -> bool:
+    return bool(
+        exitstatus in (0, 1)
+        and _UNCHANGED
+        and _same_source(_RECORDING)
+        and session.testscollected > 0
+        and (worker or len(_FINISHED) == session.testscollected)
+    )
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_sessionfinish(session: Any, exitstatus: int) -> Any:
+    yield  # JUnit and coverage finish before their fingerprints are captured.
+    global _AUDITING
+    _AUDITING = False
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    report = {
+        "format": FORMAT,
+        "root": _ROOT,
+        "run_id": _RECORDING.get("run_id"),
+        "session_id": _SESSION,
+        "workers": _WORKERS,
+        "worker": worker,
+        "collected_tests": session.testscollected,
+        "finished_tests": len(_FINISHED),
+        "environment": {"python": sys.version, "executable": sys.executable},
+        "complete": _completion(session, exitstatus, worker),
+        **_observations(),
+    }
+    if not worker:
+        plugin = session.config.pluginmanager.getplugin("_cov")
+        cov = getattr(getattr(plugin, "cov_controller", None), "cov", None)
+        report["recording"] = _RECORDING or None
+        report["artifacts"] = {
+            "coverage": _digest(cov.config.data_file) if cov else None,
+            "junit": _digest(session.config.option.xmlpath)
+            if session.config.option.xmlpath
+            else None,
+        }
+    target = f"{_TARGET}.{worker}" if worker else _TARGET
+    temporary = target + f".{os.getpid()}.tmp"
+    try:
+        with open(temporary, "w") as handle:
+            json.dump(report, handle)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)

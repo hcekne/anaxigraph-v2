@@ -546,6 +546,7 @@ class Application:
         return self.evidence.export()
 
     record_tests = selection.record_tests
+    start_recording = selection.start_recording
     tests_for_change = selection.tests_for_change
     analysis_request = review_operations.analysis_request
     submit_analysis = review_operations.submit_analysis

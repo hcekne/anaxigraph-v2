@@ -192,7 +192,10 @@ only the files that could answer differently: none for a change inside a functio
 importers for a changed surface, the files that asked for a name when a module appears or goes.
 Agent-facing calls refresh the map this way before answering, so a changed checkout is read,
 not refused. `tests_for_change` compares the checkout with a test record, a project-produced
-recording of what each test ran and read, and names the test files that are needed: those
+recording of what each test ran and read. A start manifest pins source inputs; completion binds
+coverage and JUnit outputs and verifies the declared worker inventory. Invalid or incomplete
+imports preserve the last valid record, and unbound legacy evidence requires full checks after
+a change. Selection names the test files that are needed: those
 that executed or read a changed file, those that can see what a changed file sets up when it is
 imported, changed tests and the users of changed helpers, and the whole suite when a changed
 input cannot be attributed. The recording comes from the project's own run: coverage with one

@@ -33,7 +33,10 @@ def _test_parsers(commands: Any) -> None:
     )
     command = commands.add_parser("record-tests", help="Save a record of one suite's recorded run")
     _location(command)
-    command.add_argument("--coverage", type=Path, required=True, help="coverage.py data file")
+    command.add_argument("--coverage", type=Path, help="coverage.py data file")
+    command.add_argument(
+        "--start", action="store_true", help="Save the producing source/run identity before testing"
+    )
     command.add_argument("--suite", required=True, help="Name of the suite, such as backend")
     command.add_argument("--scope", nargs="+", required=True, help="Folders the suite depends on")
     command.add_argument("--run-root", default=".", help="Folder the suite ran in")
@@ -44,6 +47,10 @@ def _test_parsers(commands: Any) -> None:
 
 def _test_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "record-tests":
+        if args.start:
+            return application.start_recording(args.suite)
+        if args.coverage is None:
+            raise ValueError("Saving a test record requires --coverage; use --start before testing")
         return application.record_tests(
             args.coverage,
             args.suite,

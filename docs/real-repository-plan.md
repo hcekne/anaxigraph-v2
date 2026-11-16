@@ -178,3 +178,13 @@ feature-drift verification applies that gate externally. Ordinary validation pre
 stale and unchecked receipt states. Product CI reviews still inspect pipeline declarations, and
 recorded selection remains available. Production size after retirement: 14,497 lines, down 442
 from the first safety fixes; the 15,000-line ceiling has not changed.
+
+Recording now starts with a source manifest (`record-tests --start`). The pytest recorder
+checks those inputs at startup and completion, binds coverage/JUnit bytes, declares xdist
+workers and counts finished tests. Import rejects source drift, altered outputs, incomplete
+runs and mixed/missing workers before replacing the last record. Legacy recordings remain
+readable but cannot authorize narrow checks after a change. This contract covers one pytest
+invocation, including xdist; independently launched shards need a completion protocol first.
+Local qualification: 48 selection tests passed, including real serial and two-worker pytest
+runs and interruption/missing-worker cases. Production size: 14,725 lines, below the unchanged
+15,000-line ceiling. No new measurement on the private target has been made.

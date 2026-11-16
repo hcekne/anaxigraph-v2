@@ -179,29 +179,46 @@ improvements in one task. It should inspect source, test the change and report t
 AnaxiGraph can say which test files a checkout needs, from a record of what each test ran and
 read. Your project produces the recording by running its own suite; AnaxiGraph never runs tests.
 
-Record on your main branch, for example nightly, with one coverage context per test and the
-reads recorder, then save the record at that same checkout:
+Start a recording before testing, then run your suite with per-test coverage and the reads
+recorder. The manifest binds the run to its original source, and the recorder fingerprints the
+finished coverage and JUnit outputs. Keep generated reports outside source inputs:
 
 ```bash
-cd backend && PYTHONPATH="$(anaxigraph tests --recorder)" python -m pytest tests \
-  -p anaxigraph_reads --cov=app --cov=migrations --cov-context=test --cov-report= \
-  --junitxml=junit.xml
-anaxigraph record-tests --coverage backend/.coverage --junit backend/junit.xml \
-  --reads backend/.anaxigraph-reads.json --suite backend --scope backend/ --run-root backend
+anaxigraph record-tests --start --suite backend --scope backend/
+anaxi_recording_dir="$PWD/.anaxigraph-v2/recordings"
+export ANAXIGRAPH_RECORDING="$anaxi_recording_dir/backend.json"
+export ANAXIGRAPH_READS="$anaxi_recording_dir/backend-reads.json"
+export COVERAGE_FILE="$anaxi_recording_dir/backend.coverage"
+(
+  cd backend
+  PYTHONPATH="$(anaxigraph tests --recorder)" python -m pytest tests \
+    -p anaxigraph_reads --cov=app --cov=migrations --cov-context=test --cov-report= \
+    --junitxml="$anaxi_recording_dir/backend-junit.xml"
+)
+anaxigraph record-tests --coverage "$COVERAGE_FILE" \
+  --junit "$anaxi_recording_dir/backend-junit.xml" --reads "$ANAXIGRAPH_READS" \
+  --suite backend --scope backend/ --run-root backend
 ```
+
+A complete recording covers one pytest invocation, including its declared pytest-xdist workers.
+Missing, interrupted or mixed worker reports, source changes and replaced output files are
+rejected before the last valid record is replaced. Early termination such as `--maxfail=1` is
+incomplete even when pytest exits with an ordinary test-failure status. Source identities are
+checked before and after testing and again when saved; this is project-produced evidence,
+not independent attestation of execution or complete behavioral coverage.
 
 Coverage shows the code each test ran. Name every folder the suite loads code from with
 `--cov`, also one that a tool loads by path, such as database migrations: coverage then lists
 the files no test loaded as well, and a file it was not measuring cannot be told from those.
 The reads recorder adds what coverage cannot see: the files a test read as data, the folders
 it scanned, whether it started another process, and which modules the run loaded at all. It
-is one file that uses only the standard library, so it runs in your test environment without
+uses the standard library and pytest, so it runs in your test environment without
 AnaxiGraph installed there; `anaxigraph tests --recorder` prints its folder. It writes
 `.anaxigraph-reads.json` where the run started (`ANAXIGRAPH_READS` names another place), one
 file per worker under pytest-xdist, and takes the nearest folder with a `.git` entry as the
-checkout (`ANAXIGRAPH_ROOT` names it where there is none). A run split over several machines
-gives several coverage files, which `coverage combine` joins, and several JUnit reports, which
-`--junit` takes together.
+checkout (`ANAXIGRAPH_ROOT` names it where there is none). Separately launched or multi-machine shards need a shared completion protocol before their
+combined reports can qualify a narrow selection; the current recording contract does not
+provide that protocol.
 
 `--scope` names the folders the suite depends on, and `--run-root` the folder it ran in. The
 record lands in `.anaxigraph-v2/test-records/`; carry it between machines as a CI artifact.
@@ -244,7 +261,8 @@ The whole suite is selected, with the reason, when a changed input cannot be att
 Prose, source in another language and files outside the scope select only the tests that read
 them. A Python file that the recorded run did not load selects nothing.
 
-A record made without `--reads` still works, with three differences: a changed file inside the
+A legacy record or one made without source-bound `--reads` remains readable, but selects the
+whole suite after a recorded input changes. Its underlying coverage-only rules additionally mean: a changed file inside the
 scope that the suite cannot import (data, configuration, source in another language) selects
 the whole suite; files outside the scope are not compared at all; and only a file that coverage
 lists without a line counts as not loaded, which takes the `--cov` setting above. Run AnaxiGraph
@@ -270,7 +288,8 @@ A pull-request job fetches the latest record, runs `anaxigraph tests --paths`, a
 listed files, or everything when nothing is listed. Start in shadow mode: keep running the whole
 suite and pass its JUnit reports to `anaxigraph tests --ran junit.xml`. Each suite then carries a
 `shadow` entry that names, under `missed`, every failing test file the selection would have left
-out, not counting files that already failed in the recorded run. Let the selection skip tests
+out. Baseline failures are compared by testcase identity, so a new failure in an already-failing
+file remains visible. A legacy baseline without testcase identities subtracts no failures. Let the selection skip tests
 only after the misses have stayed empty on real pull requests.
 
 ## CI/CD and portable records

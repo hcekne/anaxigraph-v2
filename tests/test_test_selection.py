@@ -209,12 +209,14 @@ def run(tmp_path_factory) -> Path:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
+    manifest = Application(root).start_recording("shop")["manifest"]
     command = [sys.executable, "run.py", "tests", "-q", "-p", "no:cacheprovider"]
     command += ["--cov=pkg", "--cov-context=test", "--cov-report=", "--junitxml=junit.xml"]
     environment = os.environ | {
         "PYTHONPATH": str(Path(recorder.__file__).parent),
         "ANAXIGRAPH_ROOT": str(root),  # The fixture is not a git checkout.
         "ANAXIGRAPH_READS": str(root.parent / "reads.json"),
+        "ANAXIGRAPH_RECORDING": manifest,
     }
     done = subprocess.run(
         [*command, "-p", "anaxigraph_reads"],
@@ -395,9 +397,10 @@ def test_without_recorded_reads_a_data_file_picks_everything(unread):
     (unread / "shop/pkg/taxes.json").write_text('{"vat": 0.25}\n')
     suite = picked(unread)
     assert suite["status"] == "all" and suite["selected"] == suite["total"] == TOTAL
-    assert suite["everything_because"] == [
+    assert (
         "shop/pkg/taxes.json: an input the record cannot attribute to tests"
-    ]
+        in suite["everything_because"]
+    )
     assert suite["reads_recorded"] is False and "reads a file as data" in suite["assurance"]
     (unread / "shop/pkg/taxes.json").write_text('{"vat": 0.2}\n')
     (unread / "web/routes.json").write_text("[]\n")  # Outside the scope: not seen at all.
@@ -409,9 +412,10 @@ def test_source_in_another_language_is_ruled_out_only_by_recorded_reads(checkout
         (root / "shop/pkg/widget.js").write_text("export const size = 2;\n")
     # The suite cannot import it, and the reads show that no test opened it either.
     assert picked(checkout)["test_files"] == chosen()
-    assert picked(unread)["everything_because"] == [
+    assert (
         "shop/pkg/widget.js: an input the record cannot attribute to tests"
-    ]
+        in picked(unread)["everything_because"]
+    )
 
 
 def test_a_dependency_list_picks_everything_though_a_test_reads_it(checkout):
@@ -470,10 +474,10 @@ def test_a_file_coverage_did_not_measure_is_not_taken_for_unloaded(checkout, unr
         (root / "shop/migrations/step_one.py").write_text("STEP = 1\n")
         suite = picked(root)
         assert suite["status"] == "all", root
-        assert suite["everything_because"] == [
-            "shop/migrations/step_one.py: new, or not measured when recorded, "
-            "and nothing imports it"
-        ]
+        assert (
+            "shop/migrations/step_one.py: new, or not measured when recorded, and nothing imports it"
+            in suite["everything_because"]
+        )
     # Coverage alone cannot tell a file nobody loaded from one it was not measuring.
     (unread / "shop/migrations/step_one.py").write_text(FILES["shop/migrations/step_one.py"])
     (unread / "shop/tools.py").write_text("def tool():\n    return 2\n")
@@ -485,7 +489,7 @@ def test_an_empty_file_that_gains_code_is_not_taken_for_unloaded(checkout, unrea
         # Importing an empty file may leave no line behind, so that coverage lists it like
         # a file nobody loaded; which of the two it was depends on the Python version.
         (root / "shop/pkg/__init__.py").write_text("VERSION = 1\n")
-        [reason] = picked(root)["everything_because"]
+        reason = picked(root)["everything_because"][0]
         assert reason.startswith("shop/pkg/__init__.py: ")
         assert reason.endswith(", and nothing imports it")
 
@@ -543,7 +547,7 @@ def test_a_report_from_another_checkout_is_refused(run, tmp_path):
     )
     report = reports / "reads.json"
     report.write_text(report.read_text().replace("shop/tests/", "elsewhere/"))
-    with pytest.raises(ValueError, match="names no test file of this checkout"):
+    with pytest.raises(ValueError, match="Recording source differs"):
         record(root, run, reads=True, reports=reports)
     report.write_text("{}")
     with pytest.raises(ValueError, match="Not a reads report"):
@@ -559,8 +563,10 @@ def test_worker_reports_are_merged(run, tmp_path):
     )
     whole = json.loads((reports / "reads.json").read_text())
     # As under pytest-xdist: the folder scans in one worker's file, the rest in another's.
-    (reports / "reads.json.gw1").write_text(json.dumps(whole | {"opened": {}, "started": {}}))
-    (reports / "reads.json").write_text(json.dumps(whole | {"listed": {}}))
+    (reports / "reads.json.gw1").write_text(
+        json.dumps(whole | {"opened": {}, "started": {}, "worker": "gw1"})
+    )
+    (reports / "reads.json").write_text(json.dumps(whole | {"listed": {}, "workers": ["gw1"]}))
     record(root, run, reads=True, reports=reports)
     (root / "shop/pkg/plugins/beta.py").write_text("NAME = 'beta'\n")
     assert picked(root)["test_files"] == chosen("loader")
@@ -651,3 +657,183 @@ def test_an_existing_failure_does_not_hide_another_failure_in_the_same_file(chec
     [suite] = Application(checkout).tests_for_change(ran=[report])["suites"]
     assert suite["shadow"]["missed"] == [T("taxes")]
     assert suite["shadow"]["failing_when_recorded"] == (0 if legacy else 1)
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "source",
+        "coverage",
+        "junit",
+        "incomplete",
+        "run_id",
+        "worker_missing",
+        "worker_run",
+        "worker_session",
+        "worker_incomplete",
+    ],
+)
+def test_invalid_recording_cannot_replace_the_last_good_record(checkout, run, tmp_path, problem):
+    import json
+
+    saved = checkout / ".anaxigraph-v2/test-records/shop.json"
+    before = saved.read_bytes()
+    reports = Path(
+        shutil.copytree(run.parent, tmp_path / "reports", ignore=lambda *_: ["checkout"])
+    )
+    path = reports / "reads.json"
+    report = json.loads(path.read_text())
+    if problem == "source":
+        (checkout / "shop/pkg/orders.py").write_text("def place(items):\n    return None\n")
+    elif problem in {"coverage", "junit"}:
+        target = reports / ("shop.coverage" if problem == "coverage" else "junit.xml")
+        target.write_bytes(target.read_bytes() + b"\n")
+    elif problem == "incomplete":
+        report["complete"] = False
+    elif problem == "run_id":
+        report["run_id"] = "another-run"
+    else:
+        report["workers"] = ["gw0"]
+        worker = dict(report, worker="gw0")
+        if problem == "worker_run":
+            worker["run_id"] = "another-run"
+        elif problem == "worker_session":
+            worker["session_id"] = "another-invocation"
+        elif problem == "worker_incomplete":
+            worker["complete"] = False
+        if problem != "worker_missing":
+            (reports / "reads.json.gw0").write_text(json.dumps(worker))
+    path.write_text(json.dumps(report))
+    with pytest.raises(ValueError):
+        record(checkout, run, reads=True, reports=reports)
+    assert saved.read_bytes() == before
+
+
+def test_a_legacy_recording_is_preserved_but_cannot_authorize_narrow_checks(
+    checkout, run, tmp_path
+):
+    import json
+
+    reports = Path(
+        shutil.copytree(run.parent, tmp_path / "reports", ignore=lambda *_: ["checkout"])
+    )
+    path = reports / "reads.json"
+    report = json.loads(path.read_text())
+    report.pop("recording")
+    path.write_text(json.dumps(report))
+    assert (
+        record(checkout, run, reads=True, reports=reports)["provenance"]["status"] == "unverified"
+    )
+    (checkout / "shop/pkg/orders.py").write_text("def place(items):\n    return {'total': 0}\n")
+    suite = picked(checkout)
+    assert suite["status"] == "all"
+    assert any("source/run is unverified" in reason for reason in suite["everything_because"])
+
+
+@pytest.mark.parametrize("parallel", [False, True])
+def test_completed_and_interrupted_real_runs_have_distinct_recording_status(
+    tmp_path, parallel, capsys
+):
+    import json
+
+    root = tmp_path / "source"
+    (root / "tests").mkdir(parents=True)
+    (root / "pkg").mkdir()
+    (root / "pkg/__init__.py").write_text("")
+    (root / "pkg/engine.py").write_text("def value():\n    return 1\n")
+    first = root / "tests/test_first.py"
+    first.write_text("from pkg.engine import value\ndef test_first():\n    assert value() == 1\n")
+    (root / "tests/test_second.py").write_text(
+        "from pkg.engine import value\ndef test_second():\n    assert value() > 0\n"
+    )
+    assert (
+        cli.main(
+            [
+                "record-tests",
+                "--start",
+                "--repo",
+                str(root),
+                "--suite",
+                "engine",
+                "--scope",
+                "pkg",
+                "tests",
+            ]
+        )
+        == 0
+    )
+    manifest = json.loads(capsys.readouterr().out)["manifest"]
+    environment = os.environ | {
+        "PYTHONPATH": str(Path(recorder.__file__).parent),
+        "ANAXIGRAPH_ROOT": str(root),
+        "ANAXIGRAPH_RECORDING": manifest,
+        "ANAXIGRAPH_READS": str(tmp_path / "reads.json"),
+        "COVERAGE_FILE": str(tmp_path / ".coverage"),
+    }
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "anaxigraph_reads",
+        "--cov=pkg",
+        "--cov-context=test",
+        "--cov-report=",
+        f"--junitxml={tmp_path / 'junit.xml'}",
+    ]
+    if parallel:
+        command.extend(["-n", "2"])
+    done = subprocess.run(command, cwd=root, env=environment, text=True, capture_output=True)
+    assert done.returncode == 0, done.stdout + done.stderr
+    report = json.loads((tmp_path / "reads.json").read_text())
+    assert report["complete"] is True and report["finished_tests"] == 2
+    assert len(report["workers"]) == (2 if parallel else 0)
+    app = Application(root)
+    kwargs = {
+        "suite": "engine",
+        "scope": ["tests", "pkg"],
+        "junit": [tmp_path / "junit.xml"],
+        "reads": tmp_path / "reads.json",
+    }
+    assert (
+        cli.main(
+            [
+                "record-tests",
+                "--repo",
+                str(root),
+                "--coverage",
+                str(tmp_path / ".coverage"),
+                "--junit",
+                str(tmp_path / "junit.xml"),
+                "--reads",
+                str(tmp_path / "reads.json"),
+                "--suite",
+                "engine",
+                "--scope",
+                "pkg",
+                "tests",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out)["provenance"]["status"] == "verified"
+    saved = root / ".anaxigraph-v2/test-records/engine.json"
+    before = saved.read_bytes()
+    if parallel:
+        (tmp_path / "reads.json.gw0").unlink()
+    else:
+        first.write_text(first.read_text().replace("== 1", "== 999"))
+        Application(root).start_recording("engine")
+        done = subprocess.run(
+            [*command, "--maxfail=1"], cwd=root, env=environment, text=True, capture_output=True
+        )
+        assert done.returncode == 1
+        report = json.loads((tmp_path / "reads.json").read_text())
+        assert report["complete"] is False and report["finished_tests"] == 1
+    with pytest.raises(ValueError):
+        app.record_tests(tmp_path / ".coverage", **kwargs)
+    assert saved.read_bytes() == before

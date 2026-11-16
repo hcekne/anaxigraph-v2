@@ -278,6 +278,10 @@ def select_tests(record: dict[str, Any], graph: Graph) -> dict[str, Any]:
         selection.change(path)
     tests = [test for test in selection.tests if test in graph.snapshot.files]
     if changed or graph.snapshot.dirty or record.get("revision") != graph.snapshot.revision:
+        if record.get("provenance", {}).get("status") != "verified":
+            selection.everything.append(
+                "Recording source/run is unverified; record again with --start and the reads recorder"
+            )
         _unseen(selection, tests)
     tests = sorted(selection.picked.union(tests))  # With test files newer than the record.
     picked = tests if selection.everything else sorted(selection.picked)
