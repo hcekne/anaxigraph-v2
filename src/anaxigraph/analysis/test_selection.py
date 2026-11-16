@@ -1,28 +1,69 @@
-"""Pick the tests a checkout needs from a record of which test executed which file.
+"""Pick the tests a checkout needs from a record of what each test ran and read.
 
 The record is compared with the checkout itself, not with a base branch: every file that
 differs from the recorded run counts, so the selection widens by itself as the record ages
 and a refreshed record narrows it again. Nothing is selected on a guess: when a changed input
 cannot be attributed to tests, the whole suite is selected and the reason is given.
 
-Executed lines cannot show a test that only reads a module-level value, so a change to what
-runs at import time also selects the tests of the modules that import it.
+Executed lines cannot show a test that only reads what a module set up when it was imported.
+So a change to what runs at import also selects the tests of every module that uses the
+file, and the same again for each of those whose own import-time code uses it. Where that
+walk ends at a file that nothing imports and no recorded test ran, something other than an
+import statement loads it, and the record cannot say for which tests.
+
+A record taken with the reads recorder also knows the files tests read as data, the folders
+they scanned, the tests that started another process and the modules the run loaded; without
+it, a changed data file selects everything. Code that reads a file once and keeps it serves
+later tests without reading again, so a read also counts for every test that ran the code
+which did it.
 """
 
 from __future__ import annotations
 
-from collections import deque
+import posixpath
+from collections import defaultdict, deque
 from pathlib import PurePosixPath
 from typing import Any
 
-from anaxigraph.analysis.charter import relations
 from anaxigraph.contracts import SOURCE_SUFFIXES, Graph
 
 _PROSE = {".md", ".rst", ".adoc"}
+_ASSURANCE = {
+    True: "Selected from what the recorded run executed and read, and from static imports. "
+    "Run the whole suite on the main branch: a test that only checks whether a file exists, "
+    "or shares what another test set up, is not seen here.",
+    False: "Selected from what the recorded run executed, and from static imports. Run the "
+    "whole suite on the main branch: a test that reads a file as data, or starts a process "
+    "that does, is not seen here. Record with the reads recorder to cover those.",
+}
+_USES = {"calls", "references", "inherits"}
 
 
 def _prose(path: str) -> bool:
     return PurePosixPath(path).suffix.lower() in _PROSE or path.startswith("docs/")
+
+
+def _users(graph: Graph, inside: set[str]) -> tuple[dict[str, set[str]], Any]:
+    """Among the suite's files, those that link to each file, and those among them whose
+    import-time code uses it.
+
+    A possible link counts: leaving out an affected test is the costly mistake. Code outside
+    functions runs when its module is imported, so what it uses shapes that module for
+    everyone who imports it in turn.
+    """
+    nodes = {node.id: node for node in graph.nodes}
+    users: dict[str, set[str]] = defaultdict(set)
+    importing: dict[str, set[str]] = defaultdict(set)
+    for edge in graph.edges:
+        source, target = nodes.get(edge.source), nodes.get(edge.target)
+        if source is None or target is None or edge.resolution == "unresolved":
+            continue
+        if source.path == target.path or not {source.path, target.path} <= inside:
+            continue
+        users[target.path].add(source.path)
+        if source.kind != "function" and edge.kind in _USES:
+            importing[target.path].add(source.path)
+    return users, importing
 
 
 class _Selection:
@@ -30,7 +71,12 @@ class _Selection:
         self.record, self.files = record, graph.snapshot.files
         self.tests: list[str] = record["tests"]
         self.known = set(self.tests)
-        self.modules, self.relations = relations(graph)
+        self.modules = {node.path: node for node in graph.nodes if node.kind == "module"}
+        self.scope = tuple(record["scope"])
+        inside = {path for path in self.modules if path.startswith(self.scope)} | self.known
+        self.users, self.importing = _users(graph, inside)
+        self.idle = set(record["unloaded"])  # Known not to have been loaded by the run.
+        self.reads: dict[str, Any] | None = record["reads"]
         self.picked: set[str] = set()
         self.reasons: list[dict[str, Any]] = []
         self.everything: list[str] = []
@@ -40,12 +86,16 @@ class _Selection:
         self.reasons.append({"path": path, "rule": rule, "tests": len(tests - self.picked)})
         self.picked |= tests
 
+    def numbered(self, numbers: Any) -> set[str]:
+        return {self.tests[index] for index in numbers}
+
     def executed(self, path: str) -> set[str]:
-        return {self.tests[index] for index in self.record["executed"].get(path, ())}
+        return self.numbered(self.record["executed"].get(path, ()))
 
     def _direct(self, path: str) -> set[str] | None:
         """The tests a file stands for by itself, or None when its importers must be asked."""
-        if path in self.known or PurePosixPath(path).stem.startswith("test_"):
+        stem = PurePosixPath(path).stem
+        if path in self.known or stem.startswith("test_") or stem.endswith("_test"):
             return {path}
         if PurePosixPath(path).name == "conftest.py":
             folder = str(PurePosixPath(path).parent) + "/"
@@ -54,69 +104,155 @@ class _Selection:
             return None  # A helper beside the tests: every test file that reaches it.
         return self.executed(path) or None  # A module no test executed passes the question on.
 
-    def consumers(self, path: str) -> tuple[set[str], bool]:
-        """Tests reached through the modules that import a file, and whether any import it."""
+    def _orphan(self, path: str) -> bool:
+        """Whether something other than an import statement must load a file, if anything
+        does: nothing imports it, and the run is not known to have left it alone."""
+        return not (self.users.get(path) or path in self.idle)
+
+    def consumers(self, path: str) -> tuple[set[str], str | None]:
+        """Tests that can see what a file sets up at import, and a file on the way whose
+        tests cannot be named: it uses the file, no recorded test ran it and nothing imports
+        it."""
         found: set[str] = set()
+        lost = None
         seen, queue = {path}, deque([path])
         while queue:
-            for user in self.relations.get(queue.popleft(), {}).get("consumers", ()):
+            current = queue.popleft()
+            for user in self.users.get(current, ()):
                 if user not in seen:
                     seen.add(user)
                     tests = self._direct(user)
-                    if tests is None:
+                    found |= tests or set()
+                    # A package's __init__.py is loaded with the package, and __main__.py
+                    # only as a program: neither is a sign of another way of loading.
+                    special = PurePosixPath(user).name in {"__init__.py", "__main__.py"}
+                    if tests is None and not special and self._orphan(user):
+                        lost = lost or user
+                    if tests is None or user in self.importing[current]:
                         queue.append(user)
-                    else:
-                        found |= tests
-        return found, len(seen) > 1
+        return found, lost
 
-    def _test_files(self, path: str) -> set[str]:
-        tests = self._direct(path) if path in self.modules or path in self.known else {path}
-        return self.consumers(path)[0] if tests is None else tests
+    def _helper(self, path: str, read: bool) -> set[str]:
+        """The test files a changed test, helper or conftest stands for, and those that
+        import from it."""
+        own = self._direct(path)
+        tests, lost = self.consumers(path)
+        if lost:
+            self.everything.append(f"{path}: {lost} uses it, and no import leads to that")
+        elif own is None and self._orphan(path) and not read:
+            self.everything.append(f"{path}: a test helper that nothing imports")
+        return (own or set()) | tests
 
-    def source(self, path: str) -> None:
-        """A changed source file: what the recorded suite ran of it, and who imports it."""
-        recorded = self.record["imports"].get(path)
-        node = self.modules.get(path)
-        if not path.endswith((".py", ".pyi")):
-            self.add(path, "another language: this suite cannot load it", set())
-            return
-        if path in self.record["files"] and recorded is None and path in self.files:
+    def _folder(self, path: str) -> str:
+        """The nearest folder above a file that was there when the run was recorded."""
+        folder = posixpath.dirname(path)
+        while folder and not any(known.startswith(folder + "/") for known in self.record["files"]):
+            folder = posixpath.dirname(folder)
+        return folder
+
+    def _kept(self, path: str, module: str, did: str) -> None:
+        """What a module read while it was imported belongs to that module's tests."""
+        if not module:
+            self.everything.append(f"{path}: read by the test run itself")
+        elif module in self.modules:
+            own = self._direct(module)
+            tests, lost = self.consumers(module)
+            self.add(path, f"{module} {did} when imported: its tests", (own or set()) | tests)
+            lost = lost or (module if own is None and self._orphan(module) else None)
+            if lost:
+                self.everything.append(
+                    f"{path}: {module} {did} when imported, and no import leads to {lost}"
+                )
+
+    def read(self, path: str) -> bool:
+        """Select what read a file as data, or scanned the folder it appeared in or left."""
+        if self.reads is None:
+            return False
+        asked = [("opened", path, "read it")]
+        if (path in self.files) != (path in self.record["files"]):
+            asked.append(("listed", self._folder(path), "scanned its folder"))
+        found = False
+        for kind, key, did in asked:
+            tests = self.numbered(self.reads[kind].get(key, ()))
+            for reader in self.reads["through"][kind].get(key, ()):
+                tests |= self.executed(reader)  # They may share what that code kept of it.
+            modules = self.reads["by_modules"][kind].get(key, ())
+            found = found or bool(tests or modules)
+            if tests:
+                self.add(path, f"tests that {did}, or ran the code that did", tests)
+            for module in modules:
+                self._kept(path, module, did)
+        return found
+
+    def source(self, path: str, read: bool) -> None:
+        """A changed Python file: what the recorded suite ran of it, and who uses it."""
+        if path in self.idle:
             self.add(path, "not loaded by the recorded suite", set())
             return
+        recorded = self.record["imports"].get(path)
+        node = self.modules.get(path)
         self.add(path, "tests that executed it", self.executed(path))
-        current = node.data.get("import_fingerprint") if node is not None else None
-        if recorded is not None and recorded == current:
+        whole = path in self.record["ran_at_import"]  # Its functions ran outside any test.
+        key = "semantic_fingerprint" if whole else "import_fingerprint"
+        if recorded is not None and node is not None and recorded == node.data.get(key):
             return
-        tests, reached = self.consumers(path)
-        if reached or path not in self.files:
-            self.add(path, "import-time code changed: tests of the modules that import it", tests)
-        else:
-            self.everything.append(f"{path}: new or changed at import time, and nothing imports it")
+        # Without a recorded identity nothing is known of what it does: any change counts.
+        what = "import-time code changed" if recorded else "new, or not measured when recorded"
+        tests, lost = self.consumers(path)
+        self.add(path, f"{what}: tests of the modules that use it", tests)
+        if lost:
+            self.everything.append(f"{path}: {what}; {lost} uses it, and no import leads to that")
+        elif not self.users.get(path) and not read:
+            self.everything.append(f"{path}: {what}, and nothing imports it")
 
     def change(self, path: str) -> None:
         node = self.modules.get(path)
-        if _prose(path):
+        read = self.read(path)
+        python = path.endswith(".py")
+        if not path.startswith(self.scope):
+            return  # Outside the suite's folders only what a test read counts.
+        if python and path not in self.files:
+            self.everything.append(f"{path}: removed, and what still imports it is not recorded")
+        elif path in self.known or (python and node is not None and node.data.get("is_test")):
+            self.add(path, "a changed test or test helper", self._helper(path, read))
+        elif _prose(path):
             return
-        if path in self.known or (node is not None and node.data.get("is_test")):
-            self.add(path, "a changed test or test helper", self._test_files(path))
-        elif path.endswith(SOURCE_SUFFIXES):
-            self.source(path)
-        else:
+        elif python:
+            self.source(path, read)
+        elif not read and (self.reads is None or not path.endswith(SOURCE_SUFFIXES)):
+            # Source the suite cannot import is an input only to a test that read it, and a
+            # record with reads has just answered that.
             self.everything.append(f"{path}: an input the record cannot attribute to tests")
 
 
-def _unattributed(selection: _Selection, tests: list[str]) -> None:
-    """A test that executed no recorded source reads something else: configuration, data,
-    another project. Nothing says what, so it runs whenever anything may have changed."""
-    executed = selection.record["executed"].values()
-    attributed = {selection.tests[index] for found in executed for index in found}
-    selection.add("(anything)", "tests that executed no recorded source", set(tests) - attributed)
+def _unseen(selection: _Selection, tests: list[str]) -> None:
+    """Tests whose inputs the record cannot name, so they run whenever anything changed.
+
+    One that executed no recorded source and read no recorded file depends on something else:
+    configuration, another project. One that started another process depends on whatever
+    that process loaded.
+    """
+    record, reads = selection.record, selection.reads or {}
+    seen = {index for found in record["executed"].values() for index in found}
+    for kind in ("opened", "listed"):
+        seen |= {index for found in reads.get(kind, {}).values() for index in found}
+    selection.add(
+        "(anything)", "tests with no recorded input", set(tests) - selection.numbered(seen)
+    )
+    started = selection.numbered(reads.get("started", ()))
+    selection.add("(anything)", "tests that started another process", started)
 
 
 def _changed(record: dict[str, Any], graph: Graph) -> list[str]:
-    """Every file in the suite's scope that differs from the recorded run."""
+    """Every file that differs from the recorded run: in the suite's scope, or anywhere when
+    the record knows what tests read."""
     scope, recorded = tuple(record["scope"]), record["files"]
-    current = {p: found for p, found in graph.snapshot.files.items() if p.startswith(scope)}
+    everywhere = record["reads"] is not None
+    current = {
+        path: found
+        for path, found in graph.snapshot.files.items()
+        if everywhere or path.startswith(scope)
+    }
     paths = recorded.keys() | current.keys()
     return sorted(path for path in paths if recorded.get(path) != current.get(path))
 
@@ -129,8 +265,9 @@ def select_tests(record: dict[str, Any], graph: Graph) -> dict[str, Any]:
         selection.change(path)
     tests = [test for test in selection.tests if test in graph.snapshot.files]
     if changed or graph.snapshot.dirty or record.get("revision") != graph.snapshot.revision:
-        _unattributed(selection, tests)
-    picked = sorted(tests if selection.everything else selection.picked)
+        _unseen(selection, tests)
+    tests = sorted(selection.picked.union(tests))  # With test files newer than the record.
+    picked = tests if selection.everything else sorted(selection.picked)
     seconds = dict(zip(selection.tests, record.get("seconds") or []))
     total = sum(seconds.get(test, 0.0) for test in tests)
     spent = sum(seconds.get(test, 0.0) for test in picked)
@@ -146,7 +283,6 @@ def select_tests(record: dict[str, Any], graph: Graph) -> dict[str, Any]:
         "because": sorted(selection.reasons, key=lambda item: -item["tests"])[:20],
         "changed_since_record": len(changed),
         "recorded_revision": record.get("revision"),
-        "assurance": "Selected from recorded execution and static imports. Run the whole suite "
-        "on the main branch: a test that depends on a file without executing or importing it "
-        "is not seen here.",
+        "reads_recorded": selection.reads is not None,
+        "assurance": _ASSURANCE[selection.reads is not None],
     }

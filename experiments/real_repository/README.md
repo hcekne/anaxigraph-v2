@@ -10,12 +10,16 @@ commits. Pull requests are recognised as GitHub merge commits from `fix/`, `feat
 | --- | --- | --- |
 | Does the map link the code, and how fast does it answer? | `scripts/map_health.py CHECKOUT` | Internal imports linked, files read, scan, rescan, new-process, new-worktree and brief times |
 | Do suggestions point at the files a pull request really changed? | `replay_navigation.py CLONE OUT`, then `compare_navigation.py OUT` | Top-1, top-3 and top-10 hits against plain keyword search (BM25), and candidate ranking signals chosen on half the pull requests and judged on the other half |
-| Which tests would be picked for each pull request? | `replay_tests.py CLONE --coverage ... --junit ...` | Share of suite time picked, how often the whole suite is selected and why, and whether any test that executed a changed file was left out |
+| Which tests would be picked for each pull request? | `replay_tests.py CLONE --coverage ... --junit ... --reads ...` | Share of suite time picked, how often the whole suite is selected and why, and whether any test that executed or read a changed file was left out |
+| Would the picked tests have caught a fault? | `plant_faults.py CLONE FAULTS.json --run '...' --out DIR` | For each planted fault: the test files that fail in a whole-suite run, and those among them the selection would have left out |
 
 `replay_tests.py` needs one recorded run of the suite at the clone's commit, made with one
-coverage context per test (for pytest: `--cov --cov-context=test --junitxml=...`). The
-recording is the only step that executes project code, and the project runs it itself.
+coverage context per test and the reads recorder (for pytest: `-p anaxigraph_reads --cov
+--cov-context=test --junitxml=...`, see the usage guide). `plant_faults.py` needs the record
+saved in the clone with `anaxigraph record-tests`, and runs the project's own suite command
+once per fault and once without any. These runs are the only steps that execute project code.
 
-A ranking signal belongs in the product only when it beats keyword search here, and a
-selection rule only when the replay shows no executing test left out. Results from the first
-run are in [the real-repository plan](../../docs/real-repository-plan.md).
+A ranking signal belongs in the product only when it beats keyword search here. A selection
+rule belongs there only when the replay leaves out no test that executed or read a changed
+file, and the planted faults show no failing test file left out. Results are in
+[the real-repository plan](../../docs/real-repository-plan.md).

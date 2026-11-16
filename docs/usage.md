@@ -176,18 +176,32 @@ improvements in one task. It should inspect source, test the change and report t
 
 ## Tests for a change
 
-AnaxiGraph can say which test files a checkout needs, from a record of which test executed which
-file. Your project produces the recording by running its own suite; AnaxiGraph never runs tests.
+AnaxiGraph can say which test files a checkout needs, from a record of what each test ran and
+read. Your project produces the recording by running its own suite; AnaxiGraph never runs tests.
 
-Record on your main branch, for example nightly, with one coverage context per test, then save
-the record at that same checkout:
+Record on your main branch, for example nightly, with one coverage context per test and the
+reads recorder, then save the record at that same checkout:
 
 ```bash
-cd backend && python -m pytest tests --cov=app --cov-context=test --cov-report= \
+cd backend && PYTHONPATH="$(anaxigraph tests --recorder)" python -m pytest tests \
+  -p anaxigraph_reads --cov=app --cov=migrations --cov-context=test --cov-report= \
   --junitxml=junit.xml
 anaxigraph record-tests --coverage backend/.coverage --junit backend/junit.xml \
-  --suite backend --scope backend/ --run-root backend
+  --reads backend/.anaxigraph-reads.json --suite backend --scope backend/ --run-root backend
 ```
+
+Coverage shows the code each test ran. Name every folder the suite loads code from with
+`--cov`, also one that a tool loads by path, such as database migrations: coverage then lists
+the files no test loaded as well, and a file it was not measuring cannot be told from those.
+The reads recorder adds what coverage cannot see: the files a test read as data, the folders
+it scanned, whether it started another process, and which modules the run loaded at all. It
+is one file that uses only the standard library, so it runs in your test environment without
+AnaxiGraph installed there; `anaxigraph tests --recorder` prints its folder. It writes
+`.anaxigraph-reads.json` where the run started (`ANAXIGRAPH_READS` names another place), one
+file per worker under pytest-xdist, and takes the nearest folder with a `.git` entry as the
+checkout (`ANAXIGRAPH_ROOT` names it where there is none). A run split over several machines
+gives several coverage files, which `coverage combine` joins, and several JUnit reports, which
+`--junit` takes together.
 
 `--scope` names the folders the suite depends on, and `--run-root` the folder it ran in. The
 record lands in `.anaxigraph-v2/test-records/`; carry it between machines as a CI artifact.
@@ -199,16 +213,55 @@ checkout itself, so everything that differs from the recorded run counts and the
 widens by itself as the record ages. A test file is selected when:
 
 - a recorded test in it executed a changed source file;
-- a changed file's import-time code changed (module-level values, signatures, class bodies,
-  cached functions and functions that set shared state) and the test executed a module that
-  imports it, since executed lines cannot show a test that only reads such a value;
-- it changed itself, a helper it imports changed, or a `conftest.py` above it changed;
-- it executed no recorded source at all, whenever anything may have changed.
+- it read a changed file as data, wherever in the checkout that file is, or scanned the folder
+  a file appeared in or left. Code that reads a file once and keeps it serves other tests
+  without reading again, so the tests that ran the code which did the reading are selected too;
+- what a changed file does at import changed (module-level values, signatures, class bodies,
+  cached functions, functions that set shared state, and any function the recorded run saw
+  running outside a test), and the test imports the file or executed a module that uses it.
+  The same holds again for every module whose own import-time code uses the file, since such
+  a module passes the change on to its own users. Data read while a module was imported
+  counts as part of that module. A file the record has no measurement of, because it is new
+  or coverage was not measuring it, is treated this way for any change;
+- it changed itself or is new, a helper it imports changed, or a `conftest.py` above it changed;
+- the record cannot name its inputs: it executed no recorded source and read no recorded
+  file, or it started a process whose reads are not seen (a `git` command working outside
+  the checkout does not count). These run whenever anything changed.
 
-The whole suite is selected, with the reason, when a changed input cannot be attributed: a data
-or configuration file inside the scope, or a new or import-changed module that nothing imports.
-Prose and files outside the scope select nothing. Run the whole suite on your main branch
-regardless: a test that depends on a file without executing or importing it is not seen.
+The whole suite is selected, with the reason, when a changed input cannot be attributed:
+
+- a file inside the scope that nothing in the recorded run read, such as a dependency list or
+  a container file, or a file the test run itself read;
+- a Python file that was removed: what still imports it is not in the record;
+- a module that nothing imports and whose folder nothing scanned, when it is new, was not
+  measured, or changed what it does at import. Something other than an import statement loads
+  such a file, and the record cannot say for which tests. The same holds when following the
+  users of a changed file ends at such a module.
+
+Prose, source in another language and files outside the scope select only the tests that read
+them. A Python file that the recorded run did not load selects nothing.
+
+A record made without `--reads` still works, with three differences: a changed file inside the
+scope that the suite cannot import (data, configuration, source in another language) selects
+the whole suite; files outside the scope are not compared at all; and only a file that coverage
+lists without a line counts as not loaded, which takes the `--cov` setting above. Run AnaxiGraph
+under the same Python version when it saves the record and when it is asked: the identity of
+what a file does at import comes from that version's parser, so another version treats every
+changed file as changed at import. That is safe and selects more.
+
+Run the whole suite on your main branch regardless. Four things are not seen: a test that only
+checks whether a file exists; state that one test or a session-wide fixture sets up and another
+test uses; a module-level import whose name the importing file also assigns; and a module that,
+when imported, changes what another module keeps, for the tests that only ask that other module.
+
+In CI, a nightly job on the main branch records the suite and keeps the record as an artifact
+(`.anaxigraph-v2/` is a hidden folder; artifact steps often skip those unless told otherwise).
+A pull-request job fetches the latest record, runs `anaxigraph tests --paths`, and runs the
+listed files, or everything when nothing is listed. Start in shadow mode: keep running the whole
+suite and pass its JUnit reports to `anaxigraph tests --ran junit.xml`. Each suite then carries a
+`shadow` entry that names, under `missed`, every failing test file the selection would have left
+out, not counting files that already failed in the recorded run. Let the selection skip tests
+only after the misses have stayed empty on real pull requests.
 
 ## CI/CD and portable records
 

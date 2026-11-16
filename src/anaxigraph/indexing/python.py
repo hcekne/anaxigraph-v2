@@ -262,12 +262,33 @@ def _import_fingerprint(tree: ast.Module) -> str:
 
     While it is unchanged, an edit can only be observed by running the edited functions.
     Other bodies are removed from the tree to compute it, so this is the tree's last use.
+    A function that a recorded run saw running at import is beyond what one file can tell;
+    the test record covers those (see `runs_bodies`).
     """
+    pending: list[ast.AST] = [tree]
+    while pending:
+        for node in ast.iter_child_nodes(pending.pop()):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if _outlives_its_call(node):
+                    continue  # Kept whole, with the helpers nested in it.
+                node.body = []
+            pending.append(node)
+    return hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
+
+
+def runs_bodies(source: bytes, lines: set[int]) -> bool:
+    """Whether any of these executed lines lies inside a function body of the source."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError):
+        return True  # Unreadable: assume the most.
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if not _outlives_its_call(node):
-                node.body = []
-    return hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
+            documented = ast.get_docstring(node, clean=False) is not None
+            body = node.body[1:] if documented else node.body
+            if body and not lines.isdisjoint(range(body[0].lineno, (node.end_lineno or 0) + 1)):
+                return True
+    return False
 
 
 def _populate(module: Module, data: dict, tree: ast.Module) -> None:

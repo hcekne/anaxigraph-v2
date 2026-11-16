@@ -6,6 +6,7 @@ record, with import-time code marked changed only where the pull request really 
 
     uv run python experiments/real_repository/replay_tests.py /scratch/clone \\
         --coverage /scratch/run/.coverage --junit /scratch/run/junit.xml \\
+        --reads /scratch/run/.anaxigraph-reads.json \\
         --suite backend --scope backend/ --run-root backend --recorded-root /path/of/recording
 
 The clone must be at the commit the suite was recorded at. Nothing is executed.
@@ -32,7 +33,8 @@ from anaxigraph.indexing.test_record import record_from_coverage
 options = argparse.ArgumentParser(description=__doc__.splitlines()[0])
 options.add_argument("clone", type=Path)
 options.add_argument("--coverage", type=Path, required=True)
-options.add_argument("--junit", type=Path)
+options.add_argument("--junit", type=Path, nargs="+")
+options.add_argument("--reads", type=Path, help="Reads recorder report of the same run")
 options.add_argument("--suite", required=True)
 options.add_argument("--scope", nargs="+", required=True)
 options.add_argument("--run-root", default=".")
@@ -51,21 +53,37 @@ record = record_from_coverage(
     run_root=args.run_root,
     recorded_root=args.recorded_root or str(repo),
     junit=args.junit,
+    reads=args.reads,
 )
+READS = record["reads"]
 print(
-    f"record: {len(record['tests'])} test files, {len(record['executed'])} executed sources, {len(record['imports'])} loaded modules, {len(record['files'])} files in scope, {len(json.dumps(record)) / 1e6:.2f} MB"
+    f"record: {len(record['tests'])} test files, {len(record['executed'])} executed sources, {len(record['imports'])} loaded modules ({len(record['ran_at_import'])} with functions that ran outside any test), {len(record['unloaded'])} known not to be loaded, {len(record['files'])} files compared, {len(json.dumps(record)) / 1e6:.2f} MB"
 )
+if READS:
+    print(
+        f"reads: {len(READS['opened'])} files read by tests, {len(READS['by_modules']['opened'])} read while a module was imported, {len(READS['listed'])} folders scanned, {len(READS['started'])} test files started a process"
+    )
 print(
     "unchanged checkout:",
     {k: v for k, v in select_tests(record, graph).items() if k in ("status", "selected", "total")},
 )
 total_seconds = sum(record["seconds"])
-attributed = {record["tests"][i] for found in record["executed"].values() for i in found}
-unattributed = [t for t in record["tests"] if t not in attributed]
 seconds = dict(zip(record["tests"], record["seconds"]))
-print(
-    f"tests with no recorded source execution: {len(unattributed)} files, {sum(seconds[t] for t in unattributed) / total_seconds:.1%} of suite time"
-)
+
+
+def share(numbers):
+    return sum(seconds[record["tests"][i]] for i in set(numbers)) / total_seconds
+
+
+seen = {i for found in record["executed"].values() for i in found}
+for kind in ("opened", "listed"):
+    seen |= {i for found in (READS or {}).get(kind, {}).values() for i in found}
+unseen = set(range(len(record["tests"]))) - seen
+print(f"tests with no recorded input: {len(unseen)} files, {share(unseen):.1%} of suite time")
+if READS:
+    print(
+        f"tests that started another process: {len(READS['started'])} files, {share(READS['started']):.1%} of suite time; together with the above {share(unseen | set(READS['started'])):.1%}, selected for every change"
+    )
 
 
 def git(*args):
@@ -75,10 +93,15 @@ def git(*args):
 
 
 def fingerprint_at(commit, path):
+    """What the record compares for a file: everything when its functions ran outside any
+    test, else what runs at import."""
     try:
-        return _import_fingerprint(ast.parse(git("show", f"{commit}:{path}")))
+        tree = ast.parse(git("show", f"{commit}:{path}"))
     except (subprocess.CalledProcessError, SyntaxError, ValueError):
         return None
+    if path in record["ran_at_import"]:
+        return ast.dump(tree, include_attributes=False)
+    return _import_fingerprint(tree)
 
 
 rows = []
@@ -103,13 +126,19 @@ for line in merges:
         continue
     simulated = copy.deepcopy(record)
     body_only = 0
-    for kind, path in scoped:
+    # With reads, a file anywhere in the checkout can be an input of this suite's tests.
+    for kind, path in changes if READS else scoped:
         if path not in graph.snapshot.files:
             continue  # Deleted since; nothing to select for it at this checkout.
         if kind == "A":
             simulated["files"].pop(path, None)
             simulated["imports"].pop(path, None)
             simulated["executed"].pop(path, None)
+            simulated["unloaded"] = [known for known in simulated["unloaded"] if known != path]
+            if READS:  # Nothing can have read a file that was not there yet.
+                for readers in (simulated["reads"], *simulated["reads"].values()):
+                    if isinstance(readers, dict):
+                        readers.get("opened", {}).pop(path, None)
             continue
         simulated["files"][path] = "changed-by-this-pull-request"
         if path.endswith(".py") and path in simulated["imports"]:
@@ -121,6 +150,8 @@ for line in merges:
     executed_only = set()
     for kind, path in scoped:
         executed_only |= {record["tests"][i] for i in record["executed"].get(path, ())}
+        if READS and kind != "A":
+            executed_only |= {record["tests"][i] for i in READS["opened"].get(path, ())}
     changed_tests = {path for kind, path in scoped if path in set(record["tests"])}
     needed = executed_only | changed_tests
     rows.append(
@@ -167,7 +198,7 @@ print(
     sum(0.5 <= r["time"] < 0.995 and r["status"] != "all" for r in rows),
 )
 print(
-    "pull requests where a test that executed a changed file, or a changed test, was left out:",
+    "pull requests where a test that executed or read a changed file, or a changed test, was left out:",
     sum(r["missed"] > 0 for r in rows),
 )
 reasons = collections.Counter()

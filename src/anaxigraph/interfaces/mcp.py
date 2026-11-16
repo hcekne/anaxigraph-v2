@@ -128,7 +128,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
 
     @tool
     def tests_for_change() -> dict:
-        """Test files this checkout needs, from a recorded run of which test executed which file."""
+        """Test files this checkout needs, from a recorded run of what each test executed and read."""
         return application.tests_for_change()
 
     @tool

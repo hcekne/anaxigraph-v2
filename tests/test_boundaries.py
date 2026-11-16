@@ -61,6 +61,8 @@ def test_internal_dependencies_follow_component_contracts(path):
             "evidence",
         },
         "interfaces": {"metadata", "application", "interfaces"},
+        # Runs inside a project's own test process, where AnaxiGraph need not be installed.
+        "recorder": set(),
     }
     assert component in allowed, f"Declare a deliberate dependency contract for {current}"
     for imported in internal_imports(path):

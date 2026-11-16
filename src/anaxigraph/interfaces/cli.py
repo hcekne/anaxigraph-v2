@@ -25,6 +25,12 @@ def _test_parsers(commands: Any) -> None:
     )
     _location(command)
     command.add_argument("--paths", action="store_true", help="Print only the test file paths")
+    command.add_argument(
+        "--recorder", action="store_true", help="Print the folder of the reads recorder plugin"
+    )
+    command.add_argument(
+        "--ran", type=Path, nargs="+", help="JUnit reports of a whole-suite run at this checkout"
+    )
     command = commands.add_parser("record-tests", help="Save a record of one suite's recorded run")
     _location(command)
     command.add_argument("--coverage", type=Path, required=True, help="coverage.py data file")
@@ -32,15 +38,24 @@ def _test_parsers(commands: Any) -> None:
     command.add_argument("--scope", nargs="+", required=True, help="Folders the suite depends on")
     command.add_argument("--run-root", default=".", help="Folder the suite ran in")
     command.add_argument("--recorded-root", help="Checkout path on the recording machine")
-    command.add_argument("--junit", type=Path, help="JUnit report of the same run")
+    command.add_argument("--junit", type=Path, nargs="+", help="JUnit reports of that run")
+    command.add_argument("--reads", type=Path, help="Reads recorder report of the same run")
 
 
 def _test_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "record-tests":
         return application.record_tests(
-            args.coverage, args.suite, args.scope, args.run_root, args.recorded_root, args.junit
+            args.coverage,
+            args.suite,
+            args.scope,
+            args.run_root,
+            args.recorded_root,
+            args.junit,
+            args.reads,
         )
-    result = application.tests_for_change(full=True)
+    if args.recorder:  # For PYTHONPATH in the project's own test environment.
+        return {"_lines": [str(Path(__file__).parents[1] / "recorder")]}
+    result = application.tests_for_change(full=True, ran=args.ran)
     if args.paths:  # For a CI step: one path per line, or nothing when the answer is "all".
         selected = [suite for suite in result["suites"] if suite["status"] != "all"]
         if len(selected) == len(result["suites"]):
