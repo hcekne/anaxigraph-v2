@@ -52,6 +52,9 @@ _TARGET = os.path.abspath(os.environ.get("ANAXIGRAPH_READS", ".anaxigraph-reads.
 _SEEN: dict[str, dict[str, set[str]]] = {"opened": {}, "listed": {}, "started": {}, "loaded": {}}
 _TEST: list[str | None] = [None]
 _IMPORTS, _RUNNER = "<frozen importlib", os.sep + "_pytest" + os.sep
+# Git options that take their value as the next word, and commands that read no tracked file.
+_VALUED = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
+_REFS = {"rev-parse", "symbolic-ref", "update-ref", "for-each-ref", "show-ref"}
 
 
 def _relative(path: Any) -> str | None:
@@ -122,17 +125,41 @@ def _readers(frame: Any) -> list[str]:
     return [_TEST[0], "+" + inner] if inner not in ("", _TEST[0]) else [_TEST[0]]
 
 
+def _command(words: list[str], folder: str) -> tuple[str | None, str, list[str]]:
+    """A git command's name, the folder it works in after its own options, and the absolute
+    paths it is given, also as the value of an option."""
+    command, options = None, iter(words[1:])
+    for word in options:
+        if word in _VALUED:
+            value = next(options, "")
+            folder = os.path.join(folder, value) if word == "-C" else folder
+        elif not word.startswith("-"):
+            command = word
+            break
+    given = [word.partition("=")[2] if word.startswith("--") else word for word in words[1:]]
+    return command, folder, [word for word in given if os.path.isabs(word)]
+
+
 def _elsewhere(event: str, args: tuple) -> bool:
-    """A git command working outside the checkout cannot read it; any other process might."""
+    """A git command that cannot read the checkout's files; any other process might.
+
+    Git works on the repository it is started in unless told otherwise. It reads no file of
+    the checkout when it is given no command, when it only asks about the names of commits,
+    when it creates or copies a repository somewhere else, or when the folder it works in
+    and every path it is given lie outside.
+    """
     if event not in {"subprocess.Popen", "os.posix_spawn"} or isinstance(args[1], (str, bytes)):
         return False  # A shell command line, a fork or an exec: assume it reads the checkout.
     words = [os.fsdecode(word) for word in args[1]]
     if os.path.basename(os.fsdecode(args[0])) != "git":
         return False
     folder = os.fsdecode(args[2]) if event == "subprocess.Popen" and args[2] else os.getcwd()
-    if "-C" in words[:-1]:
-        folder = os.path.join(folder, words[words.index("-C") + 1])
-    return all(_relative(os.path.join(folder, word)) is None for word in ("", *words[1:]))
+    command, folder, given = _command(words, folder)
+    if any(_relative(word) is not None for word in given):
+        return False
+    if command is None or (command in _REFS and ":" not in "".join(words)):
+        return True
+    return (command in {"init", "clone"} and words[-1] in given) or _relative(folder) is None
 
 
 def _note(kind: str, event: str, args: tuple, frame: Any) -> None:

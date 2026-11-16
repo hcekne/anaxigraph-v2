@@ -135,7 +135,22 @@ FILES = {
         "import subprocess\n\nfrom pkg.unused import idle\n\n\ndef test_git(tmp_path):\n"
         "    subprocess.run(['git', '--version'], cwd=tmp_path, check=True, capture_output=True)\n"
         "    subprocess.run(['git', '-C', str(tmp_path), '--version'], check=True)\n"
+        # Started in the checkout, yet none of these reads a file of it.
+        "    subprocess.run(['git', '-c', 'a.b=c', 'init', '-q', str(tmp_path / 'r')], check=True)\n"
+        "    there = f'--git-dir={tmp_path}/r/.git'\n"
+        "    subprocess.run(['git', there, 'symbolic-ref', 'HEAD'], capture_output=True)\n"
+        "    subprocess.run(['git', 'rev-parse', '--git-dir'], capture_output=True)\n"
         "    assert idle() is None\n"
+    ),
+    # These two do read the checkout: its tracked files, and one named through an option.
+    "shop/tests/test_tracked.py": (
+        "import subprocess\nfrom pathlib import Path\n\nfrom pkg.text import same\n\n\n"
+        "def test_tracked(tmp_path):\n"
+        "    subprocess.run(['git', 'ls-files'], capture_output=True)\n"
+        "    assert same(1) == 1\n\n\n"
+        "def test_named(tmp_path):\n"
+        "    here = f'--git-dir={Path(__file__).parents[2]}/.git'\n"
+        "    subprocess.run(['git', here, 'log'], cwd=tmp_path, capture_output=True)\n"
     ),
     # A test file that another test file imports from.
     "shop/tests/test_shared.py": (
@@ -158,8 +173,10 @@ FILES = {
         "    assert Path(__file__).with_name('logo.bin').read_bytes().endswith(b'logo')\n"
     ),
     "shop/notes.md": "Read by a test.\n",
+    # It also warns when imported, so that pytest reads the file to print the warning's line.
     "shop/tests/test_notes.py": (
-        "from pathlib import Path\n\n\ndef test_notes():\n"
+        "import warnings\nfrom pathlib import Path\n\n"
+        "warnings.warn('soon', DeprecationWarning, stacklevel=1)\n\n\ndef test_notes():\n"
         "    assert Path(__file__).parents[1].joinpath('notes.md').read_text()\n"
     ),
     "README.md": "Shop.\n",
@@ -174,9 +191,9 @@ FILES = {
     ),
 }
 T = "shop/tests/test_{}.py".format
-TOTAL = 21  # Test files in the fixture.
+TOTAL = 22  # Test files in the fixture.
 # Selected whenever anything changed: no recorded input, and a process the record cannot see.
-ALWAYS = [T("readme"), T("tool")]
+ALWAYS = [T("readme"), T("tool"), T("tracked")]
 
 
 def chosen(*names: str) -> list[str]:
@@ -265,7 +282,7 @@ def test_a_change_inside_a_function_picks_the_tests_that_executed_the_file(check
     assert suite["status"] == "selected"
     # With them the tests whose inputs the record cannot name, as for every change.
     assert suite["test_files"] == chosen("orders")
-    assert suite["selected"] == 3 and suite["total"] == TOTAL and 0 < suite["time_share"] <= 1
+    assert suite["selected"] == 4 and suite["total"] == TOTAL and 0 < suite["time_share"] <= 1
     rules = {reason["rule"] for reason in suite["because"]}
     assert {"tests with no recorded input", "tests that started another process"} <= rules
 
@@ -342,6 +359,12 @@ def test_reads_reach_prose_and_files_outside_the_scope(checkout):
     (checkout / "shop/notes.md").write_text(FILES["shop/notes.md"])
     (checkout / "web/routes.json").write_text('["/", "/new"]\n')
     assert picked(checkout)["test_files"] == chosen("routes")
+
+
+def test_a_file_the_run_read_only_to_print_a_warning_is_not_an_input_of_every_test(checkout):
+    target = checkout / T("notes")
+    target.write_text(target.read_text() + "\n# note\n")
+    assert picked(checkout)["test_files"] == chosen("notes")
 
 
 def test_a_file_appearing_in_a_scanned_folder_picks_the_tests_that_scanned_it(checkout):

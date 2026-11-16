@@ -160,12 +160,13 @@ def _marked(
     found: dict[str, set[str]], mark: str, known: dict[str, str], runner: bool
 ) -> dict[str, list[str]]:
     """Per path, the modules among its readers that carry a mark. "" stands for a reader the
-    checkout does not hold, kept only where the test run itself counts as one."""
+    checkout does not hold, kept only where the test run itself counts as one: not for
+    Python source, which a runner reads to show a line of it and loads to depend on it."""
     result = {}
     for path, readers in found.items():
         names = {reader[1:] for reader in readers if reader.startswith(mark)}
         names = {name if name in known else "" for name in names}
-        if not runner:
+        if not runner or path.endswith(".py"):
             names.discard("")
         if names:
             result[path] = sorted(names)
