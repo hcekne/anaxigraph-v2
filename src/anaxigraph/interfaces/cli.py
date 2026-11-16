@@ -53,8 +53,6 @@ def _test_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]
             args.junit,
             args.reads,
         )
-    if args.recorder:  # For PYTHONPATH in the project's own test environment.
-        return {"_lines": [str(Path(__file__).parents[1] / "recorder")]}
     result = application.tests_for_change(full=True, ran=args.ran)
     if args.paths:  # For a CI step: one path per line, or nothing when the answer is "all".
         selected = [suite for suite in result["suites"] if suite["status"] != "all"]
@@ -265,6 +263,9 @@ def main(argv: list[str] | None = None) -> int:
     from anaxigraph.application import Application
 
     args = parser().parse_args(argv)
+    if getattr(args, "recorder", False):  # For PYTHONPATH in a project's test setup.
+        print(Path(__file__).parents[1] / "recorder")  # Needs no checkout and leaves no state.
+        return 0
     try:
         exclusions = _read_json(args.exclusions, list) if hasattr(args, "exclusions") else []
         application = Application(

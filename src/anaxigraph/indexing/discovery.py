@@ -35,7 +35,7 @@ EXCLUDED_DIRS = {
 EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".db", ".db-shm", ".db-wal"}
 MAX_INPUT_BYTES = 2_000_000
 MAX_SOURCE_PACKET_BYTES = MAX_INPUT_BYTES
-INDEX_VERSION = "facts-v7-kept-helpers"
+INDEX_VERSION = "facts-v8-binary-inputs"
 
 
 @dataclass
@@ -48,7 +48,7 @@ class SourceCache:
     """
 
     maximum_bytes: int = 32_000_000
-    entries: dict[str, tuple[tuple[int, ...], str | None, str | None, tuple[str, ...]]] = field(
+    entries: dict[str, tuple[tuple[int, ...], str, str | None, tuple[str, ...]]] = field(
         default_factory=dict
     )
     bytes_read: int = 0
@@ -290,10 +290,13 @@ def _capture_inputs(
     diagnostics: list[str],
     cache: SourceCache | None = None,
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """Fingerprint captured bytes and decode supported Python inputs from those exact bytes."""
+    """Fingerprint captured bytes and decode supported Python inputs from those exact bytes.
+
+    A binary file is fingerprinted like any other input, so that a change to it is seen, and
+    never read as text.
+    """
     files: dict[str, str] = {}
     contents: dict[str, str] = {}
-    binary_count = 0
     next_entries = {}
     cache_bytes = 0
     folders: dict[str, bool] = {}
@@ -307,12 +310,9 @@ def _capture_inputs(
         if saved is not None and signature == saved[0]:
             assert cache is not None  # A saved entry can only come from this cache.
             _, fingerprint, source, errors = saved
-            if fingerprint is None:
-                binary_count += 1
-            else:
-                files[relative] = fingerprint
-                if source is not None:
-                    contents[relative] = source
+            files[relative] = fingerprint
+            if source is not None:
+                contents[relative] = source
             diagnostics.extend(errors)
             next_entries[relative] = saved
             cache_bytes += len(source.encode()) if source is not None else 0
@@ -326,17 +326,12 @@ def _capture_inputs(
             cache.bytes_read += len(content)
             cache.files_read += 1
         suffix = Path(relative).suffix
-        if b"\0" in content[:8192] and suffix not in {".py", ".pyi"}:
-            binary_count += 1
-            if cache is not None and signature is not None:
-                next_entries[relative] = (signature, None, None, ())
-            continue
         files[relative] = hashlib.sha256(content).hexdigest()
         try:
             if suffix in {".py", ".pyi"}:
                 encoding, _ = tokenize.detect_encoding(io.BytesIO(content).readline)
                 contents[relative] = content.decode(encoding)
-            elif suffix in SCRIPT_SUFFIXES:
+            elif suffix in SCRIPT_SUFFIXES and b"\0" not in content[:8192]:
                 contents[relative] = content.decode("utf-8")
         except (UnicodeError, SyntaxError) as exc:
             diagnostics.append(f"{relative}: input could not be read ({type(exc).__name__}).")
@@ -363,8 +358,6 @@ def _capture_inputs(
                 retained[relative] = entry
                 used += size
         cache.entries = retained
-    if binary_count:
-        diagnostics.append(f"{binary_count} binary files excluded from analyzed coverage.")
     return files, contents
 
 

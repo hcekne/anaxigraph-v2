@@ -230,8 +230,11 @@ widens by itself as the record ages. A test file is selected when:
 
 The whole suite is selected, with the reason, when a changed input cannot be attributed:
 
-- a file inside the scope that nothing in the recorded run read, such as a dependency list or
-  a container file, or a file the test run itself read;
+- a file inside the scope that nothing in the recorded run read, such as a container file,
+  or a file the test run itself read;
+- a dependency list or lock file inside the scope (`requirements*.txt`, `constraints*.txt`,
+  `pyproject.toml`, `setup.py`, `setup.cfg`, `Pipfile`, `*.lock`): the suite is installed from
+  it before any test runs, so a test that reads it does not stand for what depends on it;
 - a Python file that was removed: what still imports it is not in the record;
 - a module that nothing imports and whose folder nothing scanned, when it is new, was not
   measured, or changed what it does at import. Something other than an import statement loads
@@ -249,10 +252,17 @@ under the same Python version when it saves the record and when it is asked: the
 what a file does at import comes from that version's parser, so another version treats every
 changed file as changed at import. That is safe and selects more.
 
-Run the whole suite on your main branch regardless. Four things are not seen: a test that only
-checks whether a file exists; state that one test or a session-wide fixture sets up and another
-test uses; a module-level import whose name the importing file also assigns; and a module that,
-when imported, changes what another module keeps, for the tests that only ask that other module.
+Run the whole suite on your main branch regardless. These are not seen:
+
+- a test that only checks whether a file exists;
+- state that one test or a session-wide fixture sets up and another test uses;
+- a module-level import whose name the importing file also assigns;
+- a module that, when imported, changes what another module keeps, for the tests that only ask
+  that other module;
+- a file that a build step turns into something the tests use, when a test also reads the file
+  itself;
+- a file AnaxiGraph does not read at all: one that git ignores, a database file, a file over
+  2 MB, or anything inside `dist`, `build` or `node_modules`.
 
 In CI, a nightly job on the main branch records the suite and keeps the record as an artifact
 (`.anaxigraph-v2/` is a hidden folder; artifact steps often skip those unless told otherwise).

@@ -43,6 +43,15 @@ def _prose(path: str) -> bool:
     return PurePosixPath(path).suffix.lower() in _PROSE or path.startswith("docs/")
 
 
+def _installs(path: str) -> bool:
+    """A dependency list or lock file. The suite is installed from it before any test runs,
+    so a test that happens to read it does not stand for what depends on it."""
+    name = PurePosixPath(path).name
+    listed = ("requirements" in name or "constraints" in name) and name.endswith((".txt", ".in"))
+    named = name in {"pyproject.toml", "setup.py", "setup.cfg", "Pipfile"}
+    return listed or named or name.endswith(".lock")
+
+
 def _users(graph: Graph, inside: set[str]) -> tuple[dict[str, set[str]], Any]:
     """Among the suite's files, those that link to each file, and those among them whose
     import-time code uses it.
@@ -213,6 +222,8 @@ class _Selection:
             return  # Outside the suite's folders only what a test read counts.
         if python and path not in self.files:
             self.everything.append(f"{path}: removed, and what still imports it is not recorded")
+        elif _installs(path):
+            self.everything.append(f"{path}: the suite is installed from it")
         elif path in self.known or (python and node is not None and node.data.get("is_test")):
             self.add(path, "a changed test or test helper", self._helper(path, read))
         elif _prose(path):

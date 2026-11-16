@@ -146,6 +146,17 @@ FILES = {
         "from pkg.text import same\nfrom test_shared import LIMIT\n\n\n"
         "def test_borrow():\n    assert same(LIMIT) == 5\n"
     ),
+    # A dependency list that a test checks, and a binary file that a test reads.
+    "shop/requirements.txt": "pytest\n",
+    "shop/tests/test_pins.py": (
+        "from pathlib import Path\n\n\ndef test_pins():\n"
+        "    assert 'pytest' in Path(__file__).parents[1].joinpath('requirements.txt').read_text()\n"
+    ),
+    "shop/tests/logo.bin": "\x00\x01logo",
+    "shop/tests/test_logo.py": (
+        "from pathlib import Path\n\n\ndef test_logo():\n"
+        "    assert Path(__file__).with_name('logo.bin').read_bytes().endswith(b'logo')\n"
+    ),
     "shop/notes.md": "Read by a test.\n",
     "shop/tests/test_notes.py": (
         "from pathlib import Path\n\n\ndef test_notes():\n"
@@ -163,7 +174,7 @@ FILES = {
     ),
 }
 T = "shop/tests/test_{}.py".format
-TOTAL = 19  # Test files in the fixture.
+TOTAL = 21  # Test files in the fixture.
 # Selected whenever anything changed: no recorded input, and a process the record cannot see.
 ALWAYS = [T("readme"), T("tool")]
 
@@ -380,6 +391,19 @@ def test_source_in_another_language_is_ruled_out_only_by_recorded_reads(checkout
     ]
 
 
+def test_a_dependency_list_picks_everything_though_a_test_reads_it(checkout):
+    (checkout / "shop/requirements.txt").write_text("pytest\nrequests\n")
+    suite = picked(checkout)
+    # test_pins.py read the file, but every test runs on what was installed from it.
+    assert suite["status"] == "all"
+    assert suite["everything_because"] == ["shop/requirements.txt: the suite is installed from it"]
+
+
+def test_a_binary_file_is_compared_like_any_other_input(checkout):
+    (checkout / "shop/tests/logo.bin").write_bytes(b"\x00\x02logo")
+    assert picked(checkout)["test_files"] == chosen("logo")
+
+
 def test_an_input_nothing_read_picks_everything_and_says_why(checkout):
     (checkout / "shop/pkg/rates.json").write_text('{"eur": 2.0}\n')
     suite = picked(checkout)
@@ -482,8 +506,11 @@ def test_validation_and_the_command_line_carry_the_same_answer(checkout, capsys)
     (checkout / "shop/pkg/rates.json").write_text("{}\n")
     assert cli.main(["tests", "--repo", str(checkout), "--paths"]) == 0
     assert capsys.readouterr().out.strip() == ""  # Nothing to list: the whole suite is needed.
-    assert cli.main(["tests", "--repo", str(checkout), "--recorder"]) == 0
+    bare = checkout.parent / "bare"
+    bare.mkdir()
+    assert cli.main(["tests", "--repo", str(bare), "--recorder"]) == 0
     assert (Path(capsys.readouterr().out.strip()) / "anaxigraph_reads.py").is_file()
+    assert not list(bare.iterdir())  # Asked from a test setup: it leaves nothing behind.
 
 
 def test_a_report_from_another_checkout_is_refused(run, tmp_path):
