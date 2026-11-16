@@ -77,7 +77,21 @@ implementation and verification; new small benchmark applications.
 | 3 | Done | 979 TypeScript/JavaScript files read (2,380 modules in all); all 3,864 local script imports linked, none missed; 24 asset imports and 3,519 package imports left external; 502 of 507 frontend production files have a known consumer and 332 of the 465 frontend test files link to code (the other 133 are browser specs that import none); four files have syntax the pinned grammar does not accept and are reported. With both languages: first read 19 s (was 15 s), rescan after a one-file edit 0.6 s, brief 0.29 s, new process 2.3 s, new worktree 5.6 s, peak memory 384 MB. Production size 14,585 lines |
 | 4 | Done | A family now needs classes that share a base class or protocol: the target has one closed family (28 model modules on one base class) where the old rule found 38, of which one had an interface. Its finding is advice under `architecture.advisory`; only reviewed proposals ask for a decision, and deferring needs no extra field. Agents are offered 15 tools instead of 20 (8,287 bytes of names, descriptions and schemas instead of 9,604); the other five stay in the CLI and dashboard. Reviews were unscheduled in step 0. Production size 14,584 lines |
 | 5 | Done, with one part left in place | `record-tests`, `tests` and the `tests_for_change` tool. On the target's backend suite (632 test files, one recorded run) and its 70 most recent fix/feature pull requests that touch that scope: no pull request left out a test file that executed a changed file or a changed test; 39 are selected and run a median 10% of suite time (75th percentile 30%); 31 select the whole suite, 18 because a JSON data file changed, 11 because a migration was added that the recording did not measure, 2 for another unattributable input. Over all 70 the median is 65% and the mean 57% of suite time. A rule without the import-time and unattributable-input broadening would pick a median 13% and could miss tests. The declared-input planner left the product for `experiments/declared_ci/`: no tool, command, route or dashboard form offers it, and the drift qualification passes against its new home. The supplied-evidence audit (`analysis/ci_obligations.py`) and the evidence gate in `validate_change` stay because the feature-drift runner requires them from the installed runtime; they are inert unless a checkout carries `ci.json` or a policy file. Production size 14,309 lines |
-| 6 to 7 | Not started | |
+| 6 | Measured; nothing shipped | 77 pull requests replayed at their parent commit (13 Python only, 30 TypeScript/JavaScript only, 34 both; a median of six production files really changed). A really changed file is in the top three suggestions for 41, against 43 for plain keyword search (BM25); in the top one for 27 against 21. Reading TypeScript raised the product from 26. Adding files that changed together in history gave 48, with 13 pull requests better and 8 worse than keyword search (sign test p = 0.38), and 23 against 19 on the half it was not tuned on; boosting import neighbours gave 41. By the rule above no signal ships on this evidence. On TypeScript-only pull requests the product is behind keyword search, 14 against 18. Ranking a brief takes 0.17 s |
+| 7 | Not started | Needs a budget decision |
+
+## What is still open
+
+- A mutation probe of test selection on the target: do the selected tests catch a planted fault
+  that the whole suite catches?
+- Attribution for data files and dynamically loaded modules, which select the whole suite today
+  (29 of the 31 whole-suite selections). It needs either a recording that also measures those
+  modules, or a recorded list of which module read which file.
+- The supplied-evidence audit and gate (`analysis/ci_obligations.py`, about 300 lines, and the
+  gate in `application/delivery.py`) serve only the feature-drift runner and should move to it.
+- Wiring into the target repository: an MCP entry, an ignore rule for `.anaxigraph-v2/`, and a
+  nightly job that records the suite. These are changes to that repository and its CI cost.
+- A release: these changes are on `main` only.
 
 ## Evidence for step 5
 
