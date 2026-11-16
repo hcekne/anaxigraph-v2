@@ -286,8 +286,10 @@ def test_ci_plan_transports_preserve_declared_changes_and_runtime_inputs(tmp_pat
 
     async def exercise():
         server = create_mcp(application)
-        result = await server.call_tool("ci_plan", expected["options"])
-        assert json.loads(result[0].text) == expected
+        # Agents are offered the recorded-run answer; the declared plan stays with CLI and HTTP.
+        assert "ci_plan" not in {tool.name for tool in await server.list_tools()}
+        picked = await server.call_tool("tests_for_change", {})
+        assert json.loads(picked[0].text)["operation"] == "tests_for_change"
         delivery = await server.call_tool("analysis_request", {"kind": "delivery"})
         assert json.loads(delivery[0].text)["args"] == ["delivery", None]
         started = await server.call_tool("workflow_start", {"kind": "ci"})

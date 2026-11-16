@@ -42,8 +42,9 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
             "adopt, defer or reject each material proposal with a reason. Dispositions do not prove implementation. "
             "Run complete model workflows using workflow_start; inspect progress with workflow_status. "
             "Pattern workflows include boundary, standalone-package and independent-verification scouts. "
-            "They also review CI/CD configuration. Use ci for pipeline review without semantic mapping; "
-            "ci_plan selects declared checks for an explicit change, not from heuristic impact links. "
+            "They also review CI/CD configuration. Use ci for pipeline review without semantic mapping. "
+            "tests_for_change names the test files a recorded run says this checkout needs, and "
+            "the whole suite when it cannot tell. "
             "Use architecture for those searches alone; assess_plan records explicit proposal decisions. "
             "Explicit request/submit packets remain available for independent agents. "
             "Fresh Eyes packets are implementation-blind; do not add source context to that task."
@@ -125,7 +126,6 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
             require_ci_evidence=require_ci_evidence,
         )
 
-    @tool
     def ci_plan(
         base_ref: str | None = None,
         base_snapshot_id: str | None = None,
@@ -141,6 +141,13 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
             cadence=cadence,
             runtime_context=runtime_context,
         )
+
+    tool(ci_plan, agents=False)
+
+    @tool
+    def tests_for_change() -> dict:
+        """Test files this checkout needs, from a recorded run of which test executed which file."""
+        return application.tests_for_change()
 
     @tool
     def analysis_request(

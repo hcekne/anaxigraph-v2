@@ -25,7 +25,7 @@ from anaxigraph.analysis.patterns import production_modules
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
 from anaxigraph.analysis.retrieval import rank_owners
 from anaxigraph.application import architecture as component_architecture
-from anaxigraph.application import delivery, records
+from anaxigraph.application import delivery, records, selection
 from anaxigraph.application import reviews as review_operations
 from anaxigraph.application.context import (
     _bounds,
@@ -487,7 +487,6 @@ class Application:
             if architecture["status"] in {"decision_required", "scope_incomplete"}
             else "advisory",
             "architecture": architecture,
-            "proposed_ci_plan": delivery.advisory(self, changed_paths=files),
             "scope": "Placement and lexical reuse evidence; behavioral plan correctness is unresolved.",
         }
 
@@ -538,11 +537,7 @@ class Application:
             set(changed_paths(graph, previous)),
             previous.snapshot.revision if previous else None,
         )
-        result["ci_plan"] = delivery.advisory(
-            self,
-            base_snapshot_id=selected,
-            runtime_context=runtime_context,
-        )
+        result["tests"] = selection.tests_for_change(self)
         self.evidence.outcome(
             result["validation_status"],
             graph.snapshot.id,
@@ -558,6 +553,8 @@ class Application:
         return self.evidence.export()
 
     ci_plan = delivery.plan
+    record_tests = selection.record_tests
+    tests_for_change = selection.tests_for_change
     analysis_request = review_operations.analysis_request
     submit_analysis = review_operations.submit_analysis
     reviews = review_operations.reviews

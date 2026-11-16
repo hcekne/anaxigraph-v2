@@ -239,6 +239,7 @@ def parse_module(
         _populate(module, data, tree)
         _References(module).visit(tree)
         module.seal()
+        data["import_fingerprint"] = _import_fingerprint(tree)
     except (SyntaxError, ValueError, RecursionError) as exc:
         data["parse_status"] = "error"
         return (
@@ -247,6 +248,26 @@ def parse_module(
             f"{path}: {type(exc).__name__}: {exc}",
         )
     return module, Node(module_id(path), "module", name, path, 1, data), None
+
+
+def _outlives_its_call(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """A cached result or a module-level value set here is seen by callers that never run this."""
+    cached = any("cache" in ast.dump(item).lower() for item in node.decorator_list)
+    return cached or any(isinstance(item, (ast.Global, ast.Nonlocal)) for item in ast.walk(node))
+
+
+def _import_fingerprint(tree: ast.Module) -> str:
+    """Identity of what a test can depend on without running it: all that runs at import, and
+    the bodies of functions whose effect outlives the call (cached, or setting shared state).
+
+    While it is unchanged, an edit can only be observed by running the edited functions.
+    Other bodies are removed from the tree to compute it, so this is the tree's last use.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if not _outlives_its_call(node):
+                node.body = []
+    return hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
 
 
 def _populate(module: Module, data: dict, tree: ast.Module) -> None:

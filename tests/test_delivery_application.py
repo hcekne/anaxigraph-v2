@@ -153,9 +153,8 @@ def test_ci_comparison_requires_a_pin_and_does_not_drift_after_repeated_scans(ap
         application.ci_plan()
     unpinned = application.validate_change()
     assert unpinned["baseline_basis"] == "previous-scan"
-    assert unpinned["ci_plan"]["status"] == "selection_review_required"
-    assert unpinned["ci_plan"]["comparison"]["base_snapshot_id"] == unpinned["baseline_id"]
-    assert not unpinned["ci_plan"]["execution_ready"]
+    # Validation answers from recorded test runs, not from the declared planner.
+    assert "ci_plan" not in unpinned and unpinned["tests"]["status"] == "no_record"
     baseline = application.prepare_change("change payment calculation")["baseline_id"]
     path.write_text(path.read_text().replace("+ 2", "+ 3"))
     application.scan()
@@ -172,17 +171,15 @@ def test_ci_comparison_requires_a_pin_and_does_not_drift_after_repeated_scans(ap
     assert explicit["comparison"]["basis"] == "explicit-snapshot"
 
 
-def test_agent_plan_and_validation_receive_actionable_ci_scope_before_and_after_edit(application):
+def test_the_declared_plan_is_available_on_request_but_not_pushed_into_agent_replies(application):
     proposed = application.assess_plan("improve payment calculation", ["payments/charge.py"])
-    assert selected(proposed["proposed_ci_plan"]) == {"payments", "contracts"}
-    assert not proposed["proposed_ci_plan"]["checks_executed"]
+    assert "proposed_ci_plan" not in proposed
     baseline = proposed["baseline_id"]
     write(application.root, "payments/charge.py", "def calculate(amount):\n    return amount + 2\n")
-    application.scan()
-    validated = application.validate_change()
-    assert selected(validated["ci_plan"]) == {"payments", "contracts"}
-    assert validated["ci_plan"]["comparison"]["base_snapshot_id"] == baseline
-    assert not validated["ci_plan"]["checks_executed"]
+    planned = application.ci_plan()
+    assert selected(planned) == {"payments", "contracts"}
+    assert planned["comparison"]["base_snapshot_id"] == baseline
+    assert not planned["checks_executed"]
 
 
 def test_task_brief_includes_specific_saved_ci_advice_without_a_ci_keyword(application):

@@ -189,7 +189,11 @@ which module names its answers depended on. An edit therefore reads one file and
 only the files that could answer differently: none for a change inside a function, the
 importers for a changed surface, the files that asked for a name when a module appears or goes.
 Agent-facing calls refresh the map this way before answering, so a changed checkout is read,
-not refused. A result computed for an earlier snapshot, such as a model analysis, is still
+not refused. `tests_for_change` compares the checkout with a test record, a project-produced
+recording of which test executed which file, and names the test files that are needed: those
+that executed a changed file, those of its importers when its import-time code changed, changed
+tests and the users of changed helpers, and the whole suite when a changed input cannot be
+attributed. The service still runs no project code. A result computed for an earlier snapshot, such as a model analysis, is still
 refused rather than saved for a different one.
 Static resolution is incomplete for dynamic dispatch and frameworks; missing edges do not prove
 dead code. No project code or project tests are executed by the service. Check results are

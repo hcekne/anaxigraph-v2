@@ -19,6 +19,36 @@ def _location(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(f"--{name}", type=Path, default=argparse.SUPPRESS, help=description)
 
 
+def _test_parsers(commands: Any) -> None:
+    command = commands.add_parser(
+        "tests", help="Test files this checkout needs, per recorded suite"
+    )
+    _location(command)
+    command.add_argument("--paths", action="store_true", help="Print only the test file paths")
+    command = commands.add_parser("record-tests", help="Save a record of one suite's recorded run")
+    _location(command)
+    command.add_argument("--coverage", type=Path, required=True, help="coverage.py data file")
+    command.add_argument("--suite", required=True, help="Name of the suite, such as backend")
+    command.add_argument("--scope", nargs="+", required=True, help="Folders the suite depends on")
+    command.add_argument("--run-root", default=".", help="Folder the suite ran in")
+    command.add_argument("--recorded-root", help="Checkout path on the recording machine")
+    command.add_argument("--junit", type=Path, help="JUnit report of the same run")
+
+
+def _test_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
+    if args.command == "record-tests":
+        return application.record_tests(
+            args.coverage, args.suite, args.scope, args.run_root, args.recorded_root, args.junit
+        )
+    result = application.tests_for_change(full=True)
+    if args.paths:  # For a CI step: one path per line, or nothing when the answer is "all".
+        selected = [suite for suite in result["suites"] if suite["status"] != "all"]
+        if len(selected) == len(result["suites"]):
+            return {"_lines": [path for suite in selected for path in suite["test_files"]]}
+        return {"_lines": []}
+    return result
+
+
 def _ci_plan_parser(commands: Any) -> None:
     command = commands.add_parser(
         "ci-plan", help="Preview affected checks from declared task inputs and an explicit change"
@@ -43,6 +73,7 @@ def parser() -> argparse.ArgumentParser:
     _location(result)
     commands = result.add_subparsers(dest="command", required=True)
     _ci_plan_parser(commands)
+    _test_parsers(commands)
     for name, help_text in (
         ("scan", "Build or refresh the structural map"),
         ("status", "Show checkout identity and analysis readiness"),
@@ -210,6 +241,8 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
         )
     if args.command in {"validate", "ci-plan"}:
         return _check_dispatch(application, args)
+    if args.command in {"tests", "record-tests"}:
+        return _test_dispatch(application, args)
     if args.command == "request":
         options = {
             key: getattr(args, key)
@@ -274,7 +307,9 @@ def main(argv: list[str] | None = None) -> int:
             create_mcp(application).run(transport="stdio")
         else:
             result = dispatch(application, args)
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            lines = result.get("_lines")
+            shown = json.dumps(result, ensure_ascii=False, indent=2)
+            print("\n".join(lines) if lines is not None else shown)
             if args.command == "validate" and (
                 result.get("ci_selection", {}).get("required")
                 or result.get("validation_status") == "blocked"

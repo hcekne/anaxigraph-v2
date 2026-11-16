@@ -205,6 +205,7 @@ def _api_routes(server, application, operations):
     server.get("/api/modules")(operations["modules"])
     server.get("/api/entity")(operations["inspect"])
     server.get("/api/reviews")(operations["reviews"])
+    server.get("/api/tests")(operations["tests_for_change"])
     server.get("/api/workflows")(operations["workflow_status"])
     server.get("/api/evidence")(operations["trial_evidence"])
     server.post("/api/workflows/{run_id}/resume")(operations["workflow_resume"])

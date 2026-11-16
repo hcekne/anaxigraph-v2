@@ -189,7 +189,7 @@ def test_mcp_tools_dispatch_the_same_arguments() -> None:
             "prepare_change",
             "assess_plan",
             "validate_change",
-            "ci_plan",
+            "tests_for_change",
             "analysis_request",
             "submit_analysis",
             "reviews",

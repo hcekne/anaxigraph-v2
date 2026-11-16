@@ -174,10 +174,47 @@ Use AnaxiGraph for substantial code changes:
 Reviews are a team decision. You can ask an agent to conduct a review and implement selected
 improvements in one task. It should inspect source, test the change and report the actual result.
 
+## Tests for a change
+
+AnaxiGraph can say which test files a checkout needs, from a record of which test executed which
+file. Your project produces the recording by running its own suite; AnaxiGraph never runs tests.
+
+Record on your main branch, for example nightly, with one coverage context per test, then save
+the record at that same checkout:
+
+```bash
+cd backend && python -m pytest tests --cov=app --cov-context=test --cov-report= \
+  --junitxml=junit.xml
+anaxigraph record-tests --coverage backend/.coverage --junit backend/junit.xml \
+  --suite backend --scope backend/ --run-root backend
+```
+
+`--scope` names the folders the suite depends on, and `--run-root` the folder it ran in. The
+record lands in `.anaxigraph-v2/test-records/`; carry it between machines as a CI artifact.
+A worktree without one uses the record of the worktree that recorded most recently.
+
+Ask with the `tests_for_change` tool, or in CI with `anaxigraph tests --paths`, which prints one
+test file per line and nothing when the whole suite is needed. The record is compared with the
+checkout itself, so everything that differs from the recorded run counts and the selection
+widens by itself as the record ages. A test file is selected when:
+
+- a recorded test in it executed a changed source file;
+- a changed file's import-time code changed (module-level values, signatures, class bodies,
+  cached functions and functions that set shared state) and the test executed a module that
+  imports it, since executed lines cannot show a test that only reads such a value;
+- it changed itself, a helper it imports changed, or a `conftest.py` above it changed;
+- it executed no recorded source at all, whenever anything may have changed.
+
+The whole suite is selected, with the reason, when a changed input cannot be attributed: a data
+or configuration file inside the scope, or a new or import-changed module that nothing imports.
+Prose and files outside the scope select nothing. Run the whole suite on your main branch
+regardless: a test that depends on a file without executing or importing it is not seen.
+
 ## CI/CD and portable records
 
-The CI/CD review reads pipeline declarations and proposes improvements. To use deterministic
-selection, author `anaxigraph/ci-policy.json` and connect its `ci-plan` output to your runner.
+The CI/CD review reads pipeline declarations and proposes improvements. The earlier declared-input
+planner remains in the CLI (`ci-plan`) for projects that authored `anaxigraph/ci-policy.json`;
+agents are offered `tests_for_change` instead.
 The [policy reference](change-request-ci-delivery.md#declare-accepted-tasks) explains task inputs,
 ordering, consumed outputs, fallbacks, cache keys and release/scheduled checks.
 
