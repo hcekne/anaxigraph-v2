@@ -252,6 +252,8 @@ def _unseen(selection: _Selection, tests: list[str]) -> None:
     )
     started = selection.numbered(reads.get("started", ()))
     selection.add("(anything)", "tests that started another process", started)
+    if reads.get("unattributed_processes"):
+        selection.everything.append("A process started outside an attributable test")
 
 
 def _changed(record: dict[str, Any], graph: Graph) -> list[str]:

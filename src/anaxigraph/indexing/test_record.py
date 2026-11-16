@@ -61,13 +61,13 @@ def _executions(
     return files, contexts, pairs, lines
 
 
-def junit_files(
+def junit_cases(
     reports: list[Path], run_root: str, known: dict[str, str]
-) -> tuple[dict[str, float], set[str]]:
-    """Seconds per test file and the test files with a failure, from JUnit reports; tests
+) -> tuple[dict[str, float], dict[str, set[str]]]:
+    """Seconds per file and failed testcase identities, from JUnit reports; tests
     that touch no source are known this way too."""
     seconds: dict[str, float] = {}
-    failed: set[str] = set()
+    failed: dict[str, set[str]] = {}
     for report in reports:
         for case in ElementTree.parse(report).getroot().iter("testcase"):
             parts = (case.get("classname") or "").split(".")
@@ -76,9 +76,17 @@ def junit_files(
                 if path in known:
                     seconds[path] = seconds.get(path, 0.0) + float(case.get("time") or 0)
                     if case.find("failure") is not None or case.find("error") is not None:
-                        failed.add(path)
+                        identity = f"{case.get('classname')}::{case.get('name')}"
+                        failed.setdefault(path, set()).add(identity)
                     break
     return seconds, failed
+
+
+def junit_files(
+    reports: list[Path], run_root: str, known: dict[str, str]
+) -> tuple[dict[str, float], set[str]]:
+    seconds, failed = junit_cases(reports, run_root, known)
+    return seconds, set(failed)
 
 
 def _executed(
@@ -193,6 +201,7 @@ def _attributed(
         result["through"][kind] = _marked(reads[kind], "+", known, False)
     started = reads["started"].get("", set())
     result["started"] = sorted(position[reader] for reader in started & position.keys())
+    result["unattributed_processes"] = sorted(started - position.keys())
     return result
 
 
@@ -269,7 +278,7 @@ def record_from_coverage(
     prefix = (recorded_root or graph.snapshot.root).rstrip("/") + "/"
     folders = tuple(item.rstrip("/") + "/" for item in scope)
     executed, loaded, measured = _executed(database, known, prefix, folders, run_root)
-    seconds, failed = junit_files(junit or [], run_root, known)
+    seconds, failed = junit_cases(junit or [], run_root, known)
     read = _reads(reads, known) if reads else None
     idle = _unloaded(Path(graph.snapshot.root), folders, known, set(loaded), measured, read)
     tests = _test_files(seconds, executed, read or {}, known)
@@ -290,6 +299,7 @@ def record_from_coverage(
         "tests": tests,
         "seconds": [round(seconds.get(test, 0.0), 3) for test in tests],
         "failed": sorted(position[test] for test in failed),  # Already failing when recorded.
+        "failed_cases": {path: sorted(cases) for path, cases in failed.items()},
         "executed": {path: sorted(map(position.__getitem__, by)) for path, by in executed.items()},
         "reads": _attributed(read, position, known) if read else None,
     }

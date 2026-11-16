@@ -609,3 +609,45 @@ def test_a_whole_suite_run_shows_what_the_selection_would_have_left_out(checkout
         "caught": 1,
         "missed": [T("taxes")],
     }
+
+
+@pytest.mark.parametrize("reader", ["@", "@shop/pkg/regions.py", "+shop/pkg/labels.py"])
+def test_unattributed_processes_survive_recording_and_force_the_whole_suite(run, tmp_path, reader):
+    import json
+
+    root = Path(shutil.copytree(run, tmp_path / "checkout"))
+    reports = Path(
+        shutil.copytree(run.parent, tmp_path / "reports", ignore=lambda *_: ["checkout"])
+    )
+    path = reports / "reads.json"
+    report = json.loads(path.read_text())
+    report["started"].setdefault("", []).append(reader)
+    path.write_text(json.dumps(report))
+    record(root, run, reads=True, reports=reports)
+    (root / "shop/pkg/orders.py").write_text("def place(items):\n    return {'total': 0}\n")
+    suite = picked(root)
+    assert suite["status"] == "all"
+    assert "A process started outside an attributable test" in suite["everything_because"]
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_an_existing_failure_does_not_hide_another_failure_in_the_same_file(checkout, legacy):
+    import json
+
+    path = checkout / ".anaxigraph-v2/test-records/shop.json"
+    saved = json.loads(path.read_text())
+    saved["failed"] = [saved["tests"].index(T("taxes"))]
+    saved["failed_cases"] = {T("taxes"): ["tests.test_taxes::already_broken"]}
+    if legacy:
+        saved.pop("failed_cases")
+    path.write_text(json.dumps(saved))
+    report = checkout.parent / "ran.xml"
+    report.write_text(
+        '<testsuite><testcase classname="tests.test_taxes" name="already_broken">'
+        '<failure/></testcase><testcase classname="tests.test_taxes" name="newly_broken">'
+        "<failure/></testcase></testsuite>"
+    )
+    (checkout / "shop/pkg/orders.py").write_text("def place(items):\n    return {'total': 0}\n")
+    [suite] = Application(checkout).tests_for_change(ran=[report])["suites"]
+    assert suite["shadow"]["missed"] == [T("taxes")]
+    assert suite["shadow"]["failing_when_recorded"] == (0 if legacy else 1)

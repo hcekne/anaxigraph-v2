@@ -9,7 +9,7 @@ from typing import Any
 
 from anaxigraph.analysis.test_selection import select_tests
 from anaxigraph.indexing import worktrees
-from anaxigraph.indexing.test_record import FORMAT, junit_files, record_from_coverage
+from anaxigraph.indexing.test_record import FORMAT, junit_cases, record_from_coverage
 
 _FOLDER = Path(".anaxigraph-v2") / "test-records"
 _SHOWN = 200
@@ -74,13 +74,16 @@ def _records(app: Any) -> list[dict[str, Any]]:
 
 def _shadow(record: dict[str, Any], picked: dict[str, Any], graph: Any, ran: list[Path]) -> dict:
     """Would the selection have caught what a whole-suite run of this checkout caught?"""
-    failing = junit_files(ran, record["run_root"], graph.snapshot.files)[1]
-    before = {record["tests"][index] for index in record["failed"]}
-    left_out = failing - before - set(picked["test_files"])
+    failing = junit_cases(ran, record["run_root"], graph.snapshot.files)[1]
+    before = record.get("failed_cases", {})
+    new = {path for path, cases in failing.items() if cases - set(before.get(path, []))}
+    left_out = new - set(picked["test_files"])
     return {
         "failing_test_files": len(failing),
-        "failing_when_recorded": len(failing & before),
-        "caught": len(failing - before) - len(left_out) if picked["status"] != "all" else None,
+        "failing_when_recorded": sum(
+            bool(cases & set(before.get(path, []))) for path, cases in failing.items()
+        ),
+        "caught": len(new) - len(left_out) if picked["status"] != "all" else None,
         "missed": sorted(left_out) if picked["status"] != "all" else [],
     }
 
