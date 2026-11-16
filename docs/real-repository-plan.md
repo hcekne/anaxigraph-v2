@@ -76,7 +76,7 @@ implementation and verification; new small benchmark applications.
 | 2 | Done | Same graph, edge for edge. Rescan after a one-file edit 0.6 s (was 21 to 31 s); a brief 0.23 s (was 5 s); after a Markdown-only change 0.3 to 0.7 s (was 18.6 s; the target of no cost is not met, a new snapshot is still recorded); a new process on a mapped checkout 2.1 s (was 13.7 s), 3.9 s when it meets an edit nobody scanned; a new worktree 5.1 s; first read 15 s (was 59 s); peak memory 309 MB (was 1,049 MB); no call refused for a changed checkout (was 2 of 2). Production size 14,190 lines |
 | 3 | Done | 979 TypeScript/JavaScript files read (2,380 modules in all); all 3,864 local script imports linked, none missed; 24 asset imports and 3,519 package imports left external; 502 of 507 frontend production files have a known consumer and 332 of the 465 frontend test files link to code (the other 133 are browser specs that import none); four files have syntax the pinned grammar does not accept and are reported. With both languages: first read 19 s (was 15 s), rescan after a one-file edit 0.6 s, brief 0.29 s, new process 2.3 s, new worktree 5.6 s, peak memory 384 MB. Production size 14,585 lines |
 | 4 | Done | A family now needs classes that share a base class or protocol: the target has one closed family (28 model modules on one base class) where the old rule found 38, of which one had an interface. Its finding is advice under `architecture.advisory`; only reviewed proposals ask for a decision, and deferring needs no extra field. Agents are offered 15 tools instead of 20 (8,287 bytes of names, descriptions and schemas instead of 9,604); the other five stay in the CLI and dashboard. Reviews were unscheduled in step 0. Production size 14,584 lines |
-| 5 | Done; one limit measured | `record-tests`, `tests`, `tests --ran`, the `tests_for_change` tool, and a reads recorder that runs in the project's own test process. From one recorded run of the target's backend suite (632 test files, 6,615 tests) and its 70 most recent fix/feature pull requests that touch that scope: no pull request left out a test file that executed or read a changed file or a changed test, and 2 select the whole suite where 31 did before the recorder. Three faults planted one at a time, the whole suite run for each: every newly failing test file was inside the selection (18, 1 and 61 files). The limit: 86 test files start another process that could read the checkout, they are 39% of suite time and run for every change, so the median pull request runs 69% of suite time (mean 72%). The declared-input planner left the product for `experiments/declared_ci/`; the supplied-evidence audit and gate stay, see below. Production size 14,924 lines |
+| 5 | Done; one limit measured | `record-tests`, `tests`, `tests --ran`, the `tests_for_change` tool, and a reads recorder that runs in the project's own test process. From one recorded run of the target's backend suite (632 test files, 6,615 tests) and its 70 most recent fix/feature pull requests that touch that scope: no pull request left out a test file that executed or read a changed file or a changed test, and 2 select the whole suite where 31 did before the recorder. Eight faults planted one at a time, the whole suite run for each: every newly failing test file was inside the selection (18, 1, 61, 8, 46, 1, 1 and 33 files; the fifth, a changed migration, selects the whole suite). The limit: 86 test files start another process that could read the checkout, they are 39% of suite time and run for every change, so the median pull request runs 69% of suite time (mean 72%). The declared-input planner left the product for `experiments/declared_ci/`; the supplied-evidence audit and gate stay, see below. Production size 14,924 lines |
 | 6 | Measured; nothing shipped | 77 pull requests replayed at their parent commit (13 Python only, 30 TypeScript/JavaScript only, 34 both; a median of six production files really changed). A really changed file is in the top three suggestions for 41, against 43 for plain keyword search (BM25); in the top one for 27 against 21. Reading TypeScript raised the product from 26. Adding files that changed together in history gave 48, with 13 pull requests better and 8 worse than keyword search (sign test p = 0.38), and 23 against 19 on the half it was not tuned on; boosting import neighbours gave 41. By the rule above no signal ships on this evidence. On TypeScript-only pull requests the product is behind keyword search, 14 against 18. Ranking a brief takes 0.17 s |
 | 7 | Not started | Needs a budget decision |
 
@@ -90,10 +90,10 @@ implementation and verification; new small benchmark applications.
 - A recorded run with the git rule as it is now. The rule was widened after the run above
   (a repository created or copied elsewhere, a question about commit names, no command) and
   tightened (a path given as the value of an option), so the 39% is from before that.
-- Seven more planted faults whose whole-suite runs were still going when this was written: a
-  new and a changed migration, data read while a module is imported, a module-level value, a
-  class attribute in a module no test executed, a cached function and a widely used function.
-  `anaxigraph tests --ran` on their JUnit reports gives the result.
+- Two more planted faults whose whole-suite runs were still going when this was written: a
+  class attribute in a module no test executed (270 test files selected, 82% of suite time)
+  and a function whose result is kept (196, 52%). `anaxigraph tests --ran` on their JUnit
+  reports gives the result.
 - A module that is loaded by path is not attributed to the tests that loaded it. A changed
   migration therefore selects the whole suite; a new one selects the tests that scanned its
   folder.
@@ -145,6 +145,13 @@ process (39.0%) and 23 with no recorded input (1.8%).
 | A function body returns the opposite | 158 of 632 | 50% | 18 | 0 |
 | A function that runs when its module is imported skips a registration | 208 | 52% | 1 | 0 |
 | A value in a JSON file that the application reads once and keeps | 166 | 50% | 61 | 0 |
+| A new migration that cannot be applied, in a folder that is scanned for them | 158 | 64% | 8 | 0 |
+| An existing migration raises when it is applied | 632 | 100% | 46 | 0 |
+| A value in a JSON file that a module reads when it is imported | 277 | 59% | 1 | 0 |
+| An entry of a table that is built when its module is imported | 247 | 63% | 1 | 0 |
+| A function that 150 test files execute returns the opposite | 215 | 55% | 33 | 0 |
 
 Each fault was planted alone and the whole suite run. Without the reads the third selects the
-whole suite. The rules of 15 November also caught the first two.
+whole suite. The rules of 15 November also caught the first two. The changed migration selects
+the whole suite because a migration is loaded by path and nothing imports it; all 46 newly
+failing test files are among the 56 that executed it when recorded.
