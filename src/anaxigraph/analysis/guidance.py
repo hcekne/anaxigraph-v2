@@ -26,15 +26,15 @@ def module_for(graph: Graph, value: str) -> Node | None:
     )
 
 
-def _module_edges(
-    graph: Graph, entity: Node, outgoing: list[dict[str, Any]]
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _module_edges(graph: Graph, entity: Node) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Roll up observed cross-file references, retaining each original witness."""
     owners = {n.id: n.path for n in graph.nodes}
     modules = {n.path: n.id for n in graph.nodes if n.kind == "module"}
-    projected = {}
+    projected, local = {}, []
     for edge in graph.edges:
         source, target = owners.get(edge.source), owners.get(edge.target)
+        if edge.source == entity.id and (target not in modules or target == entity.path):
+            local.append(asdict(edge))
         if source == target or source not in modules or target not in modules:
             continue
         if entity.path not in {source, target}:
@@ -50,11 +50,6 @@ def _module_edges(
             }
         projected[key]["observations"] += 1
     incoming = [e for e in projected.values() if e["target"] == entity.id]
-    local = [
-        e
-        for e in outgoing
-        if owners.get(e["target"]) not in modules or owners.get(e["target"]) == entity.path
-    ]
     outgoing = [e for e in projected.values() if e["source"] == entity.id] + local
     return incoming, outgoing
 
@@ -72,10 +67,10 @@ def _compact_node(node: Node) -> dict[str, Any]:
 
 
 def _entity_relations(graph: Graph, entity: Node) -> tuple[list[dict], list[dict]]:
+    if entity.kind == "module":
+        return _module_edges(graph, entity)
     incoming = [asdict(e) for e in graph.edges if e.target == entity.id and e.kind != "contains"]
     outgoing = [asdict(e) for e in graph.edges if e.source == entity.id]
-    if entity.kind == "module":
-        return _module_edges(graph, entity, outgoing)
     return incoming, outgoing
 
 

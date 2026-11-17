@@ -1,0 +1,106 @@
+{
+  "date": "2026-11-17",
+  "before_commit": "b4d4b82ebdb295ce387473640b48ee2228eed0f6",
+  "runtime_before": "640ff9c464f0fec0347e724103c9630cbc1f7f1dd3157811c941b57b116e7bcb",
+  "runtime_after": "632c5d24c667fa97c77f14c37c5d9c9877647bdbed8c4a72bc980e7b926b76e9",
+  "harness_digest": "2817fc517e538e858998963f60f8e084238d93c3156138b3a7de8c03983741f7",
+  "scope": "Actual local APIs on separate knowledge copies, identical subject source, no target source writes or model calls",
+  "snapshots": {
+    "source_drift_cases": 8,
+    "transports": [
+      "python",
+      "http",
+      "mcp",
+      "cli"
+    ],
+    "concurrent_scan": [
+      false,
+      true
+    ],
+    "before": "All eight intervening source edits incorrectly left completion_allowed=true",
+    "after": "Captured review and test selection remain together; completion is unqualified when final input identity differs",
+    "recorded_consumer_cases": 2,
+    "original_task_baseline_preserved": true
+  },
+  "query_cases": {
+    "annotated_small_checkout": {
+      "modules": 13,
+      "annotations": {
+        "current": 11,
+        "stale": 1,
+        "missing": 1
+      },
+      "all_existing_reply_fields_preserved": true,
+      "new_validation_field": "checkout_current=true",
+      "median_ms": {
+        "prepare": {
+          "before": 28.12,
+          "after": 15.42
+        },
+        "inspect": {
+          "before": 27.48,
+          "after": 14.18
+        },
+        "validate": {
+          "before": 35.56,
+          "after": 22.53
+        }
+      },
+      "validation_profile_calls": {
+        "pinned-before": {
+          "full_module_fact_copies": 26,
+          "baseline_loads": 1,
+          "full_index_scans": 2,
+          "raw_relation_builds": 1
+        },
+        "after": {
+          "full_module_fact_copies": 0,
+          "baseline_loads": 0,
+          "full_index_scans": 1,
+          "raw_relation_builds": 0
+        }
+      }
+    },
+    "large_structural_checkout": {
+      "modules": 2380,
+      "annotations": {
+        "current": 0,
+        "stale": 0,
+        "missing": 2380
+      },
+      "all_existing_reply_fields_preserved": true,
+      "new_validation_field": "checkout_current=true",
+      "median_ms": {
+        "prepare": {
+          "before": 269.24,
+          "after": 238.32
+        },
+        "inspect": {
+          "before": 393.3,
+          "after": 300.44
+        },
+        "validate": {
+          "before": 726.92,
+          "after": 159.15
+        }
+      },
+      "validation_profile_calls": {
+        "pinned-before": {
+          "full_module_fact_copies": 4760,
+          "baseline_loads": 1,
+          "full_index_scans": 2,
+          "raw_relation_builds": 1
+        },
+        "after": {
+          "full_module_fact_copies": 0,
+          "baseline_loads": 0,
+          "full_index_scans": 1,
+          "raw_relation_builds": 0
+        }
+      }
+    }
+  },
+  "production_physical_lines": 14999,
+  "model_calls": 0,
+  "limits": "Three serial samples per API on a shared machine, not a controlled latency guarantee. Validation timings compare an unchanged candidate with its identical pinned baseline. No changed-baseline, model-latency, owner-accuracy or architecture-quality gain is established; preparation ranking is unchanged."
+}

@@ -270,6 +270,34 @@ def picked(root: Path) -> dict:
     return suite
 
 
+@pytest.mark.parametrize("edit_at", ["statistics", "record-read"])
+def test_validation_uses_one_snapshot_with_real_recorded_consumers(checkout, monkeypatch, edit_at):
+    from anaxigraph.application import selection
+
+    app = Application(checkout)
+    baseline = app.prepare_change("Improve prices")["baseline_id"]
+    receipts = [{"command": "reported fixture check", "snapshot_id": baseline, "exit_code": 0}]
+    target = app.store if edit_at == "statistics" else selection
+    method = "stats" if edit_at == "statistics" else "_records"
+    original = getattr(target, method)
+    edited = []
+
+    def edit(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if not edited:
+            edited.append(True)
+            path = checkout / "shop/pkg/prices.py"
+            path.write_text(path.read_text() + "\nnew_setting = 1\n")
+        return result
+
+    monkeypatch.setattr(target, method, edit)
+    result = app.validate_change(receipts)
+    assert result["tests"]["snapshot_id"] == result["candidate_snapshot_id"] == baseline
+    assert result["completion_allowed"] is False
+    assert result["checkout_current"] is False
+    assert result["validation_status"] == "incomplete"
+
+
 def test_an_unchanged_checkout_needs_no_test_and_a_missing_record_says_so(checkout, tmp_path):
     assert picked(checkout)["status"] == "nothing_to_run"
     bare = tmp_path / "bare"

@@ -248,11 +248,10 @@ def module_facts(graph: Graph, module: Node) -> dict[str, Any]:
 
 
 def structural_findings(graph: Graph) -> list[dict[str, Any]]:
+    modules, _, observations, _ = _latest(graph)
     findings = []
-    for node in graph.nodes:
-        if node.kind != "module":
-            continue
-        facts = module_facts(graph, node)
+    for path, node in modules.items():
+        facts = observations[path]
         rules = [
             (
                 "large-module",
@@ -291,8 +290,10 @@ def structural_findings(graph: Graph) -> list[dict[str, Any]]:
                 "message": message,
             }
             if kind == "private-interface-access":
-                finding["evidence"] = facts["private_accesses"]
+                finding["evidence"] = deepcopy(facts["private_accesses"])
             elif kind == "dependency-cycle":
-                finding.update(members=facts["cycle_paths"], evidence=facts["cycle_evidence"])
+                finding.update(
+                    members=list(facts["cycle_paths"]), evidence=deepcopy(facts["cycle_evidence"])
+                )
             findings.append(finding)
     return findings

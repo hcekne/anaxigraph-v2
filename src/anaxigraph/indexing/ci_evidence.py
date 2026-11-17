@@ -49,11 +49,6 @@ def _safe(value: str, limit: int = 300) -> str:
     return _TOKEN.sub("[credential omitted]", _URL.sub("[URL omitted]", value))[:limit]
 
 
-def redacted_command(text: str) -> str:
-    """Bound command previews and omit credential markers, URLs and assignments."""
-    return _safe(text)
-
-
 def _guard(root: Node, limit: int = 20) -> bool:
     pending: list[tuple[Node, int, frozenset[int], bool]] = [(root, 0, frozenset(), False)]
     visited, truncated = 0, False

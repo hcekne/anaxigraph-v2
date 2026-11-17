@@ -10,8 +10,8 @@ from anaxigraph.indexing.ci_evidence import (
     MAX_BYTES,
     MAX_FILES,
     MAX_JOBS,
+    _safe,
     capture_ci_evidence,
-    redacted_command,
 )
 
 
@@ -212,7 +212,7 @@ def test_local_ci_selectors_are_captured_without_execution(tmp_path):
     (tmp_path / "scripts/select_tests.py").write_text("print('changed selector')\n")
     after = capture_ci_evidence(tmp_path, index(tmp_path).snapshot.files)
     assert before["script_references"] != after["script_references"]
-    assert redacted_command("FOO=privatevalue uv run pytest") == "FOO=[value omitted] uv run pytest"
+    assert _safe("FOO=privatevalue uv run pytest") == "FOO=[value omitted] uv run pytest"
 
 
 def test_script_capture_follows_local_selector_import_and_redacts_credentials(tmp_path):

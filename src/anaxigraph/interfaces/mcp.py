@@ -117,7 +117,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         baseline_id: str | None = None,
         full: bool = False,
     ) -> dict:
-        """Validate inputs; full=True expands findings. completion_allowed=False needs evidence."""
+        """Validate one snapshot; checkout_current=False or completion_allowed=False needs fresh evidence. full=True expands findings."""
         return application.validate_change(receipts, baseline_id, full)
 
     @tool

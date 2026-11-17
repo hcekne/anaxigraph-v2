@@ -38,7 +38,9 @@ dependency_implementation_fingerprints = partial(
 )
 
 
-def _bounds(limit: int, maximum: int = 100) -> int:
+def _bounds(limit: int, maximum: int = 100, *, offset: int = 0) -> int:
     if type(limit) is not int or not 1 <= limit <= maximum:
         raise ValueError(f"limit must be between 1 and {maximum}")
+    if type(offset) is not int or offset < 0:
+        raise ValueError("offset must be a nonnegative integer")
     return limit

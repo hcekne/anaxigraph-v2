@@ -248,7 +248,7 @@ def save(root, original, folder):
 def test_warm_bytecode_dynamic_loads_retain_every_failing_consumer(
     tmp_path_factory, tmp_path, mode
 ):
-    from anaxigraph.indexing.test_record import junit_files
+    from anaxigraph.indexing.test_record import junit_cases
 
     original, _ = make_recording(tmp_path_factory, mode)
     root = Path(shutil.copytree(original, tmp_path / "clone"))
@@ -276,7 +276,7 @@ def test_warm_bytecode_dynamic_loads_retain_every_failing_consumer(
         capture_output=True,
     )
     assert done.returncode == 1, done.stdout + done.stderr
-    failed = junit_files([report], ".", saved["files"])[1]
+    failed = set(junit_cases([report], ".", saved["files"])[1])
     assert failed == set(CLIENTS)
     assert failed <= set(selected["test_files"])
 

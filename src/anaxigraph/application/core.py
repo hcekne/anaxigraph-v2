@@ -299,9 +299,7 @@ class Application:
     def modules(
         self, sort: str = "path", descending: bool = False, limit: int = 50, offset: int = 0
     ) -> dict[str, Any]:
-        _bounds(limit)
-        if type(offset) is not int or offset < 0:
-            raise ValueError("offset must be a nonnegative integer")
+        _bounds(limit, offset=offset)
         if sort not in {"path", "loc", "functions", "function_count"}:
             raise ValueError("sort must be path, loc or functions")
         graph = self._live()
@@ -505,7 +503,9 @@ class Application:
         selected = (
             baseline_id or stats.get("pinned_snapshot_id") or stats.get("previous_snapshot_id")
         )
-        previous = self.store.load_graph(str(self.root), selected) if selected else None
+        previous: Graph | None = graph
+        if selected != graph.snapshot.id:
+            previous = self.store.load_graph(str(self.root), selected) if selected else None
         if selected and previous is None:
             raise ValueError("Baseline must identify a retained snapshot of this checkout")
         basis = (
@@ -526,19 +526,23 @@ class Application:
         result["architecture"] = component_architecture.followthrough(
             self, selected, graph, previous, result["checks"], full
         )
-        result.update(delivery.validation(result["checks"]))
         result["extension_points"] = _extension_review(graph, previous, self.root)
         result["historical_associations"] = self._history_advice(
             graph,
             set(changed_paths(graph, previous)),
             previous.snapshot.revision if previous else None,
         )
-        result["tests"] = selection.tests_for_change(self)
+        result["tests"] = selection.tests_for_snapshot(self, graph)
+        result.update(
+            delivery.validation(
+                result["checks"], checkout_current=self.indexer.snapshot().id == graph.snapshot.id
+            )
+        )
         self.evidence.outcome(
             result["validation_status"],
             graph.snapshot.id,
             receipts,
-            "Supplied checks and structural comparison; not independent correctness proof.",
+            f"Captured checkout_current={result['checkout_current']}; supplied checks and structural comparison, not independent correctness proof.",
         )
         return result
 
@@ -550,7 +554,12 @@ class Application:
 
     record_tests = selection.record_tests
     start_recording = selection.start_recording
-    tests_for_change = selection.tests_for_change
+
+    def tests_for_change(
+        self, full: bool = False, ran: list[Path] | None = None, reads: Path | None = None
+    ) -> dict[str, Any]:
+        return selection.tests_for_snapshot(self, self._live(), full, ran, reads)
+
     analysis_request = review_operations.analysis_request
     submit_analysis = review_operations.submit_analysis
     reviews = review_operations.reviews

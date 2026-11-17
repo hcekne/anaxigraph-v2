@@ -12,8 +12,7 @@ from .guidance import structural_findings
 
 
 def changed_paths(graph: Graph, previous: Graph | None) -> list[str]:
-    before = previous.snapshot.files if previous else {}
-    after = graph.snapshot.files
+    before, after = previous.snapshot.files if previous else {}, graph.snapshot.files
     return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
 
 

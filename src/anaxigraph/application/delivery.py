@@ -10,10 +10,12 @@ from anaxigraph.application.architecture import package_context
 from anaxigraph.indexing.ci_evidence import capture_ci_evidence
 
 
-def validation(checks: list[dict]) -> dict:
-    """Attribute reported checks without requiring an experiment-specific selector protocol."""
+def validation(checks: list[dict], *, checkout_current: bool = True) -> dict:
+    """Attribute captured checks; an intervening checkout change leaves completion unqualified."""
     if any(check["status"] == "failed" for check in checks):
         status = "blocked"
+    elif not checkout_current:
+        status = "incomplete"
     elif not checks:
         status = "unchecked"
     else:
@@ -26,6 +28,7 @@ def validation(checks: list[dict]) -> dict:
         "validation_status": status,
         "behavioral_status": {"blocked": "failed", "incomplete": "unresolved"}.get(status, status),
         "completion_allowed": status == "reported-passed",
+        "checkout_current": checkout_current,
     }
 
 

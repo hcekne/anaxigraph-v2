@@ -116,6 +116,11 @@ migrate an already running legacy service.
    project's required checks.
 5. **Validate** the candidate against the original baseline. Supply check commands, exit
    codes and the candidate snapshot ID. Explain unresolved findings or missing checks.
+   Review and recorded-test selection use the same captured snapshot. `checkout_current=false`
+   means files changed during validation: completion remains unqualified, and the task baseline
+   stays pinned. Validate again against the current files and supply matching check receipts;
+   receipts for the earlier candidate remain stale. CLI output is a report; use its
+   `completion_allowed` field to decide whether it qualifies the change.
    Validation compares observed private accesses, cycles and consumers with the pinned baseline.
    Files entering or leaving production/test analysis scope are labelled `scope_changed`,
    including cycles affected indirectly; reclassification does not establish an architectural

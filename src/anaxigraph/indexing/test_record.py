@@ -88,13 +88,6 @@ def junit_cases(
     return seconds, failed
 
 
-def junit_files(
-    reports: list[Path], run_root: str, known: dict[str, str]
-) -> tuple[dict[str, float], set[str]]:
-    seconds, failed = junit_cases(reports, run_root, known)
-    return seconds, set(failed)
-
-
 def _executed(
     database: Path, known: dict[str, str], prefix: str, scope: tuple[str, ...], run_root: str
 ) -> tuple[dict[str, set[str]], dict[str, set[int]], set[str]]:

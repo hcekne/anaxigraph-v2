@@ -312,3 +312,19 @@ the compact list, and full validation expands boundary findings and rescoped pat
 313-module source retained identical annotation fingerprints and CI review context after sharing
 the canonical relationship view. These are compatibility and classification checks with no model
 calls, not evidence of better design. Production remains at the unchanged 15,000-line ceiling.
+
+Query profiling then exposed a validation race: a source edit between review and test selection
+could qualify old checks while selecting against different files. Validation now keeps one captured
+snapshot, verifies its input identity before qualification, and reports `checkout_current=false`
+with completion unqualified if files moved. It keeps the original baseline and attributes supplied
+checks to their actual candidate; the next call refreshes automatically. Real recorded-consumer
+and all-transport regressions reproduce the old false qualification.
+
+Identical baselines now reuse the captured graph, internal findings copy only delivered evidence,
+and module inspection stops computing discarded relationships. In three shared-machine samples on
+the same 2,380-module structural source, unchanged-validation median was 726.92 ms before and
+159.15 ms after; inspection was 393.30/300.44 ms. Existing reply fields were identical, with one new
+freshness field. The separate 13-module case retained eleven current, one stale and one missing
+annotation. These are API qualification timings, not changed-candidate, model or architectural
+quality claims. Two unused internal wrappers were removed; production is 14,999 lines under the
+unchanged ceiling. [Qualification](evidence/query-validation-qualification.json).

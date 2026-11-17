@@ -198,9 +198,7 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
 def reviews(
     app: Application, kind: str | None = None, limit: int = 12, offset: int = 0
 ) -> dict[str, Any]:
-    _bounds(limit)
-    if type(offset) is not int or offset < 0:
-        raise ValueError("offset must be a nonnegative integer")
+    _bounds(limit, offset=offset)
     saved = [row for row in app.store.reviews(str(app.root), kind, include_requests=False)]
     if not saved:
         return {"items": [], "total": 0}

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from anaxigraph.analysis.test_selection import select_tests
+from anaxigraph.contracts import Graph
 from anaxigraph.indexing import worktrees
 from anaxigraph.indexing.test_record import FORMAT, junit_cases, record_from_coverage
 from anaxigraph.indexing.test_run import FORMAT as RUN_FORMAT
@@ -176,15 +177,18 @@ def _shadow(
     }
 
 
-def tests_for_change(
-    app: Any, full: bool = False, ran: list[Path] | None = None, reads: Path | None = None
+def tests_for_snapshot(
+    app: Any,
+    graph: Graph,
+    full: bool = False,
+    ran: list[Path] | None = None,
+    reads: Path | None = None,
 ) -> dict[str, Any]:
-    """The test files each recorded suite needs for the checkout as it is now.
+    """The test files each recorded suite needs for the caller's captured snapshot.
 
     `ran` names JUnit reports of a whole-suite run at this checkout; each suite then says
     which failing test files its selection would have left out.
     """
-    graph = app._live()
     suites = []
     for record in _records(app):
         picked = select_tests(record, graph)

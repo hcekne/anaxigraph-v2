@@ -3,12 +3,13 @@
 import gc
 import weakref
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import replace
 
 from anaxigraph.analysis import charter, extension
 from anaxigraph.analysis.cache import graph_cached
 from anaxigraph.analysis.guidance import structural_findings
-from anaxigraph.contracts import Graph, Node, Snapshot
+from anaxigraph.contracts import Edge, Graph, Node, Snapshot
 
 
 def graph(name):
@@ -73,3 +74,30 @@ def test_simultaneous_readers_share_one_view_and_new_graph_objects_refresh_it():
     assert names(changed) == ("updated",)
     assert names(owner) == ("original",)
     assert builds == ["original", "updated"]
+
+
+def test_finding_expansion_cannot_mutate_shared_cycle_or_private_access_observations():
+    owner = graph("first")
+    second = graph("second").nodes[0]
+    nodes = (
+        *owner.nodes,
+        second,
+        Node("secret:first", "function", "_secret", "first.py"),
+        Node("secret:second", "function", "_secret", "second.py"),
+    )
+    edges = (
+        Edge(owner.nodes[0].id, "secret:second", "calls", "first.py", 4),
+        Edge(second.id, "secret:first", "calls", "second.py", 6),
+    )
+    owner = replace(owner, nodes=nodes, edges=edges)
+    facts = charter.module_facts(owner, owner.nodes[0])
+    findings = structural_findings(owner)
+    expected = deepcopy(findings)
+    for finding in findings:
+        for evidence in finding.get("evidence", []):
+            evidence["line"] = 999
+        if "members" in finding:
+            finding["members"].append("invented.py")
+        finding["change"] = "invented"
+    assert structural_findings(owner) == expected
+    assert charter.module_facts(owner, owner.nodes[0]) == facts
