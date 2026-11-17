@@ -533,7 +533,7 @@ class Application:
             set(changed_paths(graph, previous)),
             previous.snapshot.revision if previous else None,
         )
-        result["tests"] = selection.tests_for_snapshot(self, graph)
+        result["tests"] = selection.tests_for_snapshot(self, graph, full)
         result.update(
             delivery.validation(
                 result["checks"], checkout_current=self.indexer.snapshot().id == graph.snapshot.id

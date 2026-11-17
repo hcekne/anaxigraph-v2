@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-17",
+  "before_commit": "6ba0f8c45e0ffd98203df57c931ad1adba642017",
+  "mechanism": "Expose the existing full test view through MCP and forward full validation to the shared selector view; preserve the compact default",
+  "subject": {
+    "fixture_test_files": 202,
+    "observed_consumers": 201,
+    "independent_test_files": 1,
+    "source_bound_recording": "anaxigraph-reads-v3",
+    "coverage_contexts_per_test": true
+  },
+  "delivered_test_files": {
+    "default_mcp": {"before": 200, "after": 200, "truncated": true},
+    "explicit_full_mcp": {"before": 200, "after": 201},
+    "full_application_validation": {"before": 200, "after": 201},
+    "full_cli_validation": {"before": 200, "after": 201},
+    "cli_paths_control": {"before": 201, "after": 201}
+  },
+  "invariants": {
+    "selected_count_201_in_both_views": true,
+    "independent_test_excluded": true,
+    "default_remains_compact_after_expansion": true,
+    "validation_baseline_preserved": true,
+    "candidate_snapshot_matches_test_selection": true,
+    "unchecked_work_stays_unqualified": true
+  },
+  "protocol": {
+    "actual_http_mcp_client_session": true,
+    "full_boolean_advertised_with_false_default": true,
+    "expanded_consumer_lists_match_full_validation": true
+  },
+  "regressions": {
+    "new_cases": 4,
+    "frozen_before": {"passed": 1, "failed": 3},
+    "candidate_related_local_cases_passed": 138,
+    "new_cases_passed_with_parent_recorder_active": 4,
+    "parent_recording_source_and_artifacts_verified": true
+  },
+  "production_physical_lines": 14998,
+  "real_model_calls": 0,
+  "target_source_writes": 0,
+  "limits": "Controlled real recording and delivery checks, not a new test-selection algorithm, large-repository recall score or CI-speed measurement. Expanding a list does not verify execution of its tests."
+}

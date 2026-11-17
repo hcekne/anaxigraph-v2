@@ -117,13 +117,13 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
         baseline_id: str | None = None,
         full: bool = False,
     ) -> dict:
-        """Validate one snapshot; checkout_current=False or completion_allowed=False needs fresh evidence. full=True expands findings."""
+        """Validate one snapshot; checkout_current=False or completion_allowed=False needs fresh evidence. full=True expands findings and test lists."""
         return application.validate_change(receipts, baseline_id, full)
 
     @tool
-    def tests_for_change() -> dict:
-        """Test files this checkout needs, from a recorded run of what each test executed and read."""
-        return application.tests_for_change()
+    def tests_for_change(full: bool = False) -> dict:
+        """Select recorded test consumers; full=True expands truncated test lists."""
+        return application.tests_for_change(full)
 
     @tool
     def analysis_request(

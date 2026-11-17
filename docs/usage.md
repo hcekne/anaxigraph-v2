@@ -315,7 +315,10 @@ panel. These observations help examine coupling; they are not complete current C
 Ask with the `tests_for_change` tool, or in CI with `anaxigraph tests --paths`, which prints one
 test file per line and nothing when the whole suite is needed. The record is compared with the
 checkout itself, so everything that differs from the recorded run counts and the selection
-widens by itself as the record ages. A test file is selected when:
+widens by itself as the record ages. MCP replies show up to 200 paths per suite by default.
+When `test_files_truncated` is true, pass `full=true` to `tests_for_change` for the complete list.
+`validate_change(full=true)` and CLI `validate --full` also expand test lists. The selected count
+and test obligations are the same in both views. A test file is selected when:
 
 - a recorded test in it executed a changed source file, including executable Python under `docs/`;
 - it read a changed file as data, wherever in the checkout that file is, or scanned the folder

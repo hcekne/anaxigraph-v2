@@ -405,3 +405,12 @@ full-check fallback. Six regressions and 79 existing selection cases pass; the s
 the reads-v3 recorder active. Production remains 14,998 lines. This is controlled fault/selection
 evidence, not a new large-repository recall score.
 [Qualification](evidence/documentation-consumers-qualification.json).
+
+The larger delivery probe found that MCP exposed no expansion argument: a request for all 201
+observed consumers still returned 200, while the CLI already returned all paths. MCP now exposes
+the application's existing `full` option, and full validation forwards it to the same shared view.
+Defaults remain compact; expanded MCP, validation and CLI replies retain every selected consumer
+and the original baseline. A real 202-test-file recording, four regressions and HTTP MCP calls
+verify the result. All 138 related local checks pass; the four also pass with the recorder active.
+Unchecked work remains unqualified. Production remains 14,998 lines; no selector was added.
+[Qualification](evidence/test-list-expansion-qualification.json).
