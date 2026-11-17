@@ -126,10 +126,6 @@ def _planned_modules(
     return selected
 
 
-def _check_behavior(graph: Graph, behavior: str) -> None:
-    _check_behaviors(graph, [behavior])
-
-
 def _annotation_packet(
     graph: Graph, chosen: list[Node], symbols: list[Node], sources: dict[str, str] | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:

@@ -9,11 +9,11 @@ from typing import Any, Callable, TypeVar, cast
 from anaxigraph.contracts import Graph
 
 from .architecture import validate_architecture
-from .behavior import check_annotation_behaviors
+from .behavior import check_annotation_behaviors, check_behaviors
 from .delivery import validate_delivery
 from .fields import project as _project
 from .fields import text, texts
-from .packets import DEFAULT_RESULT_BYTES, KINDS, _check_behavior
+from .packets import DEFAULT_RESULT_BYTES, KINDS
 
 _Validator = TypeVar("_Validator", bound=Callable[..., Any])
 
@@ -39,11 +39,7 @@ def _model_output(operation: _Validator) -> _Validator:
 
 
 def _execution_worker(value: Any, *, fallbacks: bool = False) -> dict[str, Any]:
-    if (
-        not isinstance(value, dict)
-        or not isinstance(value.get("provider"), str)
-        or value["provider"] not in {"codex", "claude"}
-    ):
+    if not isinstance(value, dict) or value.get("provider") not in ("codex", "claude"):
         raise ValueError("Execution worker provider must be codex or claude")
     model = value.get("model")
     if not isinstance(model, str) or len(model) > 150:
@@ -82,11 +78,6 @@ def _execution(value: Any) -> dict[str, Any]:
     }
 
 
-def _validate_execution(value: dict[str, Any]) -> None:
-    if value.get("execution") is not None:
-        _execution(value["execution"])
-
-
 @_model_output
 def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     """Project validated model output onto the portable analysis contract.
@@ -109,7 +100,6 @@ def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[st
     return canonical
 
 
-_text = text
 _texts = partial(texts, count=30, limit=500)
 
 
@@ -156,9 +146,10 @@ def _annotations(request: dict[str, Any], result: dict[str, Any], graph: Graph) 
     if set(_identities(annotations, "node_id")) != set(request["scope"]):
         raise ValueError("Annotation result has missing, duplicate or unexpected module IDs")
     for annotation in annotations:
-        _validate_execution(annotation)
-        _text(annotation.get("overview"), "overview", 320)
-        _text(annotation.get("detail"), "detail", 1500)
+        if annotation.get("execution") is not None:
+            _execution(annotation["execution"])
+        text(annotation.get("overview"), "overview", 320)
+        text(annotation.get("detail"), "detail", 1500)
         _capabilities(annotation, graph)
         _texts(annotation.get("uncertainty"), "uncertainty")
         functions = annotation.get("functions")
@@ -175,18 +166,15 @@ def _annotations(request: dict[str, Any], result: dict[str, Any], graph: Graph) 
                 f"missing_ids={sorted(missing)[:3]}; unexpected_ids={sorted(unexpected)[:3]}"
             )
         for function in functions:
-            _text(function.get("overview"), "function overview", 320)
+            text(function.get("overview"), "function overview", 320)
         contracts = annotation.get("contracts")
         if not isinstance(contracts, list) or len(contracts) > 30:
             raise ValueError("contracts must be a bounded list")
         for contract in contracts:
             if not isinstance(contract, dict):
                 raise ValueError("Each contract must be an object")
-            _text(contract.get("statement"), "contract statement", 600)
-            if not isinstance(contract.get("basis"), str) or contract["basis"] not in {
-                "declared",
-                "inferred",
-            }:
+            text(contract.get("statement"), "contract statement", 600)
+            if contract.get("basis") not in ("declared", "inferred"):
                 raise ValueError("Contracts must distinguish declared from inferred basis")
             _evidence(contract.get("evidence"), graph, required=True)
     check_annotation_behaviors(graph, annotations)
@@ -226,7 +214,7 @@ def _patterns(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> 
             raise ValueError("Opportunity must be an integer 0–3 or null for insufficient evidence")
         _texts(evaluation.get("pros"), "pros", required=True)
         _texts(evaluation.get("cons"), "cons", required=True)
-        _text(evaluation.get("alternative"), "alternative", 600)
+        text(evaluation.get("alternative"), "alternative", 600)
         _evidence(evaluation.get("evidence"), graph, required=bool(score))
         if score or "current_fit" in evaluation:
             if not isinstance(evaluation.get("current_fit"), str) or evaluation[
@@ -234,7 +222,7 @@ def _patterns(request: dict[str, Any], result: dict[str, Any], graph: Graph) -> 
             ] not in {"present", "partial", "absent", "unknown"}:
                 raise ValueError("Positive opportunities need an explicit current_fit")
         if score or "proposed_change" in evaluation:
-            _text(evaluation.get("proposed_change"), "proposed_change", 1000)
+            text(evaluation.get("proposed_change"), "proposed_change", 1000)
 
 
 def _functional_coverage(result, expected):
@@ -266,13 +254,13 @@ def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -
             "Fresh Eyes missing required behavior brief fields: " + ", ".join(sorted(missing))
         )
     if "functional_summary" in result:
-        _check_behavior(graph, _text(result["functional_summary"], "functional_summary", 600))
+        check_behaviors(graph, [text(result["functional_summary"], "functional_summary", 600)])
     if "functional_requirements" in result:
         brief = result["functional_requirements"]
         if not isinstance(brief, list) or not 1 <= len(brief) <= 8:
             raise ValueError("functional_requirements needs one to eight behavior statements")
         for statement in brief:
-            _check_behavior(graph, _text(statement, "functional requirement", 600))
+            check_behaviors(graph, [text(statement, "functional requirement", 600)])
     if "functional_coverage" in result:
         _functional_coverage(result, expected)
     alternatives = result.get("alternatives")
@@ -283,20 +271,16 @@ def _fresh_eyes(request: dict[str, Any], result: dict[str, Any], graph: Graph) -
     for alternative in alternatives:
         if not isinstance(alternative, dict):
             raise ValueError("Each alternative must be an object")
-        names.add(_text(alternative.get("name"), "name", 160))
-        designs.add(_text(alternative.get("design"), "design", 12000))
+        names.add(text(alternative.get("name"), "name", 160))
+        designs.add(text(alternative.get("design"), "design", 12000))
         coverage = alternative.get("requirements")
         if not isinstance(coverage, list) or any(not isinstance(x, str) for x in coverage):
             raise ValueError("Requirement coverage must be a list of requirement IDs")
-        if (
-            not isinstance(coverage, list)
-            or len(coverage) != len(expected)
-            or set(coverage) != expected
-        ):
+        if len(coverage) != len(expected) or set(coverage) != expected:
             raise ValueError("Each design must explicitly preserve every requirement")
         _texts(alternative.get("pros"), "pros", required=True)
         _texts(alternative.get("cons"), "cons", required=True)
-        diagram = _text(alternative.get("diagram"), "diagram", 12000)
+        diagram = text(alternative.get("diagram"), "diagram", 12000)
         if not diagram.startswith(("flowchart ", "graph ")):
             raise ValueError("Each alternative needs a high-level Mermaid flowchart")
     if len(names) != 3 or len(designs) != 3:
@@ -311,8 +295,9 @@ def validate_result(request: dict[str, Any], result: dict[str, Any], graph: Grap
         raise ValueError("Analysis result budget must be an integer of at least 1024 bytes")
     if not isinstance(result, dict) or len(json.dumps(result, allow_nan=False).encode()) > maximum:
         raise ValueError("Analysis result exceeds its configured batch budget")
-    _text(result.get("producer"), "producer", 200)
-    _validate_execution(result)
+    text(result.get("producer"), "producer", 200)
+    if result.get("execution") is not None:
+        _execution(result["execution"])
     kind = request["kind"]
     validators = {
         "annotate": _annotations,

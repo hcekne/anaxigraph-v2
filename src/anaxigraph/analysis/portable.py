@@ -8,7 +8,7 @@ from anaxigraph.analysis.validation import validate_result
 from anaxigraph.contracts import Graph
 
 from .behavior import annotation_behavior_problems
-from .fields import fingerprint
+from .fields import annotation_context, fingerprint
 
 ANNOTATION_CONTRACT_VERSION = "behavior-v2"
 
@@ -56,10 +56,13 @@ def compatible_annotations(
             raise ValueError("Portable annotation must be an object")
         if (
             item.get("fingerprint") != graph.snapshot.files[node.path]
-            or annotation.get("context_fingerprint") != contexts[node.path]
+            or annotation.get("context_fingerprint")
+            != annotation_context(graph, annotation, contexts[node.path])
             or annotation.get("annotation_contract") != ANNOTATION_CONTRACT_VERSION
         ):
-            skipped.append({"id": identity, "reason": "source or dependency understanding changed"})
+            skipped.append(
+                {"id": identity, "reason": "source, dependency or cited evidence changed"}
+            )
             continue
         if node.data.get("annotation_status") == "current":
             skipped.append({"id": identity, "reason": "current local understanding preserved"})

@@ -16,6 +16,20 @@ def fingerprint(value: Any) -> str:
     return hashlib.sha256(body.encode()).hexdigest()
 
 
+def annotation_context(graph: Graph, annotation: dict, structure: str | None) -> str | None:
+    """Bind external contract citations while preserving existing source-only identities."""
+    try:
+        evidence = {
+            item["path"]: graph.snapshot.files.get(item["path"])
+            for contract in annotation.get("contracts", [])
+            for item in contract.get("evidence", [])
+            if item["path"] != annotation["node_id"].removeprefix("module:")
+        }
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ValueError("Malformed contract evidence") from error
+    return fingerprint([structure, evidence]) if evidence else structure
+
+
 def proposal_id(row: dict, finding: dict) -> str:
     """Keep reuse identities stable, including the historical Pattern identity format."""
     origin = (row["result"].get("provenance") or {}).get("original_id") or row["id"]

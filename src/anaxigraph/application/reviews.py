@@ -14,7 +14,7 @@ from anaxigraph.analysis import (
 from anaxigraph.analysis.architecture import reconcile_architecture
 from anaxigraph.analysis.architecture_guidance import proposals as scout_proposals
 from anaxigraph.analysis.delivery import capture_coverage, reconcile_delivery
-from anaxigraph.analysis.fields import fingerprint
+from anaxigraph.analysis.fields import annotation_context, fingerprint
 from anaxigraph.analysis.packets import SOURCE_REVIEW_KINDS, catalogue, request_modules
 from anaxigraph.analysis.patterns import (
     actionable_opportunities,
@@ -136,7 +136,7 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
                 "producer": result["producer"],
                 "basis": "agent-reported-interpretation",
                 "source_snapshot": graph.snapshot.id,
-                "context_fingerprint": contexts[node.path],
+                "context_fingerprint": annotation_context(graph, annotation, contexts[node.path]),
                 "dependency_implementation_fingerprint": implementations[node.path],
                 "annotation_contract": ANNOTATION_CONTRACT_VERSION,
                 "request_id": request_id,
@@ -288,6 +288,7 @@ def analysis_saved(
     if request is None:
         return False
     graph = app._current()
+    app._require_live(graph)
     if request["result"]["kind"] == "annotate":
         targets = set(request["result"]["scope"])
         current = [node for node in graph.nodes if node.id in targets]

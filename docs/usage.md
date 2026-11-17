@@ -169,6 +169,10 @@ Default semantic Mapping covers executable production modules. Tests and inert n
 remain in the structural map; use explicit module scopes or configuration `include_tests: true`
 to annotate them too. Progress reports needed/reused/excluded module counts. Unchanged compatible
 annotations need no model calls; explicit saved model and review choices remain part of reuse.
+Contract citations also bind freshness: changing or removing their supporting files makes the
+annotation stale locally and prevents import as current in another clone. Original saved content
+remains intact. Legacy annotations citing external files need refreshed evidence; unaffected
+source-only annotations retain their existing identities.
 Python files with module-level test functions and imports from `conftest` also follow this test
 policy, even with unconventional filenames. Full inspection records the source convention in
 `test_basis`; this is not proof that a runner collected the file. Explicit test function names

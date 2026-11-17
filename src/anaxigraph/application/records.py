@@ -47,8 +47,6 @@ def export_record(app: Application) -> dict[str, Any]:
         return cached[1] | {"changed": False} | app.portable_status()
     reviews = []
     for row in app.store.reviews(str(app.root), include_requests=False):
-        if row["kind"] == "request":
-            continue
         row = app._review_state(row, graph)
         if "input_identity" not in row["result"]:
             original = app.store.get_review(str(app.root), row["id"], "request")

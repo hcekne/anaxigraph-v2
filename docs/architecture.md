@@ -162,6 +162,9 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
   that log does not remove the plan. Plan checkpoints stay out of review listings and portable
   exports. Schema 9 upgrades preserve saved analyses with a pre-migration database backup.
 - One canonical module annotation contains its sentence, paragraph, function sentences and contracts.
+  Its context fingerprint binds external contract citations as well as source and dependency
+  surfaces. The same check governs local freshness and portable import. Source-only identities
+  remain compatible; older externally cited annotations without this proof remain saved but stale.
   Owner retrieval combines verified source, paths/symbols and current annotations at module level.
   The superseded FTS prose index is removed through a backed-up schema upgrade; source and
   annotation text is not copied into a second persistent search representation.

@@ -18,6 +18,7 @@ from anaxigraph.analysis import extension
 from anaxigraph.analysis.behavior import annotation_behavior_problems
 from anaxigraph.analysis.changes import change_review, changed_paths
 from anaxigraph.analysis.charter import CHARTER, module_facts
+from anaxigraph.analysis.fields import annotation_context
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.health import map_health
 from anaxigraph.analysis.history import cochange_advice
@@ -186,10 +187,12 @@ class Application:
             data = dict(node.data)
             annotation = data.get("annotation")
             if annotation and (
-                annotation.get("context_fingerprint") != contexts.get(node.path)
+                annotation.get("context_fingerprint")
+                != annotation_context(graph, annotation, contexts.get(node.path))
                 or annotation.get("annotation_contract") != ANNOTATION_CONTRACT_VERSION
             ):
                 data["annotation_status"] = "stale"
+                data["annotation_stale_reason"] = "Source, context or cited evidence changed"
             if node.id in behavior_problems:
                 data["annotation_status"] = "stale"
                 data["annotation_stale_reason"] = behavior_problems[node.id]

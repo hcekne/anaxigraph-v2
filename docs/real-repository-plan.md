@@ -345,3 +345,14 @@ delivered. These are delivery/identity checks using synthetic saved results, not
 architectural-quality evidence. Twenty-seven regression cases cover compatibility, invalidation,
 decision continuity and product inputs. Production remains 15,000 lines under the unchanged ceiling.
 [Qualification](evidence/review-delivery-qualification.json).
+
+Contract annotation freshness now includes cited external files. Previously, editing a policy
+document left its old declared obligation current locally and importable as current in a clone.
+The shared context check now marks it stale and declines incompatible imports while preserving
+saved content; unchanged citations and source-only identities remain reusable. An availability
+check also refuses checkout edits that happened after workflow request creation. Twenty-seven
+new cases cover document/source/configuration edits and removals, clone reuse, legacy proof,
+malformed records and unscanned edits; 237 related tests pass locally. Redundant validation
+adapters and checks were removed without dropping their contracts, keeping production at the
+unchanged 15,000-line ceiling. No model calls were needed.
+[Qualification](evidence/contract-evidence-qualification.json).

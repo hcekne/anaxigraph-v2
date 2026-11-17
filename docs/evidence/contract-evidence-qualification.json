@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-17",
+  "before_commit": "f9c5be491b0b2ada52acc8493937740519335d7b",
+  "runtime_after": "2ba86203d6ff8f7eb9e9f16bd8521e0958026cc45f4bf2f21f4c5c559a5bb62d",
+  "harness_sha256": "b555c5487864ec87dba264fafdcb5d92438b88774dcc00ccb6d52e877659e29d",
+  "scope": "Controlled source and synthetic annotations, exercised through the actual Python application, portable import and development CLI; no private target or model execution",
+  "changed_citation": {
+    "before_local_annotation": "current",
+    "before_clone_annotation": "current",
+    "after_local_annotation": "stale",
+    "after_clone_annotation": "not imported as current",
+    "original_saved_capture_preserved": true,
+    "unaffected_clone_annotation_imported": true,
+    "restoring_exact_inputs_restores_applicability": true,
+    "cli_observed_stale_annotation": true
+  },
+  "regressions": {
+    "before": {"cases": 22, "failed": 17, "passed": 5},
+    "new_cases": 27,
+    "coverage": [
+      "Changed and removed document, source and configuration citations invalidate local understanding",
+      "Portable imports reject incompatible citations while preserving the record",
+      "Unchanged citations and unrelated documents preserve clone reuse",
+      "Legacy external citations require proof without discarding original annotations",
+      "Saved workflow availability rejects unscanned checkout drift for all four module analysis kinds",
+      "Malformed portable evidence leaves structural mapping usable and the original record intact"
+    ],
+    "related_tests_passed_locally": 237
+  },
+  "production_physical_lines": 15000,
+  "model_calls": 0,
+  "limits": "Establishes evidence freshness, input rejection and preservation behavior. It does not establish that a model inferred a contract correctly, that the cited statement is true, or that architectural recommendations improve code. No release or paid campaign was run."
+}
