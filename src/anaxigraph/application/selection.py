@@ -106,14 +106,14 @@ def record_tests(
 
 def _records(app: Any) -> list[dict[str, Any]]:
     """This checkout's records, or those of the worktree that recorded most recently."""
-    folders = [app.root / _FOLDER] + [path / _FOLDER for path in worktrees(app.root)]
-    found = [sorted(folder.glob("*.json")) for folder in dict.fromkeys(folders) if folder.is_dir()]
-    found = [files for files in found if files]
-    if not found[:1]:
-        return []
-    if not (app.root / _FOLDER).is_dir() or not sorted((app.root / _FOLDER).glob("*.json")):
-        found.sort(key=lambda files: -max(file.stat().st_mtime for file in files))
-    records = [json.loads(file.read_text()) for file in found[0]]
+    files = sorted((app.root / _FOLDER).glob("*.json"))
+    if not files:
+        candidates: list[Path] = []
+        for root in worktrees(app.root):
+            candidates.extend((root / _FOLDER).glob("*.json"))
+        newest = max(candidates, key=os.path.getmtime, default=None)
+        files = sorted(newest.parent.glob("*.json")) if newest else []
+    records = [json.loads(file.read_text()) for file in files]
     return [record for record in records if record.get("format") == FORMAT]
 
 

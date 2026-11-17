@@ -491,7 +491,7 @@ class WorkflowRunner:
                 elif stage == "patterns" and run["config"].get("pattern_mode") == "screened":
                     self._plan_details(run)
                 else:
-                    self._plan_scopes(run, stage)
+                    plan_workflow_scopes(self, run, stage, plan_scopes, _selected_worker)
                 run["stages_planned"].append(stage)
         self._save(run)
         pending = [
@@ -504,9 +504,6 @@ class WorkflowRunner:
     def _parallel(self, run, batches):
         with ThreadPoolExecutor(max_workers=run["config"]["workers"]) as pool:
             list(pool.map(lambda batch: self._batch(run, batch), batches))
-
-    def _plan_scopes(self, run, kind):
-        plan_workflow_scopes(self, run, kind, plan_scopes, _selected_worker)
 
     def _plan_details(self, run):
         for batch in list(run["batches"]):

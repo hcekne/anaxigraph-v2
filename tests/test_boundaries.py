@@ -62,7 +62,7 @@ def test_internal_dependencies_follow_component_contracts(path):
         },
         "interfaces": {"metadata", "application", "interfaces"},
         # Runs inside a project's own test process, where AnaxiGraph need not be installed.
-        "recorder": set(),
+        "recorder": {"recorder"},
     }
     assert component in allowed, f"Declare a deliberate dependency contract for {current}"
     for imported in internal_imports(path):
@@ -86,9 +86,12 @@ def test_every_internal_import_is_resolved_inside_v2_and_no_legacy_path_is_added
                     f"{path}: runtime import must have a statically reviewable component boundary"
                 )
             if isinstance(node, ast.Attribute):
-                assert ast.unparse(node) != "sys.path", (
-                    f"{path}: do not find legacy code through sys.path"
-                )
+                if path == PACKAGE / "recorder/bootstrap/sitecustomize.py":
+                    assert isinstance(node.ctx, ast.Load)  # Delegate the original startup hook.
+                else:
+                    assert ast.unparse(node) != "sys.path", (
+                        f"{path}: do not find legacy code through sys.path"
+                    )
                 assert node.attr != "__path__", f"{path}: do not extend package lookup paths"
             if isinstance(node, ast.Name):
                 assert node.id != "__path__", f"{path}: do not extend package lookup paths"

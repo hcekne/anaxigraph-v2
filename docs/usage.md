@@ -220,6 +220,17 @@ checkout (`ANAXIGRAPH_ROOT` names it where there is none). Separately launched o
 combined reports can qualify a narrow selection; the current recording contract does not
 provide that protocol.
 
+For direct children launched with the same Python interpreter, optionally set
+`ANAXIGRAPH_TRACE_CHILDREN=1` before pytest. Children that inherit the recording environment
+report source loads, data reads and further process starts into one bounded 10 MB log beside
+the reads report. Only children that exit before the parent seals its report can replace its
+opaque-process fallback. Cached results retain the launching module's other test consumers.
+This adds no dependency to the child and does not inject recorder settings into cleaned or
+independently configured environments. Crashes, forced termination, missing or late receipts,
+isolated startup (`-I` or `-S`), existing startup customizations and unobserved descendants keep
+conservative selection. Pytest-xdist's controller startup is still unobserved and keeps the
+whole-suite fallback; child tracing does not yet make parallel runs select narrowly.
+
 `--scope` names the folders the suite depends on, and `--run-root` the folder it ran in. The
 record lands in `.anaxigraph-v2/test-records/`; carry it between machines as a CI artifact.
 A worktree without one uses the record of the worktree that recorded most recently.

@@ -217,6 +217,7 @@ def run(tmp_path_factory) -> Path:
         "ANAXIGRAPH_ROOT": str(root),  # The fixture is not a git checkout.
         "ANAXIGRAPH_READS": str(root.parent / "reads.json"),
         "ANAXIGRAPH_RECORDING": manifest,
+        "ANAXIGRAPH_TRACE_CHILDREN": "0",  # This fixture deliberately records opaque starts.
         "COVERAGE_FILE": str(root / "shop/.coverage"),
     }
     done = subprocess.run(
@@ -577,7 +578,7 @@ def test_the_recorder_finds_the_checkout_and_assumes_the_most_of_what_it_cannot_
     (tmp_path / "checkout/.git").mkdir(parents=True)
     (tmp_path / "checkout/inner/deep").mkdir(parents=True)
     script = (
-        "import anaxigraph_reads as r\n"
+        "import anaxigraph_reads as plugin\nr = plugin.audit\n"
         "r._audit('subprocess.Popen', ())\n"  # Not the shape a real event has.
         "print(r._ROOT)\nprint(r._SEEN['started'])\n"
     )
@@ -776,6 +777,7 @@ def test_a_legacy_recording_is_preserved_but_cannot_authorize_narrow_checks(
     report = json.loads(path.read_text())
     report.pop("recording")
     path.write_text(json.dumps(report))
+    path.with_name(path.name + ".children").write_text('{"untrusted": "child log"}\n')
     assert (
         record(checkout, run, reads=True, reports=reports)["provenance"]["status"] == "unverified"
     )

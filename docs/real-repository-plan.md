@@ -192,7 +192,15 @@ nested coverage output collisions; invocation-specific configuration and isolate
 fixed them. Production size is now 14,803 lines, 121 fewer than the handover; the 15,000-line
 ceiling is unchanged. No paid model calls or new private-target measurements were made here.
 
-Next: attribute Python child work without dropping unobserved descendants; qualify sharded
-recordings; refresh the target's recorder before new measurements. Use prospective shadow runs
+Direct Python-child attribution is now opt-in. A standard-library bootstrap records reads and
+source loads into one bounded log, while missing, late or malformed receipts and unobserved
+descendants retain conservative selection. Cleaned environments and existing startup
+customizations are preserved. Pytest-xdist's controller startup still requires the full suite.
+The 23 new tests exercise real subprocesses, including interrupted children and cached callers;
+three also passed using the recorder from an installed wheel. Production size is 14,995 lines,
+within the unchanged ceiling. This has not been measured on the private target.
+
+Next: qualify sharded recordings and worker startup; refresh the target's whole recorder folder
+before new measurements. Use prospective shadow runs
 and actual selected runs before claiming CI savings. Better architectural advice needs real-task
 evaluation separately. Reuse scheduled verification where possible rather than duplicating suites.

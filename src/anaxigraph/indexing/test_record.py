@@ -149,10 +149,8 @@ def _report(part: Path) -> dict[str, Any]:
 def _reports(report: Path) -> list[dict[str, Any]]:
     controller = _report(report)
     if not controller.get("recording"):
-        return [
-            controller,
-            *(_report(part) for part in sorted(report.parent.glob(report.name + ".*"))),
-        ]
+        parts = sorted(report.parent.glob(report.name + ".*"))
+        return [controller] + [_report(part) for part in parts if part.suffix != ".children"]
     names = controller.get("workers", [])
     if len(set(names)) != len(names) or any(
         not name.startswith("gw") or not name[2:].isdigit() for name in names
@@ -169,7 +167,50 @@ def _reports(report: Path) -> list[dict[str, Any]]:
             )
         ):
             raise ValueError("Missing, incomplete or mixed recording workers")
+    return _children(report, found)
+
+
+def _children(report: Path, parents: list[dict]) -> list[dict]:
+    """An absent or untrusted child receipt keeps its initiating readers opaque."""
+    entries = {}
+    path = report.with_name(report.name + ".children")
+    try:
+        if path.stat().st_size <= 10_000_000:
+            for line in path.read_text().splitlines(keepends=True):
+                if line.endswith("\n"):
+                    row = json.loads(line)
+                    entries[row["id"]] = row
+    except (OSError, ValueError, KeyError, TypeError):
+        entries = {}  # Partial output must never remove a fallback.
+    found = list(parents)
+    for parent in parents:
+        for identity, readers in parent.get("children", {}).items():
+            row = entries.get(identity, {})
+            if _completed_child(row, parent):
+                observed = {
+                    kind: dict.fromkeys(paths, readers)
+                    for kind, paths in row["observations"].items()
+                }
+                observed["opened"].update(observed["loaded"])
+                found.append(observed)
+            else:
+                parent["started"].setdefault("", []).extend(readers)
     return found
+
+
+def _completed_child(row: dict, parent: dict) -> bool:
+    observed = row.get("observations")
+    return bool(
+        isinstance(observed, dict)
+        and {"opened", "listed", "started", "loaded"} <= observed.keys()
+        and all(
+            isinstance(paths, list) and all(isinstance(path, str) for path in paths)
+            for paths in observed.values()
+        )
+        and all(row.get(key) == parent.get(key) for key in ("run_id", "session_id", "root"))
+        and type(row.get("finished_at")) in (int, float)
+        and 0 < row.get("finished_at", 0) <= parent.get("observed_until", 0)
+    )
 
 
 def _reads(report: Path, known: dict[str, str]) -> dict[str, dict[str, set[str]]]:
@@ -294,6 +335,15 @@ def _test_files(
     return sorted(found)
 
 
+def _recorded_reads(report: Path | None, known: dict, executed: dict) -> dict | None:
+    read = _reads(report, known) if report else None
+    for path, readers in (read or {}).get("loaded", {}).items():
+        owners = readers & known.keys()
+        if owners:
+            executed.setdefault(path, set()).update(owners)
+    return read
+
+
 def record_from_coverage(
     graph: Graph,
     database: Path,
@@ -316,7 +366,7 @@ def record_from_coverage(
     provenance = verify(reads, graph, database, reports)
     executed, loaded, measured = _executed(database, known, prefix, folders, run_root)
     seconds, failed = junit_cases(reports, run_root, known)
-    read = _reads(reads, known) if reads else None
+    read = _recorded_reads(reads, known, executed)
     idle = _unloaded(Path(graph.snapshot.root), folders, known, set(loaded), measured, read)
     tests = _test_files(seconds, executed, read or {}, known)
     position = {test: index for index, test in enumerate(tests)}
