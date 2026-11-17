@@ -71,6 +71,15 @@ def make_recording(tmp_path_factory, mode):
         path = root / name
         path.parent.mkdir(exist_ok=True, parents=True)
         path.write_text(body)
+    if mode == "cross_cached":
+        (root / "app/cache.py").write_text(
+            "from functools import lru_cache\nfrom app.client import value as child_value\n"
+            "@lru_cache\ndef _kept():\n    return child_value()\n"
+            "def value():\n    return _kept()\n"
+        )
+        for name in CLIENTS:
+            path = root / name
+            path.write_text(path.read_text().replace("app.client", "app.cache"))
     manifest = Application(root).start_recording("app")["manifest"]
     python_path = os.environ.get(
         "ANAXIGRAPH_RECORDER_TEST_PATH", str(Path(recorder.__file__).parent)
@@ -137,6 +146,7 @@ def make_recording(tmp_path_factory, mode):
     scope="module",
     params=[
         "normal",
+        "cross_cached",
         "empty_env",
         "bytes_env",
         "crash",
@@ -179,7 +189,7 @@ def test_child_code_and_data_reach_cached_callers_but_unrelated_work_stays_local
     root = Path(shutil.copytree(original, tmp_path / "clone"))
     assert save(root, original, original.parent)["provenance"]["status"] == "verified"
     app = Application(root)
-    opaque = mode not in {"normal", "bytes_env", "outside", "parallel"}
+    opaque = mode not in {"normal", "cross_cached", "bytes_env", "outside", "parallel"}
     (root / "app/other.py").write_text("def other():\n    return 43\n")
     [suite] = app.tests_for_change()["suites"]
     if mode == "parallel":

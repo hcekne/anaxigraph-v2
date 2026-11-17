@@ -224,7 +224,8 @@ For direct children launched with the same Python interpreter, optionally set
 `ANAXIGRAPH_TRACE_CHILDREN=1` before pytest. Children that inherit the recording environment
 report source loads, data reads and further process starts into one bounded 10 MB log beside
 the reads report. Only children that exit before the parent seals its report can replace its
-opaque-process fallback. Cached results retain the launching module's other test consumers.
+opaque-process fallback. Cached results retain the launching modules' other test consumers,
+including callers that cache the result across module boundaries.
 This adds no dependency to the child and does not inject recorder settings into cleaned or
 independently configured environments. Crashes, forced termination, missing or late receipts,
 isolated startup (`-I` or `-S`), existing startup customizations and unobserved descendants keep

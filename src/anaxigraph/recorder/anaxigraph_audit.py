@@ -90,11 +90,11 @@ def _module(path: str) -> str | None:
 
 def _readers(frame: Any) -> list[str]:
     """At import, @ identifies the module that keeps what it reads. Otherwise record the
-    active test and innermost caller (+module), so cached reads reach its other tests too.
+    active test and project callers (+module), so cached reads reach their other tests too.
     Outside tests, @ marks runner work. Skip recorder frames and stop at pytest frames,
     keeping the launcher outside the caller chain.
     """
-    first = None
+    callers: dict[str, None] = {}
     while frame is not None and _RUNNER not in frame.f_code.co_filename:
         name = frame.f_code.co_filename
         if (
@@ -104,12 +104,11 @@ def _readers(frame: Any) -> list[str]:
         ):
             if frame.f_code.co_name == "<module>":
                 return ["@" + str(_relative(name))]
-            first = first or name
+            callers[str(_relative(name))] = None
         frame = frame.f_back
-    inner = str(_relative(first)) if first else ""
     if _TEST[0] is None:
-        return ["@" + inner]
-    return [_TEST[0], "+" + inner] if inner not in ("", _TEST[0]) else [_TEST[0]]
+        return ["@" + next(iter(callers), "")]
+    return [_TEST[0]] + ["+" + path for path in callers if path != _TEST[0]]
 
 
 def _command(words: list[str], folder: str) -> tuple[str | None, str, list[str]]:

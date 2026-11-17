@@ -205,6 +205,10 @@ or local actions. Regression tests preserve isolation for another project's depe
 unbound legacy evidence can no longer hide changes outside its old scope. Production size
 after this safety fix is 14,997 lines.
 
+The recorder now retains the project caller chain, including a different module that caches
+a helper's result. A subprocess regression first selected only the initial caller's test;
+the fix retains both consumers. Production size is 14,996 lines.
+
 Next: qualify sharded recordings and worker startup; refresh the target's whole recorder folder
 before new measurements. Use prospective shadow runs
 and actual selected runs before claiming CI savings. Better architectural advice needs real-task
