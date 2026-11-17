@@ -421,18 +421,8 @@ class Application:
         owner_ids = tuple(
             node.id for node in graph.nodes if node.kind == "module" and node.path in matched_paths
         )
-        review_rows = [
-            self._review_state(row, graph)
-            for row in self.store.reviews(
-                str(self.root), include_requests=False, module_ids=owner_ids, limit=6
-            )
-        ]
-        review_rows = list(
-            {
-                row["id"]: row
-                for row in review_rows
-                + component_architecture.owner_reviews(self, graph, owner_ids)
-            }.values()
+        review_rows = component_architecture.owner_reviews(
+            self, graph, owner_ids, kinds=("architecture", "patterns", "fresh-eyes")
         )
         brief = extension.design_brief(graph, matched_paths)
         result = {"design_brief": brief} | prepare(

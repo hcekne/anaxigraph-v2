@@ -212,7 +212,15 @@ and an already bounded implementation 0; facts-only detail returned unknown for 
 retained the real opportunity. Luna-only detail had produced a false positive on the bounded case.
 The reproducible paid probe is documented in `experiments/architecture_quality/README.md`;
 this demonstrates implementation sensitivity, not general architectural superiority. Production
-is 14,987 lines, within the unchanged ceiling. No target-suite rerun or broad paid campaign was made.
+was 14,987 lines, within the unchanged ceiling. No target-suite rerun or broad paid campaign was made.
+
+Following the same real model result into task guidance exposed a delivery gap: its high-priority
+Pattern finding appeared in preparation, but plan assessment reported no material proposals.
+Patterns now use the existing reasoned disposition and validation-followthrough path. Both views
+share stable review/module/card IDs and priority ordering. A replay of that saved result now
+requires a decision and retains it through validation, while implementation remains unverified.
+No additional model call was needed. Shared projection/filtering and removal of duplicate review
+fetching keep production at 15,000 lines, without raising the ceiling.
 
 Next: qualify sharded recordings and worker startup; refresh the target's whole recorder folder
 before new measurements. Use prospective shadow runs and actual selected runs before claiming

@@ -90,14 +90,18 @@ def review_summary(row: dict[str, Any]) -> str:
     return f"{len(evaluations)} pairs reviewed; {count} actionable opportunities."
 
 
-def actionable_opportunities(rows: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
-    opportunities = [
-        {"review_id": row["id"]} | item
+def rated_opportunities(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        item | {"review_id": row["id"]}
         for row in rows
         if row["kind"] == "patterns" and row["status"] == "current"
         for item in row["result"]["result"]["evaluations"]
-        if type(item.get("opportunity")) is int and item["opportunity"] > 0
+        if type(item.get("opportunity")) is int and 1 <= item["opportunity"] <= 3
     ]
+
+
+def actionable_opportunities(rows: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
+    opportunities = rated_opportunities(rows)
     opportunities.sort(key=lambda item: -item["opportunity"])
     return [
         {

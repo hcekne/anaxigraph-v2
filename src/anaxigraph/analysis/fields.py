@@ -1,8 +1,30 @@
-"""Shared shape checks for model-facing review contracts."""
+"""Shared shape checks and bounded views for model-facing review contracts."""
 
 from __future__ import annotations
 
 from typing import Any
+
+from anaxigraph.contracts import Graph
+
+
+def short(value: Any, maximum: int = 240) -> str:
+    text = value if isinstance(value, str) else ""
+    raw = text.encode("utf-8")
+    return text if len(raw) <= maximum else raw[: maximum - 3].decode("utf-8", "ignore") + "..."
+
+
+def references(value: Any, graph: Graph) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [
+        {"path": item["path"], "line": item["line"]}
+        for item in value
+        if isinstance(item, dict)
+        and isinstance(item.get("path"), str)
+        and item.get("path") in graph.snapshot.files
+        and type(item.get("line")) is int
+        and item["line"] > 0
+    ][:2]
 
 
 def project(value: Any, contract: Any) -> Any:

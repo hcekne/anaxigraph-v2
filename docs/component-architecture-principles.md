@@ -13,10 +13,11 @@ these principles into mandatory focused jobs, including standalone libraries in 
 and explicit dispositions during plan assessment.
 The charter and agent change guidance express this policy. The subsequent scouts make focused
 review jobs mandatory in new Pattern workflows. The subsequent
-[CI/CD review and declared-input planner](change-request-ci-delivery.md) add a root pipeline review
-to new Pattern runs and turn accepted task inputs into an explainable check plan. Full component
-declarations and complete resource-aware impact analysis remain proposed capabilities below.
-Neither review nor planning removes project CI checks or executes them.
+[CI/CD review](change-request-ci-delivery.md) adds a root pipeline review to new Pattern runs.
+Its original declared-input planner was retired to `experiments/declared_ci/`; current test
+selection uses recorded execution and file-access evidence instead. Full component declarations
+and complete resource-aware impact analysis remain proposed capabilities below. Reviews do not
+remove project CI checks or execute them.
 
 ## The house story
 
@@ -228,16 +229,21 @@ integrations. [Module testing](https://docs.spring.io/spring-modulith/reference/
 
 The current map observes public definitions, resolved private accesses, cycles and test references.
 The shared charter informs pattern screening, selected detailed review and blind alternatives.
-`prepare_change` and `assess_plan` expose the principles and local/consumer verification advice.
-They now explicitly mention behavioral and shared-resource changes as reasons to widen checks.
+Screening, Pattern detail and architecture reviews receive verified implementation for the selected
+modules; Fresh Eyes receives behavior only. `prepare_change` surfaces current owner-scoped proposals
+with evidence, costs and expansion links. Material Pattern and architecture proposals enter the
+same `assess_plan` adopt/defer/reject path. Pair-based Pattern IDs survive model result reordering.
+`validate_change` retains the decision and its unresolved obligation; recording intent does not
+establish implementation. Behavioral and shared-resource changes remain reasons to widen checks.
 
 These are advisory observations. The current impact neighborhood follows resolved reverse
 references for **two levels**; its test list is not a complete test plan. Python globals, attributes,
 dynamic dispatch, shared resources and unparsed languages can hide relationships. AnaxiGraph does
-not yet declare architectural components, model all build inputs, run project tests or generate a
-verified CI selection from the source graph. The separate `ci-plan` operation uses the repository's
-authored `anaxigraph/ci-policy.json`: declared inputs, shared inputs, data consumers and retained
-obligations determine its selection. Unknown ownership stays incomplete. The CI/CD workflow reads
+not yet declare architectural components, model all build inputs or run project tests. Its
+`tests_for_change` operation selects checks from a source-bound recorded run: what tests executed,
+read and loaded, including conservative treatment of opaque processes and missing observations.
+This evidence is distinct from static impact links. The retired `ci-plan` command and authored
+`anaxigraph/ci-policy.json` are no longer part of the product. The CI/CD workflow reads
 actual pipeline declarations and reviews a fast path, widening, caching, parallelism and deployment
 checks. It runs without semantic mapping and keeps missing timings and opaque scripts explicit.
 Revisit that design after changes to components, shared inputs or delivery configuration.
@@ -251,7 +257,7 @@ re-analysis is started merely to publish this principle.
 
 ## Continue improving component change scope
 
-The CI task policy now declares executable verification inputs. Extend it with a compact optional
+The test record captures observed verification inputs. Complement it with a compact optional
 declaration of meaningful components, reusing existing workspace,
 package and test configuration where practical. This is a proposed metadata contract, not an
 accepted new file format:

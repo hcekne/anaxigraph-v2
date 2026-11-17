@@ -284,3 +284,22 @@ One screening attempt needed its configured fallback after output validation fai
 Luna-only detail probe had incorrectly rated the bounded version 2. This pair demonstrates why
 implementation evidence and the stronger detail pass matter; it does not establish general advice
 quality or improved coding outcomes. Outputs remain under the operator's chosen directory.
+
+`uv run python -m experiments.architecture_quality.implementation_cases --output /path/to/new-output`
+adds two pairs. A single policy edit makes duplicated preview/final prices disagree, while their
+shared-policy counterpart updates both. Receipt formatters return identical text, but only the
+hidden-effect version writes a file. Both pairs use identical synthetic behavior briefs within
+the pair. Screening finishes before detailed review starts; the probe also forces the named card
+through detail so screening misses can be distinguished from detailed-review failures.
+
+On 17 November 2026, source-aware Sol/medium detail rated both opportunities 3 and both healthy
+counterparts 0. Luna screening retained both target opportunities. One healthy-case screening
+returned `selections: []`, omitting its required module; the configured fallback returned a valid
+empty selection. The prompt now explicitly distinguishes an empty card list from an omitted
+module. A Luna retry returned a valid module entry but still selected that card; detail had rated
+it 0. These are diagnostic cases, not a measured general accuracy or false-positive rate.
+
+The original fan-out finding also exposed a product delivery bug: preparation showed it, while
+plan assessment claimed no material proposals. A replay of the saved model result now requests
+the same pair-based proposal ID in `assess_plan` and retains its disposition during validation.
+Implementation remains unverified; no new model call was needed for this replay.

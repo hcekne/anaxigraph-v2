@@ -1,9 +1,51 @@
-"""Project source-aware scout findings into bounded, explicit plan decisions."""
+"""Project current model findings into bounded, explicit plan decisions."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+
+from anaxigraph.contracts import Graph
+
+from .fields import references, short
+from .patterns import rated_opportunities
+
+
+def pattern_proposals(
+    rows: list[dict], owners: set[str], graph: Graph, limit: int = 2
+) -> list[dict]:
+    items = []
+    for item in rated_opportunities(rows):
+        evidence = references(item.get("evidence"), graph)
+        if (
+            item["module_id"] not in owners
+            or not isinstance(item.get("proposed_change"), str)
+            or not item["proposed_change"].strip()
+            or not evidence
+        ):
+            continue
+        items.append(
+            {
+                "kind": "pattern",
+                "proposal_id": f"{item['review_id']}:{item['module_id']}:{item['pattern_id']}",
+                "review_id": item["review_id"],
+                "title": f"{item['pattern_id']} in {item['module_id']}",
+                "status": "proposal-needs-source-verification",
+                "module_id": item["module_id"],
+                "module_ids": [item["module_id"]],
+                "pattern_id": item["pattern_id"],
+                "opportunity": item["opportunity"],
+                "current_fit": item.get("current_fit", "unknown"),
+                "suggestion": short(item["proposed_change"], 360),
+                "pros": [short(value, 180) for value in item.get("pros", [])[:2]],
+                "cons": [short(value, 180) for value in item.get("cons", [])[:2]],
+                "simpler_alternative": short(item.get("alternative")),
+                "evidence": evidence,
+                "expand": "review:" + item["review_id"],
+            }
+        )
+    items.sort(key=lambda item: (-item["opportunity"], item["proposal_id"]))
+    return items[:limit]
 
 
 def proposals(rows: list[dict[str, Any]], owners: set[str], limit: int = 2) -> list[dict]:

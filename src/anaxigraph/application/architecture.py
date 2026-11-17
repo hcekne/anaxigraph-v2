@@ -1,10 +1,10 @@
-"""Connect scout evidence to plan accountability without another state store."""
+"""Connect reviewed findings to plan accountability without another state store."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from anaxigraph.analysis.architecture_guidance import coverage, decide, proposals
+from anaxigraph.analysis.architecture_guidance import coverage, decide, pattern_proposals, proposals
 from anaxigraph.analysis.architecture_verification import (
     boundary_delta,
     independent_verification,
@@ -25,11 +25,14 @@ def package_context(app: Any, graph) -> dict:
     return cached[1]
 
 
-def owner_reviews(app: Any, graph, owners: tuple[str, ...], *, limit: int = 6) -> list[dict]:
+def owner_reviews(
+    app: Any, graph, owners: tuple[str, ...], kinds: tuple[str, ...], *, limit: int = 6
+) -> list[dict]:
     return [
         app._review_state(row, graph)
+        for kind in kinds
         for row in app.store.reviews(
-            str(app.root), "architecture", include_requests=False, module_ids=owners, limit=limit
+            str(app.root), kind, include_requests=False, module_ids=owners, limit=limit
         )
     ]
 
@@ -37,13 +40,19 @@ def owner_reviews(app: Any, graph, owners: tuple[str, ...], *, limit: int = 6) -
 def assess(
     app: Any, brief: dict, files: list[str], decisions: Any, structural: list[dict] | None = None
 ) -> dict:
-    """Structural extension-point findings come first: they are observed, not model proposals."""
+    """Assess current material reviews; structural observations remain advisory."""
     graph = app._current()
     owners = {item["id"] for item in brief["likely_owners"]}
     owners.update(node.id for node in graph.nodes if node.kind == "module" and node.path in files)
-    rows = owner_reviews(app, graph, tuple(sorted(owners)), limit=19)
-    scouted = [item for item in proposals(rows, owners, 57) if item["opportunity"] >= 2]
-    # Observed extension points are advice: only reviewed proposals ask for a decision.
+    rows = owner_reviews(app, graph, tuple(sorted(owners)), ("architecture", "patterns"), limit=19)
+    scouted = sorted(
+        (
+            item
+            for item in proposals(rows, owners, 57) + pattern_proposals(rows, owners, graph, 13)
+            if item["opportunity"] >= 2
+        ),
+        key=lambda item: (-item["opportunity"], item["proposal_id"]),
+    )
     result = decide(
         scouted[:12],
         decisions,

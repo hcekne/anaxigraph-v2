@@ -12,7 +12,10 @@ from anaxigraph.contracts import SOURCE_SUFFIXES, Graph, Node
 
 from .architecture_guidance import brief_proposals as architecture_proposals
 from .architecture_guidance import coverage as architecture_coverage
+from .architecture_guidance import pattern_proposals
 from .charter import CHARTER, boundary_findings, module_facts, relations
+from .fields import references as _references
+from .fields import short as _short
 
 
 def module_for(graph: Graph, value: str) -> Node | None:
@@ -134,60 +137,6 @@ def affected_paths(graph: Graph, paths: set[str], depth: int = 2) -> set[str]:
     return found
 
 
-def _short(value: Any, maximum: int = 240) -> str:
-    text = value if isinstance(value, str) else ""
-    raw = text.encode("utf-8")
-    return text if len(raw) <= maximum else raw[: maximum - 3].decode("utf-8", "ignore") + "..."
-
-
-def _references(value: Any, graph: Graph) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    return [
-        {"path": item["path"], "line": item["line"]}
-        for item in value
-        if isinstance(item, dict)
-        and isinstance(item.get("path"), str)
-        and item.get("path") in graph.snapshot.files
-        and type(item.get("line")) is int
-        and item["line"] > 0
-    ][:2]
-
-
-def _pattern_proposals(row: dict[str, Any], owners: set[str], graph: Graph) -> list[dict[str, Any]]:
-    result = row.get("result", {}).get("result", {})
-    proposals = []
-    for item in result.get("evaluations", []):
-        score = item.get("opportunity")
-        references = _references(item.get("evidence"), graph)
-        if (
-            item.get("module_id") not in owners
-            or type(score) is not int
-            or not 1 <= score <= 3
-            or not isinstance(item.get("proposed_change"), str)
-            or not item["proposed_change"].strip()
-            or not references
-        ):
-            continue
-        proposals.append(
-            {
-                "kind": "pattern",
-                "status": "proposal-needs-source-verification",
-                "module_id": item["module_id"],
-                "pattern_id": item.get("pattern_id"),
-                "opportunity": score,
-                "current_fit": item.get("current_fit", "unknown"),
-                "suggestion": _short(item["proposed_change"], 360),
-                "pros": [_short(value, 180) for value in item.get("pros", [])[:2]],
-                "cons": [_short(value, 180) for value in item.get("cons", [])[:2]],
-                "simpler_alternative": _short(item.get("alternative")),
-                "evidence": references,
-                "expand": "review:" + row["id"],
-            }
-        )
-    return proposals[:2]
-
-
 def _fresh_proposal(row: dict[str, Any]) -> dict[str, Any] | None:
     alternatives = row.get("result", {}).get("result", {}).get("alternatives", [])
     if len(alternatives) != 3:
@@ -210,13 +159,10 @@ def _review_proposals(
         and row.get("snapshot_id") == graph.snapshot.id
         and owners.intersection(row.get("result", {}).get("scope", []))
     ]
-    patterns = [
-        proposal
-        for row in current
-        if row.get("kind") == "patterns"
-        for proposal in _pattern_proposals(row, owners, graph)
-    ][:2]
-    selected = (architecture_proposals(current, owners) + patterns)[:2]
+    selected = sorted(
+        architecture_proposals(current, owners) + pattern_proposals(current, owners, graph),
+        key=lambda item: (-item["opportunity"], item["proposal_id"]),
+    )[:2]
     if not re.search(
         r"\b(architectur\w*|design|refactor\w*|simplify|modularity|maintainability|patterns?)\b",
         task,

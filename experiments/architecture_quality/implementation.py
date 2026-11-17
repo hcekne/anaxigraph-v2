@@ -32,6 +32,12 @@ SOURCES = {
     return results
 """,
 }
+DEFAULT_BRIEF = {
+    "overview": "Applies an asynchronous operation to a collection of items.",
+    "detail": "Returns results in input order and rejects a nonpositive concurrency argument.",
+    "capabilities": ["Apply an operation to items and return ordered results."],
+    "function_overview": "Apply an operation to ordered items.",
+}
 
 
 async def peak_concurrency(source: str) -> int:
@@ -52,24 +58,23 @@ async def peak_concurrency(source: str) -> int:
     return peak
 
 
-def fixture(root: Path, source: str) -> Application:
+def fixture(root: Path, source: str, *, path="delivery.py", brief=None) -> Application:
     root.mkdir(parents=True)
-    (root / "delivery.py").write_text(source)
+    (root / path).write_text(source)
+    brief = DEFAULT_BRIEF if brief is None else brief
     app = Application(root)
     app.scan()
-    request = app.analysis_request("annotate", ["delivery.py"])
+    request = app.analysis_request("annotate", [path])
     app.submit_analysis(
         request["request_id"],
         {
             "producer": "synthetic-identical-behavior-brief",
             "annotations": [
                 {
-                    "node_id": "module:delivery.py",
-                    "overview": "Applies an asynchronous operation to a collection of items.",
-                    "detail": "Returns results in input order and rejects a nonpositive concurrency argument.",
-                    "capabilities": ["Apply an operation to items and return ordered results."],
+                    "node_id": request["scope"][0],
+                    **{key: brief[key] for key in ("overview", "detail", "capabilities")},
                     "functions": [
-                        {"node_id": node["id"], "overview": "Apply an operation to ordered items."}
+                        {"node_id": node["id"], "overview": brief["function_overview"]}
                         for node in request["packet"]["functions"]
                     ],
                     "contracts": [],

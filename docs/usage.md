@@ -151,6 +151,11 @@ source copies are transient; saved reviews and portable records retain fingerpri
 copy of the code. Pattern runs do not run Fresh Eyes. Fresh Eyes receives behavior summaries rather than current source or topology,
 and keeps three design alternatives at subsystem and product levels.
 
+Current material Pattern findings (ratings 2–3) appear in `assess_plan` alongside architecture
+findings. Record adopt, defer or reject with a reason. Optional, unknown, stale and unrelated
+findings do not require decisions. Preparation and assessment use the same proposal IDs;
+validation retains those decisions as intent and leaves implementation unverified.
+
 Defaults use Luna/low for mapping and discovery, and Sol/medium for selected details and positive
 architecture/CI finding review. Existing explicit model choices are preserved. Global ordered
 review passes intentionally replace dedicated finding reviewers; the effective policy is shown

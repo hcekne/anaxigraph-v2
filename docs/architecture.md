@@ -96,7 +96,10 @@ a change needs is now answered from a recorded run (see `tests_for_change` below
 proposed work.
 The [architecture scouts](change-request-architecture-scouts.md) now perform focused source-aware
 searches, compare local/workspace/separate-repository package options, feed task guidance and
-require dispositions for material plan findings. They reuse the shared runner and do not alter
+require dispositions for material plan findings. Detailed Pattern findings use the same decision
+and followthrough path, with stable identities for each review/module/card pair. Preparation keeps
+the highest-priority proposals across both kinds; recent blind reviews cannot displace them.
+They reuse the shared runner and do not alter
 Fresh Eyes isolation. New Pattern runs also include a separate repository-level delivery specialist;
 CI-only reviews need neither semantic annotations nor a Python application. The model proposes
 pipeline improvements. Both operate through the shared application and runner.

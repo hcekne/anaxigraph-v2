@@ -329,9 +329,9 @@ def _screen_packet(graph: Graph, chosen: list[Node]) -> tuple[dict[str, Any], di
     return {
         "instruction": (
             "Consider EVERY card × module against the charter, facts and current brief. Return "
-            "ONLY plausible IDs for stronger review: normally 3–10 when justified, maximum 10, "
-            "or pattern_ids: [] when none merit review. Include uncertain opportunities without "
-            "requiring proven bugs. Seek simpler code and clearer responsibilities/interfaces; "
+            "One selections entry per module, even when pattern_ids is []; never selections: []. "
+            "Select 3–10 plausible IDs when justified, maximum 10. Include uncertain opportunities "
+            "without proven bugs. Seek simpler code and clearer responsibilities/interfaces; "
             "functions/modules can implement patterns without classes. Existing good fit is not "
             "an improvement. No mechanical exclusions, forced minimum, ratings or prose. "
             "Unselected is not proven irrelevant."
