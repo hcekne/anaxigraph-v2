@@ -31,7 +31,13 @@ from anaxigraph.application.context import (
     context_fingerprints,
     dependency_implementation_fingerprints,
 )
-from anaxigraph.application.reuse import reuse_analysis, review_context
+from anaxigraph.application.reuse import (
+    applicable_request,
+    pipeline_matches,
+    retain_review,
+    reuse_analysis,
+    review_context,
+)
 from anaxigraph.contracts import Graph, Node
 from anaxigraph.indexing import capture_sources
 
@@ -225,55 +231,39 @@ def reviews(
 
 
 def _review_state(app: Application, row: dict[str, Any], graph: Graph) -> dict[str, Any]:
-    if row["status"] != "current":
-        return row
-    scope = row["result"].get("scope")
-    if scope is None:
+    if row["result"].get("scope") is None:
         return row | {
-            "status": "unknown",
+            "status": "unknown" if row["snapshot_id"] == graph.snapshot.id else "stale",
             "freshness_reason": "Analysis input identity not recorded",
         }
-    try:
-        current_id = app._rebuild_request(graph, row["kind"], row["result"])["request_id"]
-    except ValueError:
-        current_id = None
-    return (
-        row
-        if current_id == row["id"]
-        else row
-        | {
-            "status": "stale",
-            "freshness_reason": "Source, semantic, catalogue or prompt inputs changed",
-        }
-    )
+    current = applicable_request(app, row, graph) is not None
+    return row | {
+        "status": "current" if current else "stale",
+        "checked_snapshot_id": graph.snapshot.id,
+        "freshness_reason": "Inputs match" if current else "Inputs or validation changed",
+    }
 
 
 def _rebuild_request(
     app: Application, graph: Graph, kind: str, body: dict[str, Any]
 ) -> dict[str, Any]:
+    options = dict(body.get("request_options", {}))
     if body.get("children"):
         children = []
         for child in body["children"]:
-            request = app.store.get_review(str(app.root), child["request_id"], "request")
             result = app.store.get_review(str(app.root), child["request_id"], "fresh-eyes")
-            if (
-                request is None
-                or result is None
-                or app._review_state(result, graph)["status"] != "current"
-            ):
+            request = applicable_request(app, result, graph) if result else None
+            if request is None or result is None:
                 raise ValueError("A product review's independent input is missing or stale")
-            children.append({"request": request["result"], "result": result["result"]["result"]})
-        options = body.get("request_options", {})
+            children.append({"request": request, "result": result["result"]["result"]})
         return build_product_request(
             graph,
             children,
             **{k: options[k] for k in ("max_packet_bytes", "max_result_bytes") if k in options},
         )
-    options = dict(body.get("request_options", {}))
     options.update(_request_context(app, graph, kind, options))
     request = build_request(graph, kind, body["scope"], **options)
-    if body.get("pattern_mode") in ("screened", "selected"):
-        request["pattern_mode"] = body["pattern_mode"]
+    request["pattern_mode"] = body.get("pattern_mode")
     return request
 
 
@@ -297,34 +287,21 @@ def analysis_saved(
     request = app.store.get_review(str(app.root), request_id, "request")
     if request is None:
         return False
+    graph = app._current()
     if request["result"]["kind"] == "annotate":
-        graph = app._current()
         targets = set(request["result"]["scope"])
         current = [node for node in graph.nodes if node.id in targets]
         return len(current) == len(targets) and all(
             node.data.get("annotation_status") == "current"
-            and (
-                pipeline is None
-                or (node.data["annotation"].get("execution") or {}).get("pipeline") == pipeline
-            )
+            and pipeline_matches(node.data["annotation"], pipeline)
             for node in current
         )
     row = app.store.get_review(str(app.root), request_id, request["result"]["kind"])
-    if row is None or app._review_state(row, app._current())["status"] != "current":
+    if row is None or app._review_state(row, graph)["status"] != "current":
         return reuse_analysis(app, request["result"], pipeline)
-    if (
-        pipeline is not None
-        and row["result"]["result"].get("execution", {}).get("pipeline") != pipeline
-    ):
+    if not pipeline_matches(row["result"]["result"], pipeline):
         return False
-    if request["result"].get("pattern_mode") in ("screened", "selected"):
-        app.store.save_review(
-            str(app.root),
-            row["snapshot_id"],
-            request_id,
-            row["kind"],
-            row["result"] | {"pattern_mode": request["result"]["pattern_mode"]},
-        )
+    retain_review(app, graph, row, request["result"])
     return True
 
 
@@ -342,12 +319,10 @@ def analysis_selection(app: Application, request_id: str) -> list[dict[str, Any]
 
 def _reconciliation_rows(app, graph: Graph, kind: str, review_ids: list[str]) -> list[dict]:
     rows = []
+    allowed = ("patterns", "pattern-screen", "architecture") if kind == "patterns" else (kind,)
     for identity in review_ids:
-        row = app.store.get_review(str(app.root), identity, kind)
-        if row is None and kind == "patterns":
-            row = app.store.get_review(str(app.root), identity, "pattern-screen")
-        if row is None and kind == "patterns":
-            row = app.store.get_review(str(app.root), identity, "architecture")
+        candidates = app.store.reviews(str(app.root), review_id=identity, include_requests=False)
+        row = next((item for item in candidates if item["kind"] in allowed), None)
         if row is None or app._review_state(row, graph)["status"] != "current":
             raise ValueError("Reconciliation found a missing or stale review batch")
         rows.append(row)

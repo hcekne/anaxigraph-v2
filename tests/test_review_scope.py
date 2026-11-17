@@ -55,4 +55,6 @@ def test_scope_and_limit_are_applied_before_review_decompression(tmp_path, monke
     assert store.reviews(str(tmp_path), module_ids=()) == []
     newer = replace(current, snapshot=replace(current.snapshot, id="two"))
     store.save_graph(newer)
-    assert store.reviews(str(tmp_path), module_ids=("module:a.py",), limit=6) == []
+    rows = store.reviews(str(tmp_path), module_ids=("module:a.py",), limit=6)
+    assert [row["id"] for row in rows] == ["second", "first"]
+    assert all(row["status"] == "stale" for row in rows)

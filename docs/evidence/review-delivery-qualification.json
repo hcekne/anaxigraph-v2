@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-17",
+  "before_commit": "efb92981f0ddae45cc48bd0cb6b8a7b12031ecae",
+  "runtime_before": "1ba689258e36754f3ee8ef1a555cbf76b46ea615ccde42c2abc00c313d1d9582",
+  "runtime_after": "7b7d90fde04ddcbedcf6b01aa409f88757b575f3accee6f2d65541af234752c6",
+  "harness_sha256": "b1813cde91a15cd4f4a05e6c5fc8c14a54d2b98990b58e889bca386eca96347b",
+  "scope": "Identical 104-module controlled source fixtures, seeded with synthetic annotations, reviews and plan decisions using the previously deployed runtime; compared through actual Application APIs",
+  "delivery": {
+    "before_unrelated_edit": {
+      "old_proposal_kinds": ["pattern", "architecture"],
+      "new_proposal_kinds": ["pattern", "architecture", "fresh-eyes"]
+    },
+    "after_unrelated_edit": {
+      "old_proposal_kinds": [],
+      "new_proposal_kinds": ["pattern", "architecture", "fresh-eyes"],
+      "original_material_proposals_retained": 2
+    },
+    "compatible_reuse": {
+      "old_total_obligations": 4,
+      "old_new_pending_obligations": 2,
+      "new_total_obligations": 2,
+      "new_pending_obligations": 0,
+      "prior_dispositions_preserved": true
+    },
+    "product_current_after_child_request_pruning": {"before": false, "after": true},
+    "availability_reads_preserve_original_review_token": true
+  },
+  "prepare_median_ms": {"before_empty_reply": 12.46, "after_advice_delivered": 16.52},
+  "prepare_reply_bytes": {"before": 3165, "after": 4996},
+  "new_regression_cases_passed": 27,
+  "regression_scope": [
+    "Unrelated source, documentation and empty-commit changes preserve compatible advice without rewriting capture",
+    "Scoped source, resources, cited documents and policy changes make advice stale",
+    "Invalid saved result shape remains stale even on its original snapshot",
+    "Old requests cannot promote results after their scoped source changes",
+    "Compatible explicit reuse preserves prior proposal identities and decisions across process restarts",
+    "Two material proposals do not hide the reference to three blind alternatives",
+    "Pruning transient child requests preserves product availability; revising child results invalidates it"
+  ],
+  "production_physical_lines": 15000,
+  "model_calls": 0,
+  "limits": "Five serial local samples per runtime on a shared machine, with controlled synthetic saved content. This establishes advice delivery, identity and validity behavior, not model recommendation quality, architecture improvement or production latency. No private target source or live analysis was modified."
+}

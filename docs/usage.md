@@ -144,8 +144,9 @@ preparation keeps the original baseline. Status shows saved state and does not r
 Source changes during a model run require a new run for the new snapshot; compatible accepted
 batches are reused. Stronger models cannot fix stale inputs.
 Previously assessed obligations remain with the task after source edits. Reordering review findings
-preserves their IDs; changing a finding's content requires a fresh decision. A new task clears the
-local plan checkpoint. It is not part of the portable analysis record.
+preserves their IDs, as does reuse of an identical scoped review; changing a finding's content
+requires a fresh decision. A new task clears the local plan checkpoint. It is not part of the
+portable analysis record.
 
 ## Reviews are requested, not scheduled
 
@@ -185,6 +186,15 @@ Current material Pattern findings (ratings 2–3) appear in `assess_plan` alongs
 findings. Record adopt, defer or reject with a reason. Optional, unknown, stale and unrelated
 findings do not require decisions. Preparation and assessment use the same proposal IDs;
 validation retains those decisions as intent and leaves implementation unverified.
+
+Saved scoped advice stays available after unrelated edits when its inputs, relevant resources and
+validation still match. Review listings retain the original `snapshot_id` and show the
+`checked_snapshot_id` used to verify applicability. `current` means matching inputs, not a new
+model review or verified implementation. Source, policy, cited-document or relevant resource
+changes can make it stale. Reading availability does not rewrite the original capture.
+For architecture tasks, preparation includes a compact reference to all three Fresh Eyes options
+alongside its two highest-ranked material proposals. Product reviews rely on saved child results,
+so pruning transient request packets does not discard their validity.
 
 Defaults use Luna/low for mapping and discovery, and Sol/medium for selected details and positive
 architecture/CI finding review. Existing explicit model choices are preserved. Global ordered

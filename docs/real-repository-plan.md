@@ -328,3 +328,20 @@ freshness field. The separate 13-module case retained eleven current, one stale 
 annotation. These are API qualification timings, not changed-candidate, model or architectural
 quality claims. Two unused internal wrappers were removed; production is 14,999 lines under the
 unchanged ceiling. [Qualification](evidence/query-validation-qualification.json).
+
+Saved reviews then exposed a delivery gap: an unrelated edit hid otherwise compatible scoped
+advice, while explicit cache reuse changed proposal identities and duplicated decision obligations.
+Availability now checks scoped semantic inputs, resources and result validity while preserving the
+original capture. Compatible reuse keeps original proposal identities and decisions. A stale old
+request cannot promote a result after its own source changes. Product Fresh Eyes reconstruction
+uses durable child results and checks their digests; transient request pruning no longer invalidates
+it. Architecture preparation keeps its three-option reference alongside material proposals.
+
+In a controlled 104-module fixture seeded by the deployed runtime, the old implementation hid all
+advice after an unrelated edit and added two pending duplicate obligations on reuse. The update
+retained all advice and both existing decisions. Availability reads left captures untouched. The
+five-sample preparation median was 12.46 ms for the old empty reply and 16.52 ms with advice
+delivered. These are delivery/identity checks using synthetic saved results, not new model or
+architectural-quality evidence. Twenty-seven regression cases cover compatibility, invalidation,
+decision continuity and product inputs. Production remains 15,000 lines under the unchanged ceiling.
+[Qualification](evidence/review-delivery-qualification.json).

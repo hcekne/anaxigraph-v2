@@ -97,8 +97,8 @@ proposed work.
 The [architecture scouts](change-request-architecture-scouts.md) now perform focused source-aware
 searches, compare local/workspace/separate-repository package options, feed task guidance and
 require dispositions for material plan findings. Detailed Pattern findings use the same decision
-and followthrough path. IDs bind the review and full finding content: reordering preserves them,
-while changed advice needs a fresh decision. Preparation keeps
+and followthrough path. IDs bind the original review provenance and full finding content:
+reordering and compatible reuse preserve them, while changed advice needs a fresh decision. Preparation keeps
 the highest-priority proposals across both kinds; recent blind reviews cannot displace them.
 They reuse the shared runner and do not alter
 Fresh Eyes isolation. New Pattern runs also include a separate repository-level delivery specialist;
@@ -182,6 +182,10 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 - Compressed requests and current per-scope reviews live within the database budget. Current workflow
   batches are never discarded by a twenty-review cap; obsolete requests have bounded retention.
   Completed analyses survive graph-checkpoint pruning and disclose stale inputs.
+  Scoped availability compares current semantic inputs, resource context and result validation;
+  unrelated snapshot changes alone do not invalidate advice. Listings keep the original capture
+  and identify the snapshot checked. Product review inputs rebuild from durable child results,
+  including their content digests, rather than transient queued requests.
   Writers coordinate across processes; readers remain concurrent. Compact failure diagnostics
   survive progress rotation in a bounded ledger exposed by workflow status.
 - Test observation v3 records executed code filenames, including cached dynamic modules and

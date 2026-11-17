@@ -105,14 +105,13 @@ def followthrough(
         if "view" in event
         else metrics.get("obligations", [])
     )
-    verified = [
-        item | {"status": "unresolved", "proposal_status": "unresolved"} for item in obligations
-    ]
     return observed | {
         "status": metrics.get("status", event.get("status", "not_assessed")),
         "assessed_snapshot_id": event["snapshot_id"],
         **{key: value for key, value in metrics.items() if key not in {"requirements", "advisory"}},
-        "obligations": verified,
+        "obligations": [
+            item | {"status": "unresolved", "proposal_status": "unresolved"} for item in obligations
+        ],
         "implementation_status": "unverified",
         "note": "Dispositions record intent. Observed source changes do not establish proposal implementation or behavior.",
     }

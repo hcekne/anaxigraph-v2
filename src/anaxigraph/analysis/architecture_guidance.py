@@ -7,7 +7,7 @@ from typing import Any
 
 from anaxigraph.contracts import Graph
 
-from .fields import fingerprint, references, short
+from .fields import proposal_id, references, short
 from .patterns import rated_opportunities
 
 
@@ -27,7 +27,7 @@ def pattern_proposals(
         items.append(
             {
                 "kind": "pattern",
-                "proposal_id": f"{item['review_id']}:{fingerprint(item)}",
+                "proposal_id": item["proposal_id"],
                 "review_id": item["review_id"],
                 "title": f"{item['pattern_id']} in {item['module_id']}",
                 "status": "proposal-needs-source-verification",
@@ -60,7 +60,7 @@ def proposals(rows: list[dict[str, Any]], owners: set[str], limit: int | None = 
             items.append(
                 {
                     "kind": "architecture",
-                    "proposal_id": f"{row['id']}:{fingerprint(item)}",
+                    "proposal_id": proposal_id(row, item),
                     "review_id": row["id"],
                     "lens": result["lens"],
                     "title": item["title"],

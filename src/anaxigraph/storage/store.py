@@ -712,11 +712,11 @@ class Store:
             if module_ids is not None:
                 placeholders = ",".join("?" for _ in module_ids)
                 statement += (
-                    " AND snapshot_id=? AND EXISTS(SELECT 1 FROM json_each("
+                    " AND EXISTS(SELECT 1 FROM json_each("
                     "CASE WHEN json_valid(scope_key) THEN scope_key ELSE '{}' END,'$.scope') "
                     f"AS target WHERE target.value IN ({placeholders}))"
                 )
-                parameters.extend((current_id, *module_ids))
+                parameters.extend(module_ids)
             statement += " ORDER BY updated_at DESC"
             if limit is not None:
                 statement += " LIMIT ?"

@@ -84,13 +84,11 @@ def obligation(item: dict) -> dict:
 
 
 def independent_verification(graph: Graph, previous: Graph | None, checks: list[dict]) -> dict:
-    reach = extension.check_reach(graph, changed_paths(graph, previous))
+    paths = changed_paths(graph, previous)
     return {
         "status": "unresolved",
-        "observed_check_reach": reach,
-        "baseline_check_reach": extension.check_reach(previous, changed_paths(graph, previous))
-        if previous
-        else None,
+        "observed_check_reach": extension.check_reach(graph, paths),
+        "baseline_check_reach": extension.check_reach(previous, paths) if previous else None,
         "supplied_checks": [{key: check[key] for key in ("command", "status")} for check in checks],
         "note": "Import reach includes composition roots. Snapshot-matched check reports do not establish isolated component environments, consumer coverage or full behavioral correctness.",
     }

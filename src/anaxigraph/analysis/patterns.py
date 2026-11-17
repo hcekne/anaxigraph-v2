@@ -6,6 +6,8 @@ from typing import Any
 
 from anaxigraph.contracts import Graph, Node
 
+from .fields import proposal_id
+
 
 def production_modules(graph: Graph) -> list[Node]:
     return [
@@ -92,7 +94,7 @@ def review_summary(row: dict[str, Any]) -> str:
 
 def rated_opportunities(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
-        item | {"review_id": row["id"]}
+        item | {"review_id": row["id"], "proposal_id": proposal_id(row, item)}
         for row in rows
         if row["kind"] == "patterns" and row["status"] == "current"
         for item in row["result"]["result"]["evaluations"]

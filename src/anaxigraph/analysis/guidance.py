@@ -158,7 +158,7 @@ def _review_proposals(
         row
         for row in reviews
         if row.get("status") == "current"
-        and row.get("snapshot_id") == graph.snapshot.id
+        and row.get("checked_snapshot_id", row.get("snapshot_id")) == graph.snapshot.id
         and owners.intersection(row.get("result", {}).get("scope", []))
     ]
     selected = sorted(
@@ -179,7 +179,7 @@ def _review_proposals(
         ),
         None,
     )
-    return (selected + ([fresh] if fresh is not None else []))[:2]
+    return selected + ([fresh] if fresh is not None else [])
 
 
 def _coding_steps(

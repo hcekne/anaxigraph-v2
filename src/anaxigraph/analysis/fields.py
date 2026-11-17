@@ -16,6 +16,14 @@ def fingerprint(value: Any) -> str:
     return hashlib.sha256(body.encode()).hexdigest()
 
 
+def proposal_id(row: dict, finding: dict) -> str:
+    """Keep reuse identities stable, including the historical Pattern identity format."""
+    origin = (row["result"].get("provenance") or {}).get("original_id") or row["id"]
+    if row["kind"] == "patterns":
+        finding = finding | {"review_id": origin}
+    return f"{origin}:{fingerprint(finding)}"
+
+
 def short(value: Any, maximum: int = 240) -> str:
     text = value if isinstance(value, str) else ""
     raw = text.encode("utf-8")
