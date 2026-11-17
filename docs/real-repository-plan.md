@@ -188,3 +188,17 @@ invocation, including xdist; independently launched shards need a completion pro
 Local qualification: 48 selection tests passed, including real serial and two-worker pytest
 runs and interruption/missing-worker cases. Production size: 14,725 lines, below the unchanged
 15,000-line ceiling. No new measurement on the private target has been made.
+
+Shadow results now distinguish unverified JUnit, a source-bound completed candidate invocation,
+and an incomplete test-file inventory. `tests --ran ... --reads ...` checks the candidate's
+recording without replacing the baseline. Unknown JUnit testcases are rejected. This verifies
+the supplied invocation, not the completeness of the project's declared suite or future
+behavior. Selective CI still requires prospective comparisons. Local selection regression
+coverage has increased to 49 cases, with no paid model calls.
+
+Self-recording exposed a performance mistake in the initial opaque-process fix: a measured
+helper named with `+module` was treated like an unowned import-time start. Such helpers now
+keep every test that executed them selected; only unknown/unmeasured process context requires
+the whole suite. CI measures the experimental helpers its unit tests actually call as well.
+Local selection regression coverage: 50 passed. Production size: 14,756 lines, 168 fewer than
+the handover, with the original ceiling unchanged.

@@ -243,7 +243,9 @@ widens by itself as the record ages. A test file is selected when:
 - it changed itself or is new, a helper it imports changed, or a `conftest.py` above it changed;
 - the record cannot name its inputs: it executed no recorded source and read no recorded
   file, or it started a process whose reads are not seen (a `git` command working outside
-  the checkout does not count). These run whenever anything changed.
+  the checkout does not count). The tests of a measured process-starting helper also run, since
+  it may keep the result for later callers. These run whenever anything changed. An opaque
+  start outside a test, or in code coverage did not measure, requires the whole suite.
 
 The whole suite is selected, with the reason, when a changed input cannot be attributed:
 
@@ -286,7 +288,12 @@ In CI, a nightly job on the main branch records the suite and keeps the record a
 (`.anaxigraph-v2/` is a hidden folder; artifact steps often skip those unless told otherwise).
 A pull-request job fetches the latest record, runs `anaxigraph tests --paths`, and runs the
 listed files, or everything when nothing is listed. Start in shadow mode: keep running the whole
-suite and pass its JUnit reports to `anaxigraph tests --ran junit.xml`. Each suite then carries a
+suite and pass its JUnit reports to `anaxigraph tests --ran junit.xml --reads candidate-reads.json`.
+Start a new recording for that candidate before testing, but keep the original test record for
+selection; do not replace it with the candidate recording before the comparison. The candidate
+reads report binds JUnit to current source and a completed invocation. Without it the comparison
+is explicitly unverified. Missing previously recorded test files make it incomplete, and an
+unmatched testcase is rejected rather than silently ignored. Each suite then carries a
 `shadow` entry that names, under `missed`, every failing test file the selection would have left
 out. Baseline failures are compared by testcase identity, so a new failure in an already-failing
 file remains visible. A legacy baseline without testcase identities subtracts no failures. Let the selection skip tests

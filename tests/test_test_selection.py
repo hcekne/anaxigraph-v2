@@ -610,15 +610,29 @@ def test_a_whole_suite_run_shows_what_the_selection_would_have_left_out(checkout
     [suite] = json.loads(capsys.readouterr().out)["suites"]
     # The selection for orders.py holds its failing test; the failure in test_taxes.py is one
     # that it would not have run.
-    assert suite["shadow"] == {
+    assert {
+        key: suite["shadow"][key]
+        for key in ("failing_test_files", "failing_when_recorded", "caught", "missed")
+    } == {
         "failing_test_files": 2,
         "failing_when_recorded": 0,
         "caught": 1,
         "missed": [T("taxes")],
     }
+    assert suite["shadow"]["evidence_status"] == "incomplete"
+    assert T("loader") in suite["shadow"]["missing_recorded_test_files"]
 
 
-@pytest.mark.parametrize("reader", ["@", "@shop/pkg/regions.py", "+shop/pkg/labels.py"])
+def test_an_unmatched_junit_case_is_not_silently_treated_as_no_failures(checkout):
+    report = checkout.parent / "unknown.xml"
+    report.write_text(
+        '<testsuite><testcase classname="elsewhere.test_unknown" name="broken"><failure/></testcase></testsuite>'
+    )
+    with pytest.raises(ValueError, match="cannot be matched"):
+        Application(checkout).tests_for_change(ran=[report])
+
+
+@pytest.mark.parametrize("reader", ["@", "@shop/pkg/regions.py", "+missing.py"])
 def test_unattributed_processes_survive_recording_and_force_the_whole_suite(run, tmp_path, reader):
     import json
 
@@ -635,6 +649,26 @@ def test_unattributed_processes_survive_recording_and_force_the_whole_suite(run,
     suite = picked(root)
     assert suite["status"] == "all"
     assert "A process started outside an attributable test" in suite["everything_because"]
+
+
+def test_process_helpers_keep_all_their_observed_consumers_without_forcing_other_tests(
+    run, tmp_path
+):
+    import json
+
+    root = Path(shutil.copytree(run, tmp_path / "checkout"))
+    reports = Path(
+        shutil.copytree(run.parent, tmp_path / "reports", ignore=lambda *_: ["checkout"])
+    )
+    path = reports / "reads.json"
+    report = json.loads(path.read_text())
+    report["started"].setdefault("", []).append("+shop/pkg/prices.py")
+    path.write_text(json.dumps(report))
+    record(root, run, reads=True, reports=reports)
+    (root / "shop/pkg/labels.py").write_text("def label(order):\n    return ''\n")
+    suite = picked(root)
+    assert suite["status"] == "selected"
+    assert suite["test_files"] == chosen("labels", "orders", "prices")
 
 
 @pytest.mark.parametrize("legacy", [False, True])
@@ -822,6 +856,11 @@ def test_completed_and_interrupted_real_runs_have_distinct_recording_status(
         == 0
     )
     assert json.loads(capsys.readouterr().out)["provenance"]["status"] == "verified"
+    [suite] = app.tests_for_change(ran=[tmp_path / "junit.xml"], reads=tmp_path / "reads.json")[
+        "suites"
+    ]
+    assert suite["shadow"]["evidence_status"] == "source-bound"
+    assert suite["shadow"]["missing_recorded_test_files"] == []
     saved = root / ".anaxigraph-v2/test-records/engine.json"
     before = saved.read_bytes()
     if parallel:

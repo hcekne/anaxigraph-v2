@@ -30,15 +30,15 @@ jobs:
           uv sync --locked --extra dev --python ${{ matrix.python }}
       - name: Check V2 behavior and boundaries
         run: |
-          uv run anaxigraph record-tests --start --suite unit --scope src tests scripts
+          uv run anaxigraph record-tests --start --suite unit --scope src tests scripts experiments
           export ANAXIGRAPH_RECORDING="${GITHUB_WORKSPACE}/.anaxigraph-v2/recordings/unit.json"
           export ANAXIGRAPH_READS="${RUNNER_TEMP}/unit-reads.json"
           printf '[run]\ndata_file = %s\n' "${RUNNER_TEMP}/unit.coverage" > "${RUNNER_TEMP}/unit-coveragerc"
           PYTHONPATH="$(uv run anaxigraph tests --recorder)" uv run pytest \
-            -p anaxigraph_reads --cov=anaxigraph --cov-context=test --cov-report= \
+            -p anaxigraph_reads --cov=anaxigraph --cov=experiments --cov=scripts --cov-context=test --cov-report= \
             --cov-config="${RUNNER_TEMP}/unit-coveragerc" \
             --junitxml="${RUNNER_TEMP}/unit.xml"
-          uv run anaxigraph record-tests --suite unit --scope src tests scripts \
+          uv run anaxigraph record-tests --suite unit --scope src tests scripts experiments \
             --coverage "${RUNNER_TEMP}/unit.coverage" --reads "$ANAXIGRAPH_READS" \
             --junit "${RUNNER_TEMP}/unit.xml"
           unset ANAXIGRAPH_RECORDING ANAXIGRAPH_READS

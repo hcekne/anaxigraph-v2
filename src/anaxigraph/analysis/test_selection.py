@@ -252,6 +252,12 @@ def _unseen(selection: _Selection, tests: list[str]) -> None:
     )
     started = selection.numbered(reads.get("started", ()))
     selection.add("(anything)", "tests that started another process", started)
+    for module in reads.get("process_modules", ()):
+        if module not in record["executed"]:
+            selection.everything.append(f"Process-starting code was not measured: {module}")
+        selection.add(
+            module, "tests of code that started another process", selection.executed(module)
+        )
     if reads.get("unattributed_processes"):
         selection.everything.append("A process started outside an attributable test")
 

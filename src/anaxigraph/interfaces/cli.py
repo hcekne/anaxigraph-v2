@@ -31,6 +31,9 @@ def _test_parsers(commands: Any) -> None:
     command.add_argument(
         "--ran", type=Path, nargs="+", help="JUnit reports of a whole-suite run at this checkout"
     )
+    command.add_argument(
+        "--reads", type=Path, help="Completed candidate recording that binds --ran to this source"
+    )
     command = commands.add_parser("record-tests", help="Save a record of one suite's recorded run")
     _location(command)
     command.add_argument("--coverage", type=Path, help="coverage.py data file")
@@ -60,7 +63,7 @@ def _test_dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]
             args.junit,
             args.reads,
         )
-    result = application.tests_for_change(full=True, ran=args.ran)
+    result = application.tests_for_change(full=True, ran=args.ran, reads=args.reads)
     if args.paths:  # For a CI step: one path per line, or nothing when the answer is "all".
         selected = [suite for suite in result["suites"] if suite["status"] != "all"]
         if len(selected) == len(result["suites"]):

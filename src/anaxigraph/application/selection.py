@@ -13,6 +13,7 @@ from anaxigraph.analysis.test_selection import select_tests
 from anaxigraph.indexing import worktrees
 from anaxigraph.indexing.test_record import FORMAT, junit_cases, record_from_coverage
 from anaxigraph.indexing.test_run import FORMAT as RUN_FORMAT
+from anaxigraph.indexing.test_run import verify
 
 _FOLDER = Path(".anaxigraph-v2") / "test-records"
 _SHOWN = 200
@@ -116,13 +117,23 @@ def _records(app: Any) -> list[dict[str, Any]]:
     return [record for record in records if record.get("format") == FORMAT]
 
 
-def _shadow(record: dict[str, Any], picked: dict[str, Any], graph: Any, ran: list[Path]) -> dict:
+def _shadow(
+    record: dict[str, Any], picked: dict[str, Any], graph: Any, ran: list[Path], reads: Path | None
+) -> dict:
     """Would the selection have caught what a whole-suite run of this checkout caught?"""
-    failing = junit_cases(ran, record["run_root"], graph.snapshot.files)[1]
+    proof = verify(reads, graph, None, ran)
+    seconds, failing = junit_cases(ran, record["run_root"], graph.snapshot.files)
+    missing = sorted(set(record["tests"]).intersection(graph.snapshot.files) - seconds.keys())
     before = record.get("failed_cases", {})
     new = {path for path, cases in failing.items() if cases - set(before.get(path, []))}
     left_out = new - set(picked["test_files"])
     return {
+        "evidence_status": "incomplete"
+        if missing
+        else "source-bound"
+        if proof["status"] == "verified"
+        else "unverified",
+        "missing_recorded_test_files": missing[:20],
         "failing_test_files": len(failing),
         "failing_when_recorded": sum(
             bool(cases & set(before.get(path, []))) for path, cases in failing.items()
@@ -132,7 +143,9 @@ def _shadow(record: dict[str, Any], picked: dict[str, Any], graph: Any, ran: lis
     }
 
 
-def tests_for_change(app: Any, full: bool = False, ran: list[Path] | None = None) -> dict[str, Any]:
+def tests_for_change(
+    app: Any, full: bool = False, ran: list[Path] | None = None, reads: Path | None = None
+) -> dict[str, Any]:
     """The test files each recorded suite needs for the checkout as it is now.
 
     `ran` names JUnit reports of a whole-suite run at this checkout; each suite then says
@@ -143,7 +156,7 @@ def tests_for_change(app: Any, full: bool = False, ran: list[Path] | None = None
     for record in _records(app):
         picked = select_tests(record, graph)
         if ran:
-            picked["shadow"] = _shadow(record, picked, graph, ran)
+            picked["shadow"] = _shadow(record, picked, graph, ran, reads)
         if not full and len(picked["test_files"]) > _SHOWN:
             picked |= {"test_files": picked["test_files"][:_SHOWN], "test_files_truncated": True}
         suites.append(picked)

@@ -80,6 +80,11 @@ def junit_cases(
                         identity = f"{case.get('classname')}::{case.get('name')}"
                         failed.setdefault(path, set()).add(identity)
                     break
+            else:
+                raise ValueError(
+                    "JUnit testcase cannot be matched to this checkout: "
+                    + (case.get("classname") or "(no classname)")
+                )
     return seconds, failed
 
 
@@ -227,7 +232,11 @@ def _attributed(
         result["through"][kind] = _marked(reads[kind], "+", known, False)
     started = reads["started"].get("", set())
     result["started"] = sorted(position[reader] for reader in started & position.keys())
-    result["unattributed_processes"] = sorted(started - position.keys())
+    modules = {reader[1:] for reader in started if reader.startswith("+") and reader[1:] in known}
+    result["process_modules"] = sorted(modules)
+    result["unattributed_processes"] = sorted(
+        started - position.keys() - {"+" + module for module in modules}
+    )
     return result
 
 

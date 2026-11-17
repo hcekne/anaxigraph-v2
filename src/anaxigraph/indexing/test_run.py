@@ -16,7 +16,7 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def verify(report: Path | None, graph: Graph, coverage: Path, junit: list[Path]) -> dict:
+def verify(report: Path | None, graph: Graph, coverage: Path | None, junit: list[Path]) -> dict:
     if report is None:
         return {"status": "unverified", "reason": "No source-bound reads recording"}
     found = json.loads(report.read_text())
@@ -34,7 +34,7 @@ def verify(report: Path | None, graph: Graph, coverage: Path, junit: list[Path])
     if not found.get("complete") or found.get("run_id") != run["run_id"]:
         raise ValueError("Recording did not complete against its original source")
     artifacts = found.get("artifacts", {})
-    if artifacts.get("coverage") != digest(coverage):
+    if coverage is not None and artifacts.get("coverage") != digest(coverage):
         raise ValueError("Coverage does not belong to this completed recording")
     if len(junit) != 1 or artifacts.get("junit") != digest(junit[0]):
         raise ValueError("JUnit does not belong to this completed recording")
