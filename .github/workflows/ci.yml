@@ -33,14 +33,15 @@ jobs:
           uv run anaxigraph record-tests --start --suite unit --scope src tests scripts
           export ANAXIGRAPH_RECORDING="${GITHUB_WORKSPACE}/.anaxigraph-v2/recordings/unit.json"
           export ANAXIGRAPH_READS="${RUNNER_TEMP}/unit-reads.json"
-          export COVERAGE_FILE="${RUNNER_TEMP}/unit.coverage"
+          printf '[run]\ndata_file = %s\n' "${RUNNER_TEMP}/unit.coverage" > "${RUNNER_TEMP}/unit-coveragerc"
           PYTHONPATH="$(uv run anaxigraph tests --recorder)" uv run pytest \
             -p anaxigraph_reads --cov=anaxigraph --cov-context=test --cov-report= \
+            --cov-config="${RUNNER_TEMP}/unit-coveragerc" \
             --junitxml="${RUNNER_TEMP}/unit.xml"
           uv run anaxigraph record-tests --suite unit --scope src tests scripts \
-            --coverage "$COVERAGE_FILE" --reads "$ANAXIGRAPH_READS" \
+            --coverage "${RUNNER_TEMP}/unit.coverage" --reads "$ANAXIGRAPH_READS" \
             --junit "${RUNNER_TEMP}/unit.xml"
-          unset ANAXIGRAPH_RECORDING ANAXIGRAPH_READS COVERAGE_FILE
+          unset ANAXIGRAPH_RECORDING ANAXIGRAPH_READS
           uv run pytest experiments
           uv run ruff check src tests scripts experiments
           uv run ruff format --check src tests scripts experiments

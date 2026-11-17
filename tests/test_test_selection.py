@@ -217,6 +217,7 @@ def run(tmp_path_factory) -> Path:
         "ANAXIGRAPH_ROOT": str(root),  # The fixture is not a git checkout.
         "ANAXIGRAPH_READS": str(root.parent / "reads.json"),
         "ANAXIGRAPH_RECORDING": manifest,
+        "COVERAGE_FILE": str(root / "shop/.coverage"),
     }
     done = subprocess.run(
         [*command, "-p", "anaxigraph_reads"],
