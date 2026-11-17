@@ -239,10 +239,10 @@ class _Selection:
             self.everything.append(f"{path}: the suite is installed from it")
         elif path in self.known or (python and node is not None and node.data.get("is_test")):
             self.add(path, "a changed test or test helper", self._helper(path, read))
-        elif _prose(path):
-            return
         elif python:
             self.source(path, read)
+        elif _prose(path):
+            return
         elif not read and (self.reads is None or not path.endswith(SOURCE_SUFFIXES)):
             # Source the suite cannot import is an input only to a test that read it, and a
             # record with reads has just answered that.

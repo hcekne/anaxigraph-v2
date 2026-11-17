@@ -395,3 +395,13 @@ from 18.50 to 12.19 seconds. Serial time remained approximately unchanged at 12.
 These are synthetic API overhead probes on a shared machine, without model delay or a claim about
 semantic quality. Source checks and the 14,998 production lines are unchanged.
 [Qualification](evidence/annotation-views-qualification.json).
+
+A consumer-recall probe then found the documentation shortcut taking precedence over executable
+Python. Two faults under `docs/` made three test files fail, but selection returned nothing.
+Python now follows the existing source rules before the prose shortcut. The same real recorded
+fixture selects every failing consumer and excludes its independent test; a data-read control
+still selects its consumer, unread prose selects nothing, and new unobserved source retains the
+full-check fallback. Six regressions and 79 existing selection cases pass; the six also pass with
+the reads-v3 recorder active. Production remains 14,998 lines. This is controlled fault/selection
+evidence, not a new large-repository recall score.
+[Qualification](evidence/documentation-consumers-qualification.json).

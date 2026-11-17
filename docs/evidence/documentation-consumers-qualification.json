@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-17",
+  "before_commit": "62598e7a188ebd8d58e9f4d523c52c52abd36867",
+  "old_selector_sha256": "3c327f2a54a1b70d9ecb5021c7cfea82acfca2c5b6ebabdc315f07d597db20c0",
+  "mechanism": "Apply Python source rules before the documentation path shortcut, preserving executed and import-time consumers regardless of their source folder",
+  "recording": {
+    "observations": "anaxigraph-reads-v3",
+    "source_bound": true,
+    "coverage_contexts_per_test": true,
+    "fixture_test_files": 5,
+    "identical_fixture_sources_before_after": true,
+    "oracle": "Actual full fixture runs and JUnit failures after each fault, compared with frozen old and candidate selectors over the same record and graph"
+  },
+  "faults": [
+    {"kind": "Python function body under docs", "actual_failing_test_files": 1, "before_selected": 0, "after_selected": 1, "after_missed": 0},
+    {"kind": "Python value imported into an application module", "actual_failing_test_files": 2, "before_selected": 0, "after_selected": 2, "after_missed": 0},
+    {"kind": "JSON data-read control under docs", "actual_failing_test_files": 1, "before_selected": 1, "after_selected": 1, "after_missed": 0}
+  ],
+  "controls": {
+    "independent_test_excluded_from_all_fault_selections": true,
+    "new_unobserved_python_source": {"before": "nothing_to_run", "after": "all"},
+    "unread_prose": {"before": "nothing_to_run", "after": "nothing_to_run"},
+    "recorded_input_unchanged_by_selection": true
+  },
+  "regression_cases": {
+    "new": 6,
+    "before": {"passed": 3, "failed": 3},
+    "after_including_existing_selection_cases_passed": 85,
+    "new_cases_passed_with_parent_recorder_active": 6,
+    "parent_recording_source_and_artifacts_verified": true
+  },
+  "production_physical_lines": 14998,
+  "real_model_calls": 0,
+  "target_source_writes": 0,
+  "limits": "A controlled five-test-file repository and three behavioral faults, not a new large-repository recall or CI-speed measurement. Existing unknown-input fallbacks remain; this does not establish complete runtime coverage."
+}

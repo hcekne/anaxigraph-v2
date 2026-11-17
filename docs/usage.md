@@ -317,7 +317,7 @@ test file per line and nothing when the whole suite is needed. The record is com
 checkout itself, so everything that differs from the recorded run counts and the selection
 widens by itself as the record ages. A test file is selected when:
 
-- a recorded test in it executed a changed source file;
+- a recorded test in it executed a changed source file, including executable Python under `docs/`;
 - it read a changed file as data, wherever in the checkout that file is, or scanned the folder
   a file appeared in or left. Code that reads a file once and keeps it serves other tests
   without reading again, so the tests that ran the code which did the reading are selected too;
