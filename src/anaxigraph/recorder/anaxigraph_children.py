@@ -86,12 +86,15 @@ def _context(args, rest, options, session, run_id, readers):
 
 
 def record_child(context: dict) -> None:
+    if audit.unobserved_startup():
+        return  # Startup code ran before this audit; keep the initiating tests opaque.
     audit._AUDITING = True
 
     def finish():
         observations = audit._observations()
         audit._AUDITING = False
         row = context | {
+            "format": audit.FORMAT,
             "finished_at": time.monotonic(),
             "observations": {kind: list(paths) for kind, paths in observations.items()},
         }

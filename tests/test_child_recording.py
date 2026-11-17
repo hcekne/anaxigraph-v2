@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
+import venv
 from pathlib import Path
 
 import pytest
@@ -41,7 +42,7 @@ FILES = {
         "@lru_cache\ndef _value():\n"
         "    mode = os.environ['MODE']\n"
         "    flags = {'isolated': ['-I'], 'no_site': ['-S']}.get(mode, [])\n"
-        "    args = [sys.executable, *flags, str(Path(__file__).with_name('worker.py')), mode]\n"
+        "    args = [os.environ.get('CHILD_PYTHON', sys.executable), *flags, str(Path(__file__).with_name('worker.py')), mode]\n"
         "    kwargs = {'env': {}} if mode == 'empty_env' else {}\n"
         "    if mode == 'bytes_env': kwargs['env'] = dict(os.environ, PYTHONPATH=b'')\n"
         "    if mode == 'outside': kwargs['cwd'] = os.environ['OTHER_CWD']\n"
@@ -80,6 +81,24 @@ def make_recording(tmp_path_factory, mode):
         for name in CLIENTS:
             path = root / name
             path.write_text(path.read_text().replace("app.client", "app.cache"))
+    startup_python = None
+    if mode in {"startup_hook", "parent_startup"}:
+        prefix = folder / "startup-env"
+        venv.EnvBuilder(symlinks=True, with_pip=False).create(prefix)
+        startup_python = str(prefix / "bin/python")
+        packages = (
+            prefix / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+        )
+        (packages / "a1_coverage.pth").write_text(
+            "import os; os.environ['STARTUP_VALUE'] = open(os.environ['STARTUP_INPUT']).read().strip()\n"
+        )
+        (root / "app/worker.py").write_text("import os\nprint(os.environ['STARTUP_VALUE'])\n")
+        other = root / "tests/test_other.py"
+        other.write_text(
+            other.read_text()
+            + "    from pathlib import Path\n"
+            + "    assert Path('app/value.txt').read_text() == '7'\n"
+        )
     manifest = Application(root).start_recording("app")["manifest"]
     python_path = os.environ.get(
         "ANAXIGRAPH_RECORDER_TEST_PATH", str(Path(recorder.__file__).parent)
@@ -109,8 +128,12 @@ def make_recording(tmp_path_factory, mode):
         "READY_MARKER": str(folder / "child.ready"),
         "PARENT_ONLY_VALUE": "fixture",
     }
+    if startup_python:
+        environment.update(CHILD_PYTHON=startup_python, STARTUP_INPUT=str(root / "app/value.txt"))
+    if mode == "parent_startup":
+        environment["PYTHONPATH"] += os.pathsep + str(Path(pytest.__file__).parent.parent)
     command = [
-        sys.executable,
+        startup_python if mode == "parent_startup" else sys.executable,
         "-m",
         "pytest",
         "tests",
@@ -192,8 +215,10 @@ def test_child_code_and_data_reach_cached_callers_but_unrelated_work_stays_local
     opaque = mode not in {"normal", "cross_cached", "bytes_env", "outside", "parallel"}
     (root / "app/other.py").write_text("def other():\n    return 43\n")
     [suite] = app.tests_for_change()["suites"]
-    if mode == "parallel":
-        assert suite["status"] == "all"  # Unobserved controller startup remains conservative.
+    if mode in {"parallel", "customization"}:
+        assert (
+            suite["status"] == "all"
+        )  # Unobserved controller or parent startup stays conservative.
     else:
         assert suite["status"] == "selected"
         assert suite["test_files"] == sorted(["tests/test_other.py", *(CLIENTS if opaque else [])])
@@ -205,7 +230,9 @@ def test_child_code_and_data_reach_cached_callers_but_unrelated_work_stays_local
     ):
         (root / name).write_text(body)
         [suite] = app.tests_for_change()["suites"]
-        if mode == "parallel" or (opaque and name == "app/value.txt" and mode != "descendant"):
+        if mode in {"parallel", "customization"} or (
+            opaque and name == "app/value.txt" and mode != "descendant"
+        ):
             assert suite["status"] == "all"
         else:
             assert suite["status"] == "selected", suite
@@ -215,7 +242,16 @@ def test_child_code_and_data_reach_cached_callers_but_unrelated_work_stays_local
 
 @pytest.mark.parametrize(
     "problem",
-    ["missing", "truncated", "wrong_session", "late", "bad_shape", "bad_time", "foreign_root"],
+    [
+        "missing",
+        "truncated",
+        "wrong_session",
+        "late",
+        "bad_shape",
+        "bad_time",
+        "foreign_root",
+        "wrong_format",
+    ],
 )
 def test_bad_child_receipts_keep_the_original_fallback(ordinary, tmp_path, problem):
     original, _ = ordinary
@@ -236,6 +272,8 @@ def test_bad_child_receipts_keep_the_original_fallback(ordinary, tmp_path, probl
             row["finished_at"] = True
         elif problem == "foreign_root":
             row["root"] = str(tmp_path)
+        elif problem == "wrong_format":
+            row["format"] = "anaxigraph-reads-v1"
         else:
             row.update(
                 session_id="other" if problem == "wrong_session" else row["session_id"],
@@ -246,6 +284,72 @@ def test_bad_child_receipts_keep_the_original_fallback(ordinary, tmp_path, probl
     (root / "app/other.py").write_text("def other():\n    return 43\n")
     [suite] = Application(root).tests_for_change()["suites"]
     assert suite["test_files"] == sorted(["tests/test_other.py", *CLIENTS])
+
+
+@pytest.mark.parametrize("mode", ["startup_hook", "parent_startup"])
+def test_startup_hooks_cannot_hide_failing_consumers(tmp_path_factory, tmp_path, mode):
+    original, _ = make_recording(tmp_path_factory, mode)
+    root = Path(shutil.copytree(original, tmp_path / "clone"))
+    save(root, original, original.parent)
+    (root / "app/value.txt").write_text("8")
+    [suite] = Application(root).tests_for_change()["suites"]
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("ANAXIGRAPH_", "COV_CORE_", "COVERAGE_", "PYTEST_XDIST_"))
+    }
+    python = str(original.parent / "startup-env/bin/python")
+    environment.update(
+        PYTHONPATH=str(root) + os.pathsep + str(Path(pytest.__file__).parent.parent),
+        MODE=mode,
+        CHILD_PYTHON=python,
+        STARTUP_INPUT=str(root / "app/value.txt"),
+    )
+    from xml.etree import ElementTree
+
+    report = tmp_path / "mutant.xml"
+    done = subprocess.run(
+        [
+            python if mode == "parent_startup" else sys.executable,
+            "-m",
+            "pytest",
+            "tests",
+            "-q",
+            f"--junitxml={report}",
+        ],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode == 1, done.stdout + done.stderr
+    failing = {
+        "tests/" + case.attrib["name"] + ".py"
+        for case in ElementTree.parse(report).iter("testcase")
+        if case.find("failure") is not None
+    }
+    assert failing == {*CLIENTS, "tests/test_other.py"}
+    assert failing <= set(suite["test_files"]), suite
+
+
+@pytest.mark.parametrize("trigger", ["COVERAGE_PROCESS_START", "COVERAGE_PROCESS_CONFIG", "active"])
+def test_reviewed_coverage_startup_is_qualified_only_when_inactive(monkeypatch, trigger):
+    from coverage.control import process_startup
+
+    from anaxigraph.recorder.anaxigraph_audit import _opaque_pth
+
+    reviewed = b'import sys; exec(\'import os\\n\\nif os.getenv("COVERAGE_PROCESS_START") or os.getenv("COVERAGE_PROCESS_CONFIG"):\\n try:\\n  import coverage\\n except:\\n  pass\\n else:\\n  coverage.process_startup(slug="pth")\')\n'
+    monkeypatch.delenv("COVERAGE_PROCESS_START", raising=False)
+    monkeypatch.delenv("COVERAGE_PROCESS_CONFIG", raising=False)
+    monkeypatch.delattr(process_startup, "coverage", raising=False)
+    assert not _opaque_pth(reviewed)
+    assert not _opaque_pth(b"# Path only\n/project/source\n")
+    assert _opaque_pth(reviewed + b"print('extra startup code')\n")
+    if trigger == "active":
+        monkeypatch.setattr(process_startup, "coverage", object(), raising=False)
+    else:
+        monkeypatch.setenv(trigger, "configured")
+    assert _opaque_pth(reviewed)
 
 
 def test_own_record_lookup_does_not_enumerate_other_worktrees(ordinary, tmp_path, monkeypatch):

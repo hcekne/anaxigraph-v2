@@ -232,6 +232,13 @@ isolated startup (`-I` or `-S`), existing startup customizations and unobserved 
 conservative selection. Pytest-xdist's controller startup is still unobserved and keeps the
 whole-suite fallback; child tracing does not yet make parallel runs select narrowly.
 
+Executable `.pth` files and custom Python startup modules can read inputs before the recorder
+loads. Such a parent run requires the full suite; such a child retains the launching tests'
+opaque-process fallback. Path-only `.pth` files and an exactly reviewed, inactive coverage
+initializer remain compatible. Changed or active startup code is not assumed harmless.
+Older observation records remain readable but require a fresh recording before narrowing checks.
+Refresh the whole recorder folder from the current AnaxiGraph installation before recording again.
+
 `--scope` names the folders the suite depends on, and `--run-root` the folder it ran in. The
 record lands in `.anaxigraph-v2/test-records/`; carry it between machines as a CI artifact.
 A worktree without one uses the record of the worktree that recorded most recently.

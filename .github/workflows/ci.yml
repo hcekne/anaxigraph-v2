@@ -78,7 +78,7 @@ jobs:
           uvx --from dist/*.whl anaxigraph --version
           ANAXIGRAPH_RECORDER_TEST_PATH="$(uvx --from dist/*.whl anaxigraph tests --recorder)" \
             uv run pytest tests/test_child_recording.py -q \
-            -k 'child_code and (normal or cross_cached or customization or parallel)'
+            -k '(child_code and (normal or cross_cached or customization or parallel)) or startup_hooks'
           mkdir -p "${RUNNER_TEMP}/v2-fixture"
           echo "def create_invoice(): return {'id': 1}" > "${RUNNER_TEMP}/v2-fixture/billing.py"
           uvx --from dist/*.whl anaxigraph scan --repo "${RUNNER_TEMP}/v2-fixture"

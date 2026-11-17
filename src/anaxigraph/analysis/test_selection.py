@@ -271,7 +271,11 @@ def _unseen(selection: _Selection, tests: list[str]) -> None:
             module, "tests of code that started another process", selection.executed(module)
         )
     if reads.get("unattributed_processes"):
-        selection.everything.append("A process started outside an attributable test")
+        selection.everything.append(
+            "Unobserved Python startup hooks require full checks"
+            if "@startup" in reads["unattributed_processes"]
+            else "A process started outside an attributable test"
+        )
 
 
 def _changed(record: dict[str, Any], graph: Graph) -> list[str]:
@@ -279,6 +283,17 @@ def _changed(record: dict[str, Any], graph: Graph) -> list[str]:
     recorded, current = record["files"], graph.snapshot.files
     paths = recorded.keys() | current.keys()
     return sorted(path for path in paths if recorded.get(path) != current.get(path))
+
+
+def _recording_limit(record: dict[str, Any]) -> str | None:
+    provenance = record.get("provenance", {})
+    if provenance.get("status") != "verified":
+        return (
+            "Recording source/run is unverified; record again with --start and the reads recorder"
+        )
+    if provenance.get("observations") != "anaxigraph-reads-v2":
+        return "Older observation rules; update the recorder, then record the suite again"
+    return None
 
 
 def select_tests(record: dict[str, Any], graph: Graph) -> dict[str, Any]:
@@ -289,10 +304,9 @@ def select_tests(record: dict[str, Any], graph: Graph) -> dict[str, Any]:
         selection.change(path)
     tests = [test for test in selection.tests if test in graph.snapshot.files]
     if changed or graph.snapshot.dirty or record.get("revision") != graph.snapshot.revision:
-        if record.get("provenance", {}).get("status") != "verified":
-            selection.everything.append(
-                "Recording source/run is unverified; record again with --start and the reads recorder"
-            )
+        limitation = _recording_limit(record)
+        if limitation:
+            selection.everything.append(limitation)
         _unseen(selection, tests)
     tests = sorted(selection.picked.union(tests))  # With test files newer than the record.
     picked = tests if selection.everything else sorted(selection.picked)

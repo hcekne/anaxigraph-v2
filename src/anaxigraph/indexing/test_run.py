@@ -38,4 +38,9 @@ def verify(report: Path | None, graph: Graph, coverage: Path | None, junit: list
         raise ValueError("Coverage does not belong to this completed recording")
     if len(junit) != 1 or artifacts.get("junit") != digest(junit[0]):
         raise ValueError("JUnit does not belong to this completed recording")
-    return {"status": "verified", "run_id": run["run_id"], "environment": found["environment"]}
+    return {
+        "status": "verified",
+        "run_id": run["run_id"],
+        "environment": found["environment"],
+        "observations": found.get("format"),
+    }

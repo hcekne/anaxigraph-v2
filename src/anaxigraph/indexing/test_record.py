@@ -22,7 +22,7 @@ from anaxigraph.indexing.python import runs_bodies
 from anaxigraph.indexing.test_run import verify
 
 FORMAT = "anaxigraph-test-record-v2"
-READS = "anaxigraph-reads-v1"
+READS = "anaxigraph-reads-v2"
 
 
 def _executions(
@@ -141,7 +141,11 @@ def _report(part: Path) -> dict[str, Any]:
         found = json.loads(part.read_text())
     except (OSError, ValueError):
         found = None
-    if not isinstance(found, dict) or found.get("format") != READS or "loaded" not in found:
+    if (
+        not isinstance(found, dict)
+        or found.get("format") not in {READS, "anaxigraph-reads-v1"}
+        or "loaded" not in found
+    ):
         raise ValueError(f"Not a reads report: {part}")
     return found
 
@@ -163,7 +167,7 @@ def _reports(report: Path) -> list[dict[str, Any]]:
             or not worker.get("complete")
             or any(
                 worker.get(key) != controller.get(key)
-                for key in ("run_id", "session_id", "environment")
+                for key in ("format", "run_id", "session_id", "environment")
             )
         ):
             raise ValueError("Missing, incomplete or mixed recording workers")
@@ -208,6 +212,7 @@ def _completed_child(row: dict, parent: dict) -> bool:
             for paths in observed.values()
         )
         and all(row.get(key) == parent.get(key) for key in ("run_id", "session_id", "root"))
+        and row.get("format") == parent.get("format")
         and type(row.get("finished_at")) in (int, float)
         and 0 < row.get("finished_at", 0) <= parent.get("observed_until", 0)
     )

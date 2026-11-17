@@ -184,32 +184,26 @@ Implemented since the handover:
   static links and permission to narrow CI. Advice now requires observed consumers rather than
   assuming folder boundaries imply isolated checks.
 
-Local evidence: 848 product tests passed in the end-to-end instrumented run, producing a 128,758
-byte record. The subsequent focused regression run passed 80 tests, including module-inspection
-paging and stale-source/test attribution. CI is green on `21f8fc9`; its existing suite publishes
-source-bound test records on Python 3.11 and 3.12. The first instrumented CI attempt exposed
-nested coverage output collisions; invocation-specific configuration and isolated fixture outputs
-fixed them. Production size is now 14,803 lines, 121 fewer than the handover; the 15,000-line
-ceiling is unchanged. No paid model calls or new private-target measurements were made here.
+Direct Python-child attribution is opt-in. A standard-library bootstrap records reads and
+source loads into one bounded log. Missing, late or malformed receipts and unobserved
+processes retain conservative selection. Cached results retain consumers across module
+boundaries. Shared ancestor dependency files and GitHub workflow/action changes widen checks;
+an unrelated project's dependency list stays local.
 
-Direct Python-child attribution is now opt-in. A standard-library bootstrap records reads and
-source loads into one bounded log, while missing, late or malformed receipts and unobserved
-descendants retain conservative selection. Cleaned environments and existing startup
-customizations are preserved. Pytest-xdist's controller startup still requires the full suite.
-The 23 new tests exercise real subprocesses, including interrupted children and cached callers;
-three also passed using the recorder from an installed wheel. Production size is 14,995 lines,
-within the unchanged ceiling. This has not been measured on the private target.
+A mutation probe found startup hooks reading data before the recorder loaded: three test files
+failed, but only one was selected. Both parent and child cases now retain every failing test.
+Unobserved executable `.pth` files or startup customizations keep full/opaque checks. The
+exactly reviewed coverage initializer is compatible only while inactive. Observation format v2
+prevents older or mixed observation rules from silently authorizing narrow selection.
 
-Selection also widens for dependency inputs above a declared scope and for GitHub workflows
-or local actions. Regression tests preserve isolation for another project's dependency list;
-unbound legacy evidence can no longer hide changes outside its old scope. Production size
-after this safety fix is 14,997 lines.
-
-The recorder now retains the project caller chain, including a different module that caches
-a helper's result. A subprocess regression first selected only the initial caller's test;
-the fix retains both consumers. Production size is 14,996 lines.
+The last completed baseline (`a7fa7f0`) passed 892 product and 418 experiment tests on both
+Python versions. Its source-bound record is 154,179 bytes; cached opaque-process consumers
+still account for 25 test files and 77.8% of summed recorded durations, not CI wall time.
+Current focused startup/recorder checks pass 170 tests. CI also exercises the installed wheel.
+The result projector now uses the delivered response contract, removing duplicated field lists
+and rejecting invented contracts for documentation-only markers. Production is 14,960 lines,
+within the unchanged 15,000-line ceiling. No paid model calls or new target-suite runs were made.
 
 Next: qualify sharded recordings and worker startup; refresh the target's whole recorder folder
-before new measurements. Use prospective shadow runs
-and actual selected runs before claiming CI savings. Better architectural advice needs real-task
-evaluation separately. Reuse scheduled verification where possible rather than duplicating suites.
+before new measurements. Use prospective shadow runs and actual selected runs before claiming
+CI savings. Better architectural advice needs real-task evaluation separately.

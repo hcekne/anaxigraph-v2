@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import posixpath
+import site
 import sys
 import threading
 from typing import Any
 
-FORMAT = "anaxigraph-reads-v1"
+FORMAT = "anaxigraph-reads-v2"
 _EVENTS = {
     "open": "opened",
     "os.listdir": "listed",
@@ -43,6 +45,51 @@ _REFS = {"rev-parse", "symbolic-ref", "update-ref", "for-each-ref", "show-ref"}
 _AUDITING = False
 _SUPPRESS = threading.local()
 _OWN_FRAMES = {__file__, os.path.join(os.path.dirname(__file__), "anaxigraph_children.py")}
+
+
+def _opaque_pth(raw: bytes) -> bool:
+    if len(raw) > 65_536:
+        return True
+    if not any(
+        line.startswith((b"import ", b"import\t"))
+        for line in raw.removeprefix(b"\xef\xbb\xbf").splitlines()
+    ):
+        return False
+    # This exact coverage initializer only imports frozen os when both switches are absent.
+    inactive_coverage = (
+        hashlib.sha256(raw).hexdigest()
+        == "ef2ed06d19867ec669c09a804060666a9cd5e383af0a9d11aa2de79b77d448e8"
+    )
+    active = getattr(sys.modules.get("coverage.control"), "process_startup", None)
+    return not inactive_coverage or bool(
+        os.getenv("COVERAGE_PROCESS_START")
+        or os.getenv("COVERAGE_PROCESS_CONFIG")
+        or getattr(active, "coverage", None)
+    )
+
+
+def unobserved_startup() -> bool:
+    own = os.path.join(os.path.dirname(__file__), "bootstrap", "sitecustomize.py")
+    if any(
+        name in sys.modules and getattr(sys.modules[name], "__file__", None) != own
+        for name in ("sitecustomize", "usercustomize")
+    ):
+        return True
+    folders = site.getsitepackages()
+    if site.ENABLE_USER_SITE:
+        folders.append(site.getusersitepackages())
+    try:
+        for folder in folders:
+            if not os.path.isdir(folder):
+                continue
+            for name in os.listdir(folder):
+                if name.endswith(".pth"):
+                    with open(os.path.join(folder, name), "rb") as stream:
+                        if _opaque_pth(stream.read(65_537)):
+                            return True
+    except OSError:
+        return True
+    return False
 
 
 def _relative(path: Any) -> str | None:

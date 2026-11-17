@@ -56,6 +56,8 @@ def _same_source(run: dict) -> bool:
 
 _RECORDING = _manifest()
 _UNCHANGED = _same_source(_RECORDING)
+if audit.unobserved_startup():
+    audit._SEEN["started"].setdefault("", set()).add("@startup")
 
 
 audit._AUDITING = True

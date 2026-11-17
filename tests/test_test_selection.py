@@ -769,6 +769,7 @@ def test_an_existing_failure_does_not_hide_another_failure_in_the_same_file(chec
         "worker_run",
         "worker_session",
         "worker_incomplete",
+        "worker_format",
     ],
 )
 def test_invalid_recording_cannot_replace_the_last_good_record(checkout, run, tmp_path, problem):
@@ -799,12 +800,32 @@ def test_invalid_recording_cannot_replace_the_last_good_record(checkout, run, tm
             worker["session_id"] = "another-invocation"
         elif problem == "worker_incomplete":
             worker["complete"] = False
+        elif problem == "worker_format":
+            worker["format"] = "anaxigraph-reads-v1"
         if problem != "worker_missing":
             (reports / "reads.json.gw0").write_text(json.dumps(worker))
     path.write_text(json.dumps(report))
     with pytest.raises(ValueError):
         record(checkout, run, reads=True, reports=reports)
     assert saved.read_bytes() == before
+
+
+@pytest.mark.parametrize("observations", [None, "anaxigraph-reads-v1"])
+def test_older_observers_remain_readable_but_cannot_narrow_checks(checkout, observations):
+    import json
+
+    path = checkout / ".anaxigraph-v2/test-records/shop.json"
+    record = json.loads(path.read_text())
+    assert record["provenance"]["status"] == "verified"
+    record["provenance"]["observations"] = observations
+    path.write_text(json.dumps(record))
+    (checkout / "shop/pkg/orders.py").write_text("def place(items):\n    return {}\n")
+    suite = picked(checkout)
+    assert suite["status"] == "all"
+    assert (
+        "Older observation rules; update the recorder, then record the suite again"
+        in suite["everything_because"]
+    )
 
 
 def test_a_legacy_recording_is_preserved_but_cannot_authorize_narrow_checks(
