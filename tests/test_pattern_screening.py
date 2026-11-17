@@ -364,7 +364,7 @@ def test_concise_detail_instruction_does_not_change_exhaustive_review_or_schema(
     assert "must not force a positive" in selected["packet"]["instruction"]
     assert "80 words" not in exhaustive["packet"]["instruction"]
     assert selected["response_schema"] == exhaustive["response_schema"]
-    assert exhaustive["packet"]["instruction"].endswith("No card or module may be skipped.")
+    assert "No card or module may be skipped." in exhaustive["packet"]["instruction"]
 
 
 def test_screen_rejects_a_stale_saved_selection(mapped):

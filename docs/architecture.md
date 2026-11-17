@@ -101,6 +101,14 @@ Fresh Eyes isolation. New Pattern runs also include a separate repository-level 
 CI-only reviews need neither semantic annotations nor a Python application. The model proposes
 pipeline improvements. Both operate through the shared application and runner.
 
+Screening, Pattern detail and architecture workers receive fingerprint-verified source for their
+exact module scope. The application captures it; the runner delivers it within the input budget.
+Review requests persist the source fingerprints rather than those additional source copies, so
+body changes invalidate results and compatible clone imports can reuse them. Annotation requests
+still carry their original source payload. Fresh Eyes receives neither implementation evidence nor
+the source-aware envelope. Supplying code enables implementation critique; it does not establish
+recommendation quality.
+
 Annotation validity includes its own source and public interfaces of resolved outgoing dependencies.
 Comment and body-only dependency edits preserve callers; changed signatures, documentation and
 exports invalidate them. A separate implementation-change flag preserves behavioral uncertainty;

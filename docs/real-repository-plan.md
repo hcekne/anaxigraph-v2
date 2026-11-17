@@ -196,13 +196,23 @@ Unobserved executable `.pth` files or startup customizations keep full/opaque ch
 exactly reviewed coverage initializer is compatible only while inactive. Observation format v2
 prevents older or mixed observation rules from silently authorizing narrow selection.
 
-The last completed baseline (`a7fa7f0`) passed 892 product and 418 experiment tests on both
+The baseline recorded at `a7fa7f0` passed 892 product and 418 experiment tests on both
 Python versions. Its source-bound record is 154,179 bytes; cached opaque-process consumers
 still account for 25 test files and 77.8% of summed recorded durations, not CI wall time.
 Current focused startup/recorder checks pass 170 tests. CI also exercises the installed wheel.
 The result projector now uses the delivered response contract, removing duplicated field lists
 and rejecting invented contracts for documentation-only markers. Production is 14,960 lines,
 within the unchanged 15,000-line ceiling. No paid model calls or new target-suite runs were made.
+
+Screening, Pattern detail and architecture now receive verified implementation for the selected
+modules. Previously their isolated workers had facts and summaries without file access. Source
+copies are transient; saved review requests retain fingerprints. Fresh Eyes remains behavior-only.
+In a controlled pair with identical behavior briefs, Sol/medium detail rated unbounded fan-out 3
+and an already bounded implementation 0; facts-only detail returned unknown for both. Screening
+retained the real opportunity. Luna-only detail had produced a false positive on the bounded case.
+The reproducible paid probe is documented in `experiments/architecture_quality/README.md`;
+this demonstrates implementation sensitivity, not general architectural superiority. Production
+is 14,987 lines, within the unchanged ceiling. No target-suite rerun or broad paid campaign was made.
 
 Next: qualify sharded recordings and worker startup; refresh the target's whole recorder folder
 before new measurements. Use prospective shadow runs and actual selected runs before claiming

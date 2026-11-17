@@ -11,6 +11,7 @@ from typing import Any
 
 # Files read into source facts: Python, then JavaScript/TypeScript in resolution order.
 SOURCE_SUFFIXES = (".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+SOURCE_REVIEW_KINDS = frozenset({"pattern-screen", "patterns", "architecture"})
 
 
 @dataclass(frozen=True)

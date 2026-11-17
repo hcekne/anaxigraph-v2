@@ -166,8 +166,8 @@ def architecture_packet(
             "1 optional, 2 material, 3 highly important. Prefer independently developable/testable "
             "components and small agent contexts; justify abstractions or network services. "
             "Account for shared state, schemas, configuration and resources across import boundaries. "
-            "No raw test/CI source or external package source was inspected: missing checks, commands, "
-            "versions and external-target resolution remain unknown without supplied evidence. "
+            "Test/CI or external package source outside implementation_evidence was not inspected: "
+            "missing checks, commands, versions and external-target resolution remain unknown without evidence. "
             "Verification targets are proposals, never executed/passed results."
         ),
         "charter": CHARTER,

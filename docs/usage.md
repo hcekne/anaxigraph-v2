@@ -144,8 +144,11 @@ to annotate them too. Progress reports needed/reused/excluded module counts. Unc
 annotations need no model calls; explicit saved model and review choices remain part of reuse.
 
 Pattern runs include catalogue screening, detailed review of selected opportunities, and focused
-workers for boundaries, package/repository options, independent verification and CI/CD. They do
-not run Fresh Eyes. Fresh Eyes receives behavior summaries rather than current source or topology,
+workers for boundaries, package/repository options, independent verification and CI/CD. Screening,
+pattern detail and architecture workers receive the selected modules' implementation alongside
+graph facts and concise annotations. Missing neighboring implementation remains unknown. These
+source copies are transient; saved reviews and portable records retain fingerprints, not another
+copy of the code. Pattern runs do not run Fresh Eyes. Fresh Eyes receives behavior summaries rather than current source or topology,
 and keeps three design alternatives at subsystem and product levels.
 
 Defaults use Luna/low for mapping and discovery, and Sol/medium for selected details and positive

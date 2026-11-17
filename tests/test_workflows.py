@@ -300,7 +300,8 @@ def test_new_review_pipeline_is_executed_instead_of_reusing_unreviewed_output(tm
     assert len(calls) == completed
 
 
-def test_cli_provider_uses_real_subprocess_without_repository_or_tools(tmp_path, monkeypatch):
+@pytest.mark.parametrize("kind", ["fresh-eyes", "patterns", "pattern-screen", "architecture"])
+def test_cli_provider_uses_real_subprocess_without_repository_or_tools(tmp_path, monkeypatch, kind):
     executable = tmp_path / "codex"
     executable.write_text("""#!/usr/bin/env python3
 import json, os, pathlib, sys
@@ -315,7 +316,12 @@ else:
     assert 'CODEX_THREAD_ID' not in os.environ
     assert 'ANAXIGRAPH_HTTP_TOKEN' not in os.environ
     payload = sys.stdin.read()
-    assert 'BEHAVIOR ONLY' in payload and 'secret.py' not in payload
+    delivered = json.loads(payload.split('\\n', 1)[1])
+    assert delivered['packet']['instruction'] == 'EVIDENCE PROBE'
+    if delivered['kind'] == 'fresh-eyes':
+        assert 'implementation_evidence' not in delivered and 'secret.py' not in payload
+    else:
+        assert delivered['implementation_evidence'] == {'secret.py': '# IMPLEMENTATION_CANARY'}
     target = pathlib.Path(sys.argv[sys.argv.index('--output-last-message')+1])
     assert '--json' in sys.argv
     target.write_text(json.dumps({'producer':'synthetic-executable','alternatives':[], '_anaxigraph_usage':{'cost_usd':999}}))
@@ -328,10 +334,11 @@ else:
     _verified.cache_clear()
     request = {
         "request_id": "r",
-        "kind": "fresh-eyes",
-        "packet": {"instruction": "BEHAVIOR ONLY"},
+        "kind": kind,
+        "packet": {"instruction": "EVIDENCE PROBE"},
         "response_schema": {},
         "scope": ["secret.py"],
+        "implementation_evidence": {"secret.py": "# IMPLEMENTATION_CANARY"},
     }
     result = execute(
         request,

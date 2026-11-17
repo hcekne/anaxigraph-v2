@@ -16,7 +16,7 @@ from anaxigraph.analysis import (
 from anaxigraph.analysis.architecture import reconcile_architecture
 from anaxigraph.analysis.architecture_guidance import proposals as scout_proposals
 from anaxigraph.analysis.delivery import capture_coverage, reconcile_delivery
-from anaxigraph.analysis.packets import catalogue
+from anaxigraph.analysis.packets import catalogue, request_modules
 from anaxigraph.analysis.patterns import (
     actionable_opportunities,
     excluded_modules,
@@ -33,7 +33,7 @@ from anaxigraph.application.context import (
     dependency_implementation_fingerprints,
 )
 from anaxigraph.application.reuse import reuse_analysis, review_context
-from anaxigraph.contracts import Graph, Node
+from anaxigraph.contracts import SOURCE_REVIEW_KINDS, Graph, Node
 from anaxigraph.indexing import capture_sources
 
 if TYPE_CHECKING:
@@ -79,14 +79,13 @@ def analysis_request(
     app._require_live(graph)
     sources = None
     options.update(_request_context(app, graph, kind, options, scope))
-    if kind == "annotate":
-        modules = [n for n in graph.nodes if n.kind == "module"]
-        selected = scope or [modules[0].id] if modules else []
-        selected_paths = [n.path for n in modules if n.id in selected or n.path in selected]
+    if kind == "annotate" or kind in SOURCE_REVIEW_KINDS:
+        selected_paths = [node.path for node in request_modules(graph, scope, kind)]
         sources = capture_sources(app.root, selected_paths, graph.snapshot.files)
     request = build_request(graph, kind, scope, sources, **options) | metadata
+    stored = {key: value for key, value in request.items() if key != "implementation_evidence"}
     app.store.save_review(
-        str(app.root), graph.snapshot.id, request["request_id"], "request", request
+        str(app.root), graph.snapshot.id, request["request_id"], "request", stored
     )
     if kind == "fresh-eyes":
         # Do not hand the blind designer a scope envelope containing module IDs.

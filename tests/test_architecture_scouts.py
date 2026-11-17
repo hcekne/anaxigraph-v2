@@ -167,7 +167,10 @@ def test_packet_lenses_have_distinct_input_identity_and_honest_context(graph):
     assert len({input_identity(packet) for packet in packets}) == 3
     for packet in packets:
         assert packet["packet"]["lens"] == packet["request_options"]["lens"]
-        assert "No raw test/CI source" in packet["packet"]["instruction"]
+        assert (
+            "source outside implementation_evidence was not inspected"
+            in packet["packet"]["instruction"]
+        )
         assert "source" not in packet["packet"]
         assert any(item["is_test"] for item in packet["packet"]["neighbor_context"]["modules"])
     default = build_request(graph, "architecture", ["pkg/a.py"])

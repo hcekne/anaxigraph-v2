@@ -267,3 +267,20 @@ sequence, reusing the coding transport and evidence machinery. Deterministic qua
 harness remains separate from live architectural-effectiveness evidence.
 
 Codex launch and MCP approval settings follow the [official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
+
+## Implementation-sensitive review probe
+
+`uv run python -m experiments.architecture_quality.implementation --output /path/to/new-output`
+is a small paid diagnostic, separate from the coding-outcome benchmark. Two fixed fixtures
+have identical signatures and synthetic behavior briefs. Both return the same ordered results;
+one starts 20 operations despite a limit of four, while the other peaks at four. The probe sends
+each through facts-only detail, source-aware detail and catalogue screening using current product
+profiles. It saves every attempt immediately, including timing, reported usage and validation
+failures. No call deadline is imposed. Review the proposed changes as well as ratings.
+
+On 17 November 2026, source-aware Sol/medium detail rated the real unbounded case 3 and the bounded
+case 0; facts-only detail returned unknown for both. Screening retained the real opportunity.
+One screening attempt needed its configured fallback after output validation failed. A preliminary
+Luna-only detail probe had incorrectly rated the bounded version 2. This pair demonstrates why
+implementation evidence and the stronger detail pass matter; it does not establish general advice
+quality or improved coding outcomes. Outputs remain under the operator's chosen directory.

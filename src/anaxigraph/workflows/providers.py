@@ -18,6 +18,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from anaxigraph.contracts import SOURCE_REVIEW_KINDS
 from anaxigraph.evidence import provider_usage
 
 NO_TOOLS = (
@@ -225,11 +226,13 @@ def execute(
     effort = reasoning_effort(worker)
     model = model or configured_model(provider)
     _verified(provider)
-    # Deliver only the blind public envelope, never a server's scope/source metadata.
-    allowed = ("request_id", "kind", "packet", "response_schema")
+    # Keep server metadata private; source-aware reviews alone receive scoped implementation.
+    allowed: tuple[str, ...] = ("request_id", "kind", "packet", "response_schema")
+    if request.get("kind") in SOURCE_REVIEW_KINDS:
+        allowed += ("implementation_evidence",)
     packet = {key: request[key] for key in allowed if key in request}
     instruction = (
-        "Complete this analysis using only its packet. Return a JSON object matching the "
+        "Complete this analysis using only its packet and any implementation_evidence. Return a JSON object matching the "
         "response_schema example (it describes required fields, not literal answers). "
         "Do not use tools, inspect files, or invent evidence. Preserve every declared member. "
         "For Fresh Eyes also provide functional_summary and functional_requirements (at most "
