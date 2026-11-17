@@ -40,7 +40,8 @@ def _semantic(module: Node) -> str:
 
 def _match(module, symbols, source_terms, task, weights) -> dict[str, Any]:
     words = weights.keys()
-    exact = next((node for node in symbols if _mentioned(task, node.name)), module)
+    mentioned = (node for node in symbols if _mentioned(task, node.name))
+    exact = max(mentioned, key=lambda node: "_" in node.name, default=module)
     path_match = _mentioned(task, module.path) or _mentioned(task, module.path.rsplit("/", 1)[-1])
     fields = {
         "path": (words & _terms(module.path), 2),

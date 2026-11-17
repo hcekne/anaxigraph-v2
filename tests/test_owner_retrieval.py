@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from itertools import permutations
 
 import pytest
 
@@ -83,6 +84,42 @@ def test_ordinary_english_verb_does_not_override_relevant_source_and_symbols():
     assert (
         next(row for row in rows if row["path"] == "audit.py")["match_scores"]["exact_symbol"] == 2
     )
+
+
+@pytest.mark.parametrize(
+    "symbol_order", list(permutations(("Application", "status", "validate_change")))
+)
+def test_explicit_identifier_has_the_right_witness_in_any_declaration_order(symbol_order):
+    sources = {"owner.py": "Application status validate_change original baseline"}
+    graph = fixture_graph(sources)
+    symbols = {
+        "Application": Node("class:owner", "class", "Application", "owner.py", 1),
+        "status": Node("function:status", "function", "status", "owner.py", 2),
+        "validate_change": Node("function:validate", "function", "validate_change", "owner.py", 4),
+    }
+    graph = replace(graph, nodes=(*graph.nodes, *(symbols[name] for name in symbol_order)))
+    rows = rank_owners(graph, sources, "Fix application status in validate_change")
+    assert rows[0]["matched_symbol"] == "validate_change"
+    assert rows[0]["evidence"] == [{"path": "owner.py", "line": 4}]
+
+
+def test_real_brief_keeps_the_explicit_owner_ahead_of_common_word_decoys(tmp_path):
+    (tmp_path / "owner.py").write_text(
+        "class Application:\n    def status(self):\n        return {}\n"
+        "    def validate_change(self):\n        return True\n"
+    )
+    for i in range(3):
+        (tmp_path / f"decoy_{i}.py").write_text(
+            "def application(): pass\ndef original(): pass\ndef baseline(): pass\n"
+            "def against(): pass\n"
+        )
+    app = Application(tmp_path)
+    brief = app.prepare_change("Fix application validate_change against the original baseline")
+    assert brief["likely_owners"][0]["path"] == "owner.py"
+    assert brief["likely_owners"][0]["evidence"] == [{"path": "owner.py", "line": 4}]
+    step = brief["implementation_advice"]["steps"][0]
+    assert "validate_change" in step["suggestion"]
+    assert step["evidence"] == [{"path": "owner.py", "line": 4}]
 
 
 def test_explicit_test_file_can_own_a_test_change_without_test_helpers_leading_feature_work(

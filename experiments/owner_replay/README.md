@@ -30,6 +30,8 @@ Use a fresh workdir for each implementation or settings change. The manifest fre
 harness, selected full commit IDs, task text and configuration; unverified warm databases are
 rejected. This prevents future/stale annotation leakage from an earlier replay. Duplicate or
 abbreviated result identities are rejected; interrupted runs resume without appending duplicates.
+The runtime digest covers the imported package, including when the harness runs against a
+separately installed version; it does not assume that version matches the harness checkout.
 
 The free structural mode now exercises source/symbol retrieval without semantic annotations.
 `symbols` removes source/annotations; `grep` is the independent source baseline; `fused` combines
@@ -102,6 +104,9 @@ One repository, twenty commits and commit messages written as records rather tha
 Commit messages can be vague or name evidence rather than code. These numbers are a smoke test of
 the owner-finding claim, not a general accuracy estimate. Repeat on other repositories and with
 real task statements before generalizing. Tool effects on coding outcomes need separate trials.
+This replay selects and labels Python changes. Current AnaxiGraph can return JavaScript/TypeScript
+owners too, so a correct mixed-language recommendation can be unlabelled here. Use Python-only
+subjects for fair owner comparisons; this harness does not establish cross-language accuracy.
 
 ## Follow-up — repaired delivery and free retrieval
 
@@ -132,3 +137,18 @@ eligible development cases (four gains, no losses), with the same 2.55 average l
 twenty cases. This final measurement uses direct core composition; reconstruction with the old
 ordering matches all twenty prior Application results. Relevant tests still fall outside the
 bounded list: it never authorizes skipping required project checks.
+
+## Explicit identifier evidence — 17 November 2026
+
+An earlier common-word match could hide a later underscore identifier in the same module:
+“application validate_change” pointed at the class declaration instead of the requested method.
+Selection now uses the existing identifier priority before choosing the witness. Seven regression
+cases cover declaration ordering and a real change brief with decoy modules. Scoring weights are
+unchanged; candidate projection removes a redundant path map and a sort whose keys were all equal.
+
+A frozen before/after replay of twenty public AnaxiGraph commits retained the same scores:
+2/19 first owners and 5/19 top-three owners, with one new-file-only case excluded. No model calls
+or semantic mapping were used. These are mixed-language, commit-message proxy cases with the
+Python-label limitation above: no general relevance gain is claimed. Broad behavioral tasks still
+need better evidence than source words alone; this fix preserves the requested underscore
+identifier and its source witness.

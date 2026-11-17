@@ -206,7 +206,9 @@ def oracle(
 
 
 def _manifest(source, workdir, args, commits, config):
-    package = Path(__file__).resolve().parents[2] / "src" / "anaxigraph"
+    import anaxigraph
+
+    package = Path(anaxigraph.__file__).resolve().parent
     digest = hashlib.sha256()
     for path in sorted(package.rglob("*.py")):
         digest.update(path.relative_to(package).as_posix().encode() + b"\0" + path.read_bytes())

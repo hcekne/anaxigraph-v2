@@ -241,19 +241,16 @@ def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
 
 
 def _candidates(modules: dict[str, Node], matches: list[dict[str, Any]]) -> list[Node]:
-    by_path = {node.path: node for node in modules.values()}
     paths = dict.fromkeys(match.get("path") for match in matches)
     explicit = {m["path"] for m in matches if "exact_path" in m.get("match_scores", {})}
-    candidates = [
-        by_path[path]
+    return [
+        modules[path]
         for path in paths
-        if path in by_path
-        and by_path[path].data.get("parse_status", "parsed") == "parsed"
+        if path in modules
+        and modules[path].data.get("parse_status", "parsed") == "parsed"
         and path.endswith(SOURCE_SUFFIXES)
-        and (not by_path[path].data.get("is_test") or path in explicit)
-    ]
-    candidates.sort(key=lambda n: bool(n.data.get("is_test")) and n.path not in explicit)
-    return candidates[:3]
+        and (not modules[path].data.get("is_test") or path in explicit)
+    ][:3]
 
 
 def _contracts(graph: Graph, impacted: set[str], owners: set[str]) -> list[dict[str, Any]]:
@@ -284,7 +281,7 @@ def prepare(
     reviews: list[dict[str, Any]] | None = None,
     delivery_advice: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    modules = {node.id: node for node in graph.nodes if node.kind == "module"}
+    modules = {node.path: node for node in graph.nodes if node.kind == "module"}
     candidates = _candidates(modules, matches)
     paths = {node.path for node in candidates}
     impacted = affected_paths(graph, paths)

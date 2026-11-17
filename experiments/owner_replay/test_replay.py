@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+import anaxigraph
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import replay  # noqa: E402
 import scoring  # noqa: E402
@@ -82,3 +84,18 @@ def test_budget_metrics_keep_no_predictions_visible_and_do_not_conflate_recall_w
         ]
     )
     assert summary["eligible_list_sizes"]["consumer_anaxigraph"] == {"mean": 2, "n": 1}
+
+
+def test_resume_checks_the_imported_runtime_rather_than_the_harness_checkout(tmp_path, monkeypatch):
+    runtime = tmp_path / "installed-anaxigraph"
+    runtime.mkdir()
+    metadata = runtime / "__init__.py"
+    metadata.write_text("VERSION = 'initial'\n")
+    monkeypatch.setattr(anaxigraph, "__file__", str(metadata))
+    args = argparse.Namespace(mode="structural", candidate_budget=6)
+    workdir = tmp_path / "run"
+    workdir.mkdir()
+    replay._manifest(tmp_path, workdir, args, [], None)
+    (runtime / "changed.py").write_text("def alternate_runtime(): return 1\n")
+    with pytest.raises(ValueError, match="inputs/runtime changed"):
+        replay._manifest(tmp_path, workdir, args, [], None)
