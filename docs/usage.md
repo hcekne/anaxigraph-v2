@@ -84,14 +84,17 @@ migrate an already running legacy service.
 ## Everyday agent loop
 
 1. **No scan is needed.** `prepare_change`, `assess_plan`, `validate_change`, `inspect`,
-   `modules`, `reviews` and `tests_for_change` each read the checkout as it is: a file edited since the
-   last call is read again, and only the files its change can affect are linked again. The
+   `modules`, `reviews`, `tests_for_change` and new `analysis_request` calls read the checkout
+   as it is: a file edited since the last call is read again, and only the files its change can
+   affect are linked again. The
    first call in a checkout reads everything once; a new worktree starts from the facts another
    worktree of the same repository saved. `scan` remains for an explicit refresh and report:
    its `map_health` counts the imports between the checkout's own files that were linked and
    the source files left unread, and a `warning` there means dependency, consumer and test
    answers are incomplete. Structural reading uses no model calls. If semantic understanding
    is wanted and missing, run Mapping; compatible unchanged understanding is reused.
+   A first manual annotation request also initializes the structural map. Review kinds that need
+   current semantic briefs still require Mapping; structural refresh does not invent understanding.
 2. **Prepare** a substantial task with `prepare_change`. Keep its baseline and task identity.
    The reply opens with a `design_brief`: questions to answer before planning and any closed
    families near the task (see [component principles](component-architecture-principles.md)).
@@ -143,6 +146,9 @@ it clears the previous task plan even when the files and task wording are unchan
 preparation keeps the original baseline. Status shows saved state and does not refresh source.
 Source changes during a model run require a new run for the new snapshot; compatible accepted
 batches are reused. Stronger models cannot fix stale inputs.
+Cached batches and final reconciliation honor that same frozen workflow snapshot, even when
+another scan advances the saved map. New requests refresh normally; old submissions remain bound
+to their original capture.
 Previously assessed obligations remain with the task after source edits. Reordering review findings
 preserves their IDs, as does reuse of an identical scoped review; changing a finding's content
 requires a fresh decision. A new task clears the local plan checkpoint. It is not part of the

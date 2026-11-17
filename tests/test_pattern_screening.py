@@ -371,5 +371,5 @@ def test_screen_rejects_a_stale_saved_selection(mapped):
     request = mapped.analysis_request("pattern-screen", ["app.py"])
     mapped.submit_analysis(request["request_id"], selection_result(request))
     (mapped.root / "app.py").write_text("value = 4\n")
-    with pytest.raises(ValueError, match="changed after mapping"):
+    with pytest.raises(ValueError, match="Checkout changed"):
         mapped.analysis_selection(request["request_id"])

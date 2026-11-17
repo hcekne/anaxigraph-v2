@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-17",
+  "before_commit": "fd3aa32266b350065f8d2b6a9e2db9ec814625aa",
+  "runtime_before": "2ba86203d6ff8f7eb9e9f16bd8521e0958026cc45f4bf2f21f4c5c559a5bb62d",
+  "runtime_after": "611607d0da0e504b528d5144ee7d17313edce4e3f328441259e73e55484c47e8",
+  "measurement_harness": "4ce69f24494cae63dd98ffcb15b16bdac2310322771f9d3252dda344442dcf51",
+  "regressions": {
+    "before": {"passed": 1, "failed": 20},
+    "after": {"passed": 21, "failed": 0},
+    "transports": ["Python", "CLI executable", "HTTP", "MCP SDK"],
+    "scope": [
+      "New requests refresh source while retaining the original task baseline",
+      "First manual annotation request initializes structural reading",
+      "Changed semantic briefs still require annotation",
+      "Product Fresh Eyes retains actual durable child IDs across unrelated edits and later inspection",
+      "Old model results remain rejected after a new capture",
+      "Cached workflow batches and final reconciliation cannot qualify a changed frozen checkout"
+    ],
+    "related_workflow_and_reuse_tests": 146
+  },
+  "request_cost": {
+    "modules": 2380,
+    "source_and_request_identities_equal": true,
+    "request_bytes": 7352,
+    "before_median_ms": 166.03,
+    "after_median_ms": 230.92,
+    "samples_per_runtime": 5,
+    "scope": "Unchanged single-module annotation request creation on isolated knowledge copies of identical actual source, including request persistence"
+  },
+  "production_physical_lines": 14999,
+  "model_calls": 0,
+  "target_source_writes": 0,
+  "limits": "Shared-machine serial timings measure request-capture overhead, not mapping throughput or model latency. Synthetic responses are used only in regression fixtures. This establishes source identity, workflow qualification and child lineage behavior; it does not establish improved architectural recommendation quality."
+}

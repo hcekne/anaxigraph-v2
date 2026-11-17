@@ -356,3 +356,14 @@ malformed records and unscanned edits; 237 related tests pass locally. Redundant
 adapters and checks were removed without dropping their contracts, keeping production at the
 unchanged 15,000-line ceiling. No model calls were needed.
 [Qualification](evidence/contract-evidence-qualification.json).
+
+New manual analysis requests now refresh source themselves, including a first annotation request
+without a prior scan. Semantic prerequisites still apply; old result submission remains tied to
+its captured snapshot. Fresh Eyes product reconstruction retains the saved child result's identity
+when rebuilding compatible inputs, avoiding references to unsaved synthetic request IDs. Cached
+workflow batches and final reconciliation also check the original frozen run identity, so another
+scan cannot turn a changed run into a success. Twenty-one regressions pass where the deployed
+version failed twenty, plus 146 workflow/reuse cases. On identical 2,380-module source, five serial
+samples measured request creation at 166.03 ms before and 230.92 ms after; the request was identical.
+This is the cost of refreshing capture, not a throughput gain. Production is 14,999 lines; no model
+calls or target source writes were needed. [Qualification](evidence/request-capture-qualification.json).

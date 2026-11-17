@@ -262,7 +262,7 @@ def test_a_result_for_an_edited_checkout_is_refused_while_validation_sees_the_ed
     source = app.root / "service.py"
     source.write_text(source.read_text() + "\n# Concurrent edit\n")
     # An analysis belongs to the snapshot it was requested for and is never saved for another.
-    with pytest.raises(ValueError, match="changed after mapping"):
+    with pytest.raises(ValueError, match="Checkout changed"):
         app.submit_analysis(request["request_id"], annotation_result(request))
     # Validation needs no scan first: it reads the checkout as it is.
     validated = app.validate_change()

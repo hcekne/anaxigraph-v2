@@ -80,7 +80,7 @@ def analysis_request(
     app, kind: str, scope: list[str] | None = None, **options: Any
 ) -> dict[str, Any]:
     metadata = _screened_metadata(kind, options)
-    graph = app._current()
+    graph = app._live()
     app._require_live(graph)
     sources = None
     options.update(_request_context(app, graph, kind, options, scope))
@@ -255,6 +255,7 @@ def _rebuild_request(
             request = applicable_request(app, result, graph) if result else None
             if request is None or result is None:
                 raise ValueError("A product review's independent input is missing or stale")
+            request["request_id"] = result["id"]
             children.append({"request": request, "result": result["result"]["result"]})
         return build_product_request(
             graph,
@@ -270,7 +271,7 @@ def _rebuild_request(
 def analysis_product_request(app: Application, review_ids: list[str]) -> dict[str, Any]:
     if not isinstance(review_ids, list) or not 1 <= len(review_ids) <= 16:
         raise ValueError("Product synthesis needs one to sixteen independent review IDs")
-    graph = app._current()
+    graph = app._live()
     app._require_live(graph)
     request = app._rebuild_request(
         graph, "fresh-eyes", {"children": [{"request_id": identity} for identity in review_ids]}

@@ -451,6 +451,7 @@ class WorkflowRunner:
                         if node.kind == "module"
                     ]
                 review_workflow(self, run)
+                self.application._require_live(self.application._current(), snapshot)
                 run["status"] = "completed"
             except Exception as error:
                 run["status"], run["error"] = "failed", str(error)[:600]
@@ -556,6 +557,7 @@ class WorkflowRunner:
             }
             reviewers = [_selected_worker(x) for x in review_choices(run, batch["kind"])]
             pipeline = {"worker": selected, "review_passes": reviewers}
+            self.application._require_live(graph, run["snapshot_id"])
             if self.application.analysis_saved(
                 request["request_id"], pipeline
             ) and consumable_saved(self.application, request["request_id"], batch["kind"]):

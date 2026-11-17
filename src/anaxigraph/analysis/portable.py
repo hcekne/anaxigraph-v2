@@ -60,9 +60,7 @@ def compatible_annotations(
             != annotation_context(graph, annotation, contexts[node.path])
             or annotation.get("annotation_contract") != ANNOTATION_CONTRACT_VERSION
         ):
-            skipped.append(
-                {"id": identity, "reason": "source, dependency or cited evidence changed"}
-            )
+            skipped.append({"id": identity, "reason": "source, context or citations changed"})
             continue
         if node.data.get("annotation_status") == "current":
             skipped.append({"id": identity, "reason": "current local understanding preserved"})

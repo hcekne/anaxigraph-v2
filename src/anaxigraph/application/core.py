@@ -205,12 +205,10 @@ class Application:
             nodes.append(replace(node, data=data))
         return replace(graph, nodes=tuple(nodes))
 
-    def _require_live(self, graph: Graph) -> None:
+    def _require_live(self, graph: Graph, snapshot_id: str | None = None) -> None:
         # Never accept an old job merely because an edit has not been scanned yet.
-        if self.indexer.snapshot().id != graph.snapshot.id:
-            raise ValueError(
-                "Checkout changed after mapping; scan again before saving or validating"
-            )
+        if self.indexer.snapshot().id != (snapshot_id or graph.snapshot.id):
+            raise ValueError("Checkout changed; restart this work from current files")
 
     def _history_advice(self, graph: Graph, paths: set[str], revision: str | None) -> dict:
         key = (revision, tuple(sorted(graph.snapshot.files)))
