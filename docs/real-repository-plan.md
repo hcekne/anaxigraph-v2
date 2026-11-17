@@ -367,3 +367,19 @@ version failed twenty, plus 146 workflow/reuse cases. On identical 2,380-module 
 samples measured request creation at 166.03 ms before and 230.92 ms after; the request was identical.
 This is the cost of refreshing capture, not a throughput gain. Production is 14,999 lines; no model
 calls or target source writes were needed. [Qualification](evidence/request-capture-qualification.json).
+
+Annotation overhead then exposed a cold-start bottleneck: the first save took 15.9 seconds on the
+2,380-module graph. An isolated profile attributed almost all matcher construction to compiling
+two regexes containing repository identities. Matching now uses identity sets and the same word
+boundaries/code contexts, retaining English and JSON-label handling. Shared weak graph caching
+replaces a duplicate registry. An 11,130-string differential check covers unusual identifiers and
+Unicode; 196 related tests pass. Empty identity sets no longer match punctuation, and oversized
+behavior text fails its existing field budget before searching.
+
+On identical source and module scopes, sixteen synthetic request/save cycles fell from 28.95 to
+12.35 seconds serially and 31.67 to 18.50 seconds with four workers. First save fell from 15,879 to
+291 ms. Cold matcher profiles were 33.103/0.127 seconds including profiler overhead. These are
+synthetic API overhead probes, not model throughput or semantic-quality evidence. Four workers
+still lose to serial and their median submit cost worsened; structural-view rebuilding and cache
+contention remain. Production is 14,998 lines under the unchanged ceiling.
+[Qualification](evidence/behavior-index-qualification.json).

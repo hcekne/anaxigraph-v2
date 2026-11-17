@@ -180,6 +180,10 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
   references; returned module facts remain copies. One structural-finding producer uses those
   canonical facts. Compact inspection derives relationships once, then pages within its prose
   budget without recomputing edges or dropping their original witnesses.
+  Behavior identity matching uses the same weak graph cache and at most four immutable identity
+  indexes. It checks bounded text at Unicode word boundaries and explicit code contexts; repository
+  identities are not compiled into giant regexes. Ordinary English and JSON data labels keep their
+  existing treatment, with the existing 600-character behavior budget checked before searching.
 - The default database ceiling is 100 MB. Writes fail atomically and preserve the last valid map.
   SQLite rollback journals are temporary; retained data is not an unbounded history archive.
 - Compressed requests and current per-scope reviews live within the database budget. Current workflow

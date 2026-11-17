@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-17",
+  "before_commit": "4f59124a3eb1196842a191d4a71b683e75b099d1",
+  "runtime_before": "611607d0da0e504b528d5144ee7d17313edce4e3f328441259e73e55484c47e8",
+  "runtime_after": "19a0c133fdc773a06143e45aaed91adecd7d43531e6d913c1d27c0e1a0b685ff",
+  "cycle_harness_sha256": "2944bf4a8506b4aec26694b0e4bb971004b7d4f8922635587be9cbcce01d0842",
+  "cold_profile_harness_sha256": "a60082a7c314da5cdd486e2fbee429191cbc35f39dd076fcd5971a61eaa6b792",
+  "subject": {"modules": 2380, "nodes": 90228, "identical_source_and_module_scopes": true},
+  "mechanism": "Replace two repository-sized regexes with identity sets searched at the same lexical boundaries/code contexts; replace the duplicate matcher registry with shared weak graph caching",
+  "serial_request_submit_probe": {
+    "timed_annotations": 16,
+    "wall_seconds": {"before": 28.95, "after": 12.35},
+    "first_submit_ms": {"before": 15879.10, "after": 290.91},
+    "median_submit_ms": {"before": 573.03, "after": 512.21}
+  },
+  "four_worker_request_submit_probe": {
+    "timed_annotations": 16,
+    "wall_seconds": {"before": 31.67, "after": 18.50},
+    "median_request_ms": {"before": 2658.28, "after": 2896.41},
+    "median_submit_ms": {"before": 808.23, "after": 1344.85},
+    "limit": "Four zero-delay workers remain slower than serial; individual request/submit medians worsened despite lower total wall time. Contention and structural view work remain."
+  },
+  "isolated_cold_matcher_profile_seconds": {"before": 33.103, "after": 0.127},
+  "cold_profile_limit": "Profiler overhead is included; these are attribution timings, not production latency. The old profile attributes 32.647 seconds to its two dynamic regex compiles.",
+  "correctness": {
+    "differential_strings_against_frozen_regex_policy": 11130,
+    "covers": ["Unicode and combining characters", "paths with whitespace and punctuation", "code calls/references and overlapping backticks", "ordinary English", "JSON data labels"],
+    "new_cases": 24,
+    "old_runtime_cases": {"passed": 19, "failed": 5},
+    "candidate_related_cases_passed": 196,
+    "empty_identity_sets_no_longer_match_punctuation": true,
+    "existing_behavior_text_limit_checked_before_search": true,
+    "graph_garbage_collection_and_shared_index_reuse_verified": true
+  },
+  "production_physical_lines": 14998,
+  "real_model_calls": 0,
+  "target_source_writes": 0,
+  "limits": "Single local probe per worker count on a shared machine, synthetic annotations in separate disposable databases and no model delay. Initial scans and one extra profiling cycle are outside the timed sixteen. No claim of production mapping throughput, novel recommendations or better architecture."
+}

@@ -316,8 +316,7 @@ def test_data_labels_preserve_code_shaped_and_explicit_source_detection(statemen
 
 def test_matchers_reuse_annotation_only_graph_copies_without_retaining_graphs(tmp_path):
     app = application(tmp_path)
-    graph = app._current()
-    behavior._MATCHERS.clear()
+    graph = replace(app._current())
     behavior._compile_matcher.cache_clear()
     matcher = behavior.behavior_matcher(graph)
     for _ in range(100):
@@ -344,7 +343,11 @@ def test_matchers_reuse_annotation_only_graph_copies_without_retaining_graphs(tm
     del copy
     gc.collect()
     assert reference() is None
-    for i in range(10):
-        behavior.behavior_matcher(replace(graph, diagnostics=(str(i),)))
-    assert len(behavior._MATCHERS) <= 4
+    copies = [replace(graph, diagnostics=(str(i),)) for i in range(10)]
+    references = [weakref.ref(item) for item in copies]
+    for item in copies:
+        behavior.behavior_matcher(item)
+    del item, copies
+    gc.collect()
+    assert all(reference() is None for reference in references)
     assert behavior._compile_matcher.cache_info().currsize <= 4
