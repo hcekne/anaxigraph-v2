@@ -303,3 +303,12 @@ in one request. Explicit restart clears prior plan intent and starts a new trial
 preparation stays pinned. The captured source identity survives an interleaved scan by another
 process. CLI, MCP, real HTTP responses and dashboard handlers have regression coverage. Shared
 snapshot-retention normalization removes duplication and keeps production at 15,000 lines.
+
+Source-role reclassification exposed a misleading comparison: twenty unchanged private-access
+observations in the frozen public checkout were labelled improved when their owners became tests.
+Validation now distinguishes production/test scope changes, including indirect cycle changes,
+from observed boundary changes. Newly relevant concerns remain visible, real new concerns lead
+the compact list, and full validation expands boundary findings and rescoped paths. The same
+313-module source retained identical annotation fingerprints and CI review context after sharing
+the canonical relationship view. These are compatibility and classification checks with no model
+calls, not evidence of better design. Production remains at the unchanged 15,000-line ceiling.

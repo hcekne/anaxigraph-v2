@@ -82,9 +82,11 @@ def assess(
     }
 
 
-def followthrough(app: Any, baseline_id: str | None, graph, previous, checks: list[dict]) -> dict:
+def followthrough(
+    app: Any, baseline_id: str | None, graph, previous, checks: list[dict], full: bool = False
+) -> dict:
     observed = {
-        "boundary_changes": boundary_delta(graph, previous),
+        "boundary_changes": boundary_delta(graph, previous, full),
         "independent_verification": independent_verification(graph, previous, checks),
     }
     saved = app.store.get_review(str(app.root), "current-plan", "plan")

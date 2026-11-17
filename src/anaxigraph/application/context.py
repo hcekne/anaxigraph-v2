@@ -6,25 +6,12 @@ import hashlib
 import json
 from functools import partial
 
+from anaxigraph.analysis.charter import relations
 from anaxigraph.contracts import Graph
 
 
 def _digest(value: dict) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
-
-
-def _dependencies(graph: Graph) -> dict[str, set[str]]:
-    owners = {node.id: node.path for node in graph.nodes}
-    dependencies = {node.path: {node.path} for node in graph.nodes if node.kind == "module"}
-    for edge in graph.edges:
-        source, target = owners.get(edge.source), owners.get(edge.target)
-        if (
-            source in dependencies
-            and target in graph.snapshot.files
-            and edge.resolution == "resolved"
-        ):
-            dependencies[source].add(target)
-    return dependencies
 
 
 def _fingerprints(graph: Graph, field: str, include_own: bool) -> dict[str, str]:
@@ -37,11 +24,11 @@ def _fingerprints(graph: Graph, field: str, include_own: bool) -> dict[str, str]
         path: _digest(
             {
                 p: graph.snapshot.files[p] if p == path else values.get(p, graph.snapshot.files[p])
-                for p in paths
+                for p in row["dependencies"] | {path}
                 if include_own or p != path
             }
         )
-        for path, paths in _dependencies(graph).items()
+        for path, row in relations(graph)[1].items()
     }
 
 

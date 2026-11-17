@@ -524,7 +524,7 @@ class Application:
         }
 
         result["architecture"] = component_architecture.followthrough(
-            self, selected, graph, previous, result["checks"]
+            self, selected, graph, previous, result["checks"], full
         )
         result.update(delivery.validation(result["checks"]))
         result["extension_points"] = _extension_review(graph, previous, self.root)

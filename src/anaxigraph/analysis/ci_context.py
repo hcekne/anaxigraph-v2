@@ -9,6 +9,8 @@ from pathlib import PurePosixPath
 
 from anaxigraph.contracts import SOURCE_SUFFIXES, Graph
 
+from .charter import relations
+
 
 def _area(path: str) -> str:
     parts = PurePosixPath(path).parts[:-1]
@@ -16,29 +18,22 @@ def _area(path: str) -> str:
     return "/".join(parts[:depth]) or "."
 
 
-def _area_dependencies(graph: Graph) -> list:
-    nodes = {node.id: node for node in graph.nodes}
-    return sorted(
-        {
-            (_area(nodes[edge.source].path), _area(nodes[edge.target].path))
-            for edge in graph.edges
-            if edge.resolution == "resolved"
-            and edge.source in nodes
-            and edge.target in nodes
-            and _area(nodes[edge.source].path) != _area(nodes[edge.target].path)
-        }
-    )
-
-
 def component_context(graph: Graph) -> dict:
-    modules = {node.path: node for node in graph.nodes if node.kind == "module"}
+    modules, raw = relations(graph)
     sources = set(modules) | {
         path for path in graph.snapshot.files if path.endswith(SOURCE_SUFFIXES)
     }
     groups: dict[str, list] = defaultdict(list)
     for path in sorted(sources):
         groups[_area(path)].append(path)
-    links = _area_dependencies(graph)
+    links = sorted(
+        {
+            (_area(path), _area(target))
+            for path in raw
+            for target in raw[path]["dependencies"]
+            if _area(path) != _area(target)
+        }
+    )
     tests = {path for path, node in modules.items() if node.data.get("is_test")}
     context = {
         "basis": "Provisional source-root/package/directory areas, not accepted component or test-ownership declarations.",

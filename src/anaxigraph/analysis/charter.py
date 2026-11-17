@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from copy import deepcopy
 from typing import Any
 
@@ -148,11 +149,11 @@ def _relations(graph: Graph, modules: dict[str, Node]):
 
 
 @graph_cached
-def _latest(graph: Graph) -> tuple[Any, Any, Any]:
-    """Modules, relations and facts, derived once for all the answers a graph gives."""
+def _latest(graph: Graph) -> tuple[Any, Any, Any, Any]:
+    """Modules, relations, facts and full boundaries, derived once per graph."""
     modules = {node.path: node for node in graph.nodes if node.kind == "module"}
     raw, witnesses = _relations(graph, modules)
-    return modules, raw, _observations(modules, raw, witnesses)
+    return modules, raw, *_observations(modules, raw, witnesses)
 
 
 def relations(graph: Graph) -> tuple[dict[str, Node], dict[str, dict[str, Any]]]:
@@ -163,10 +164,33 @@ def relations(graph: Graph) -> tuple[dict[str, Node], dict[str, dict[str, Any]]]
     return _latest(graph)[:2]
 
 
-def _observations(modules, raw, witnesses) -> dict[str, dict[str, Any]]:
+def boundaries(graph: Graph) -> dict:
+    """Read-only production boundaries; full SCC membership stays out of public facts."""
+    return _latest(graph)[3]
+
+
+def boundary_scope(graph: Graph, previous: Graph | None) -> dict[str, set[str]]:
+    """Existing files entering/leaving production, including indirectly affected cycles."""
+    before, after = boundaries(previous) if previous else {}, boundaries(graph)
+    retained = graph.snapshot.files.keys() & (previous.snapshot.files.keys() if previous else set())
+    direct = (before.keys() ^ after.keys()) & retained
+    cycles = {
+        member
+        for view in (before, after)
+        for path in direct
+        for member in view.get(path, {}).get("cycle", ())
+    }
+    return {
+        "private-interface-access": direct,
+        "shared-consumers": direct,
+        "dependency-cycle": direct | cycles,
+    }
+
+
+def _observations(modules, raw, witnesses):
     production = {path for path, node in modules.items() if not node.data.get("is_test")}
     cycles = _cycles({path: raw[path]["dependencies"] & production for path in production})
-    facts = {}
+    facts, boundaries = {}, {}
     for path, node in modules.items():
         dependencies, consumers, tests = (
             raw[path][key] for key in ("dependencies", "consumers", "tests")
@@ -208,7 +232,14 @@ def _observations(modules, raw, witnesses) -> dict[str, dict[str, Any]]:
             "consumer_test_count": len(consumer_tests),
             "limitations": _LIMITATION,
         }
-    return facts
+        if path in production:
+            boundaries[path] = {
+                "private-interface-access": Counter(item[0] for item in raw[path]["private"]),
+                "dependency-cycle": Counter(dependencies & set(cycle)),
+                "shared-consumers": Counter(consumers),
+                "cycle": cycle,
+            }
+    return facts, boundaries
 
 
 def module_facts(graph: Graph, module: Node) -> dict[str, Any]:

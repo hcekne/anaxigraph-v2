@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from typing import Any
 
 from anaxigraph.analysis.validation import validate_result
 from anaxigraph.contracts import Graph
 
 from .behavior import annotation_behavior_problems
+from .fields import fingerprint
 
 ANNOTATION_CONTRACT_VERSION = "behavior-v2"
 
@@ -32,11 +31,7 @@ def input_identity(request: dict[str, Any]) -> str:
         key: stable(request.get(key))
         for key in ("kind", "scope", "packet", "response_schema", "request_options")
     }
-    return hashlib.sha256(
-        json.dumps(
-            meaning, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
-        ).encode()
-    ).hexdigest()
+    return fingerprint(meaning)
 
 
 def compatible_annotations(

@@ -9,12 +9,21 @@
   "all_prior_test_edges_retained": true,
   "new_source_supported_test_modules": 65,
   "additional_static_test_edges": 1767,
-  "default_model_scope_modules": {"before": 194, "after": 129},
+  "default_model_scope_modules": {
+    "before": 194,
+    "after": 129
+  },
   "owner_replay": {
     "frozen_commits": 20,
     "eligible_existing_python_owner_cases": 19,
-    "before": {"hit_at_1": 2, "hit_at_3": 5},
-    "after": {"hit_at_1": 2, "hit_at_3": 5},
+    "before": {
+      "hit_at_1": 2,
+      "hit_at_3": 5
+    },
+    "after": {
+      "hit_at_1": 2,
+      "hit_at_3": 5
+    },
     "gains": 0,
     "losses": 0,
     "label_limit": "Commit-message proxies with Python-only gold; no cross-language or held-out claim"
@@ -27,5 +36,20 @@
     "scope": "Constructed regression, not universal recall evidence"
   },
   "model_calls": 0,
-  "limits": "Scope reduction is not measured model time/cost, architectural superiority, or qualified CI savings. Native processes and separately launched shards remain conservative."
+  "limits": "Scope reduction is not measured model time/cost, architectural superiority, or qualified CI savings. Native processes and separately launched shards remain conservative.",
+  "boundary_scope_qualification": {
+    "comparison": "Same frozen source and references; previous source roles compared with source-supported test roles",
+    "rescoped_modules": 65,
+    "previous_false_improved_entries": 20,
+    "current_scope_changed_entries": 20,
+    "kinds": [
+      "private-interface-access"
+    ],
+    "annotation_fingerprints_unchanged": true,
+    "dependency_implementation_fingerprints_unchanged": true,
+    "ci_context_and_identity_unchanged": true,
+    "canonical_digests_unchanged": true,
+    "regressions": "Includes indirect and retained/shrinking cycles, new production concerns, real file additions/deletions, compact prioritization and full application expansion",
+    "model_calls": 0
+  }
 }

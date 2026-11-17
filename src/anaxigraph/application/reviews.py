@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -16,6 +14,7 @@ from anaxigraph.analysis import (
 from anaxigraph.analysis.architecture import reconcile_architecture
 from anaxigraph.analysis.architecture_guidance import proposals as scout_proposals
 from anaxigraph.analysis.delivery import capture_coverage, reconcile_delivery
+from anaxigraph.analysis.fields import fingerprint
 from anaxigraph.analysis.packets import SOURCE_REVIEW_KINDS, catalogue, request_modules
 from anaxigraph.analysis.patterns import (
     actionable_opportunities,
@@ -142,17 +141,12 @@ def submit_analysis(app: Application, request_id: str, result: dict[str, Any]) -
                 for n in request["packet"]["modules"]
                 if n["id"] == node.id
             )
-            expected_digest = hashlib.sha256(
-                json.dumps(
-                    prior, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                ).encode()
-            ).hexdigest()
             changed = app.store.annotate(
                 str(app.root),
                 graph.snapshot.id,
                 node.id,
                 value,
-                expected_digest=expected_digest,
+                expected_digest=fingerprint(prior),
             )
             written += int(changed)
             updated[node.id] = value

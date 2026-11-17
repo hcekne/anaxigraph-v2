@@ -6,33 +6,29 @@ from collections import Counter
 
 from anaxigraph.analysis import extension
 from anaxigraph.analysis.changes import changed_paths
-from anaxigraph.analysis.charter import _cycles, relations
+from anaxigraph.analysis.charter import boundaries, boundary_scope
 from anaxigraph.contracts import Graph
 
 
-def _input_errors(graph: Graph) -> list[str]:
-    return [row for row in graph.diagnostics if ".py:" in row or ".pyi:" in row]
+def _delta_status(kind, prior, added, errors, rescoped):
+    if rescoped:
+        return "scope_changed", "unresolved"
+    change = "worsened" if added and prior else "introduced" if added else "improved"
+    if kind == "shared-consumers":
+        return change, "widened" if added else "narrowed"
+    return change, "concern" if added else "unresolved" if errors else "improved"
 
 
-def _boundaries(graph: Graph) -> dict:
-    modules, raw = relations(graph)
-    production = {path for path, node in modules.items() if not node.data.get("is_test")}
-    cycles = _cycles({path: raw[path]["dependencies"] & production for path in production})
-    return {
-        path: {
-            "private-interface-access": Counter(item[0] for item in raw[path]["private"]),
-            "dependency-cycle": Counter(raw[path]["dependencies"] & set(cycles.get(path, []))),
-            "shared-consumers": Counter(raw[path]["consumers"]),
-        }
-        for path in production
-    }
-
-
-def boundary_delta(graph: Graph, previous: Graph | None) -> dict:
+def boundary_delta(graph: Graph, previous: Graph | None, full: bool = False) -> dict:
     if previous is None:
         return {"status": "unresolved", "findings": [], "reason": "No retained baseline"}
-    before, after = _boundaries(previous), _boundaries(graph)
-    errors = _input_errors(graph) + _input_errors(previous)
+    before, after = boundaries(previous), boundaries(graph)
+    scope = boundary_scope(graph, previous)
+    errors = [
+        row
+        for row in (*graph.diagnostics, *previous.diagnostics)
+        if ".py:" in row or ".pyi:" in row
+    ]
     findings = []
     for path in sorted(set(before) | set(after)):
         for kind in ("private-interface-access", "dependency-cycle", "shared-consumers"):
@@ -41,35 +37,35 @@ def boundary_delta(graph: Graph, previous: Graph | None) -> dict:
             added, removed = current - prior, prior - current
             if not added and not removed:
                 continue
+            change, status = _delta_status(kind, prior, added, errors, path in scope[kind])
             findings.append(
                 {
                     "kind": kind,
                     "path": path,
-                    "change": "worsened"
-                    if added and prior
-                    else "introduced"
-                    if added
-                    else "improved",
+                    "change": change,
                     "previous_count": sum(prior.values()),
                     "candidate_count": sum(current.values()),
                     "added": sorted(added)[:10],
                     "removed": sorted(removed)[:10],
-                    "status": ("widened" if added else "narrowed")
-                    if kind == "shared-consumers"
-                    else "concern"
-                    if added
-                    else "unresolved"
-                    if errors
-                    else "improved",
+                    "status": status,
                 }
             )
+    findings.sort(
+        key=lambda item: (
+            item["change"] not in {"introduced", "worsened"},
+            item["status"] != "concern",
+        )
+    )
+    rescoped = sorted(scope["shared-consumers"])
     return {
         "status": "observed",
-        "findings": findings[:50],
+        "findings": findings if full else findings[:50],
         "total": len(findings),
-        "truncated": len(findings) > 50,
+        "truncated": not full and len(findings) > 50,
+        "rescoped_paths": rescoped if full else rescoped[:20],
+        "rescoped_total": len(rescoped),
         "unresolved_inputs": errors[:10],
-        "note": "Static relations; consumer additions widen impact, not proof of a design defect.",
+        "note": "Static relations; scope_changed reflects production/test scope, not a proven architectural change. Consumer additions widen impact, not proof of a design defect.",
     }
 
 

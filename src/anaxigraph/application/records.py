@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from anaxigraph.analysis import validate_result
+from anaxigraph.analysis.fields import fingerprint
 from anaxigraph.analysis.portable import compatible_annotations, input_identity
 from anaxigraph.application.context import context_fingerprints
 from anaxigraph.storage.portable import (
@@ -111,15 +110,12 @@ def import_record(app: Application) -> dict[str, Any]:
     modules = {node.id: node for node in graph.nodes if node.kind == "module"}
     for annotation in annotations:
         prior = modules[annotation["node_id"]].data.get("annotation")
-        expected = hashlib.sha256(
-            json.dumps(prior, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
         app.store.annotate(
             str(app.root),
             graph.snapshot.id,
             annotation["node_id"],
             annotation,
-            expected_digest=expected,
+            expected_digest=fingerprint(prior),
         )
     graph = app._current()
     source_id = content_identity(graph.snapshot.files)

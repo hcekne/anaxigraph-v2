@@ -7,6 +7,7 @@ from typing import Any
 
 from anaxigraph.contracts import Graph
 
+from .charter import boundary_scope
 from .guidance import structural_findings
 
 
@@ -47,6 +48,7 @@ def attribute_checks(
 
 def findings_delta(graph: Graph, previous: Graph | None) -> list[dict[str, Any]]:
     old = {(f["kind"], f["entity"]): f for f in structural_findings(previous)} if previous else {}
+    scope = boundary_scope(graph, previous)
     findings = []
     for finding in structural_findings(graph):
         prior = old.get((finding["kind"], finding["entity"]))
@@ -61,6 +63,8 @@ def findings_delta(graph: Graph, previous: Graph | None) -> list[dict[str, Any]]
             if finding == prior
             else "changed"
         )
+        if finding["entity"].removeprefix("module:") in scope.get(finding["kind"], ()):
+            finding["change"] = "scope_changed"
         if prior:
             finding["previous_measured"] = prior["measured"]
         findings.append(finding)
