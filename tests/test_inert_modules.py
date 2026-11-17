@@ -83,6 +83,26 @@ def marker_answer(request):
     return result
 
 
+def test_empty_contract_schema_cannot_store_undeclared_nested_payload(tmp_path):
+    (tmp_path / "marker.py").write_text("# A namespace marker.\n")
+    application = Application(tmp_path)
+    application.scan()
+    request = application.analysis_request("annotate")
+    result = marker_answer(request)
+    assert request["response_schema"]["annotations"][0]["contracts"] == []
+    result["annotations"][0]["contracts"] = [
+        {
+            "statement": "Preserve documented behavior.",
+            "basis": "inferred",
+            "evidence": [{"path": "marker.py", "line": 1}],
+            "raw_source": "PRIVATE",
+        }
+    ]
+    with pytest.raises(ValueError, match="contract statement"):
+        application.submit_analysis(request["request_id"], result)
+    assert application.status()["annotations"]["current"] == 0
+
+
 def test_whole_mapping_patterns_and_fresh_eyes_cover_marker_without_inventing_requirements(
     tmp_path,
 ):

@@ -19,15 +19,6 @@ STRATEGIES = (
     "retain_checks",
     "next_steps",
 )
-RECOMMENDATION_FIELDS = {
-    "pipeline_ids",
-    "priority",
-    "title",
-    "bottleneck",
-    "evidence",
-    "uncertainty",
-    *STRATEGIES,
-}
 
 
 def delivery_packet(graph: Graph, context: dict) -> tuple[dict, dict]:

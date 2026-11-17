@@ -158,7 +158,8 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 - One `anaxigraph/record.json` carries canonical annotations, analyses and provenance through Git,
   without source, SQLite or deterministic graphs. Clone imports compare source, dependency and
   analysis input identities; product child identities are reconstructed in dependency order.
-  Unknown model payload fields are excluded from saved result contracts.
+  The delivered response contract also projects saved results: unknown model fields are
+  excluded recursively, while missing or malformed required values still fail validation.
 - Portable publication targets 100 MB combined with active local state. Up to twelve workflow
   progress files have an aggregate 20 MB bound; retained-state writes enforce a 200 MB guard.
   Schema upgrades preserve one pre-migration backup. Failed writes preserve the last valid record.

@@ -8,12 +8,12 @@ from typing import Any, Callable, TypeVar, cast
 
 from anaxigraph.contracts import Graph
 
-from .architecture import FINDING_FIELDS, validate_architecture
+from .architecture import validate_architecture
 from .behavior import check_annotation_behaviors
-from .delivery import RECOMMENDATION_FIELDS, validate_delivery
+from .delivery import validate_delivery
 from .fields import project as _project
 from .fields import text, texts
-from .packets import DEFAULT_RESULT_BYTES, _check_behavior
+from .packets import DEFAULT_RESULT_BYTES, KINDS, _check_behavior
 
 _Validator = TypeVar("_Validator", bound=Callable[..., Any])
 
@@ -96,100 +96,12 @@ def canonical_result(request: dict[str, Any], result: dict[str, Any]) -> dict[st
     ``validate_result`` too. Required fields are never invented or defaulted.
     """
 
-    def reference(item):
-        return _project(item, {"path", "line"})
-
-    def annotation(item):
-        projected = _project(
-            item,
-            {
-                "node_id",
-                "overview",
-                "detail",
-                "capabilities",
-                "functions",
-                "contracts",
-                "uncertainty",
-            },
-            {
-                "functions": lambda function: _project(function, {"node_id", "overview"}),
-                "contracts": lambda contract: _project(
-                    contract, {"statement", "basis", "evidence"}, {"evidence": reference}
-                ),
-            },
-        )
-        return projected
-
-    kind = request["kind"]
-    fields, children = {
-        "annotate": ({"producer", "annotations"}, {"annotations": annotation}),
-        "pattern-screen": (
-            {"producer", "selections"},
-            {"selections": lambda item: _project(item, {"module_id", "pattern_ids"})},
-        ),
-        "patterns": (
-            {"producer", "evaluations"},
-            {
-                "evaluations": lambda item: _project(
-                    item,
-                    {
-                        "module_id",
-                        "pattern_id",
-                        "opportunity",
-                        "current_fit",
-                        "proposed_change",
-                        "pros",
-                        "cons",
-                        "alternative",
-                        "evidence",
-                    },
-                    {"evidence": reference},
-                )
-            },
-        ),
-        "architecture": (
-            {"producer", "lens", "assessments", "findings", "uncertainty"},
-            {
-                "assessments": lambda item: _project(item, {"module_id", "outcome"}),
-                "findings": lambda item: _project(
-                    item,
-                    FINDING_FIELDS,
-                    {
-                        "evidence": reference,
-                        "options": lambda option: _project(
-                            option, {"placement", "benefit", "cost"}
-                        ),
-                    },
-                ),
-            },
-        ),
-        "delivery": (
-            {"producer", "assessments", "recommendations", "uncertainty"},
-            {
-                "assessments": lambda item: _project(item, {"pipeline_id", "outcome"}),
-                "recommendations": lambda item: _project(
-                    item, RECOMMENDATION_FIELDS, {"evidence": reference}
-                ),
-            },
-        ),
-        "fresh-eyes": (
-            {
-                "producer",
-                "alternatives",
-                "functional_summary",
-                "functional_requirements",
-                "functional_coverage",
-            },
-            {
-                "alternatives": lambda item: _project(
-                    item, {"name", "design", "requirements", "pros", "cons", "diagram"}
-                )
-            },
-        ),
-    }.get(kind, (None, None))
-    if fields is None:
+    if request["kind"] not in KINDS:
         raise ValueError("Unknown analysis result kind")
-    canonical = _project(result, fields, children)
+    contract = request.get("response_schema")
+    if not isinstance(contract, dict):
+        raise ValueError("Analysis request has no delivered response contract; request it again")
+    canonical = _project(result, contract)
     if not isinstance(canonical, dict):
         raise ValueError("Analysis result must be an object")
     if result.get("execution") is not None:

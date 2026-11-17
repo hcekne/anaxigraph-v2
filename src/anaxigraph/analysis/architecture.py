@@ -44,20 +44,6 @@ PLACEMENTS = (
     "external-package",
     "service",
 )
-FINDING_FIELDS = {
-    "title",
-    "module_ids",
-    "priority",
-    "placement",
-    "public_contract",
-    "private_implementation",
-    "dependencies",
-    "verification",
-    "next_step",
-    "options",
-    "evidence",
-    "uncertainty",
-}
 
 
 def _selected_modules(graph: Graph, scope: list[str] | None) -> list[Node]:
