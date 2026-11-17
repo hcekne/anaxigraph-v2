@@ -244,3 +244,16 @@ The duplicate static "implemented" predicate and automatic folder-only CI prescr
 removed. Import reach no longer predicts future test savings. Observed boundary deltas remain
 available, while freeform proposal implementation stays unverified. Production is 14,999 lines
 under the unchanged 15,000-line ceiling. No paid campaign or target-suite rerun was made.
+
+Worker qualification exposed a separate safety defect in warm bytecode loading. A dynamic child
+loaded a dotted source filename without retaining its module object. The recorder inferred the
+wrong source from its cache name and marked the real input unloaded. A mutation failed two test
+files, but selection omitted one. Direct execution-filename observations now retain both failing
+files; the unrelated test stays out. Regression cases cover plain, dotted, optimized and externally
+cached modules, including a nearby unused file that must not become a spurious input.
+
+Observation format v3 preserves those execution inputs. V1/v2 reports remain readable but cannot
+authorize narrow checks after a change. This repairs an observed omission; it does not establish
+complete test recall. Separately launched shards and the conservative xdist-controller fallback
+remain unchanged. Production is 15,000 lines under the existing ceiling. No target suite or paid
+model run was started for this qualification.

@@ -252,6 +252,10 @@ loads. Such a parent run requires the full suite; such a child retains the launc
 opaque-process fallback. Path-only `.pth` files and an exactly reviewed, inactive coverage
 initializer remain compatible. Changed or active startup code is not assumed harmless.
 Older observation records remain readable but require a fresh recording before narrowing checks.
+Observation format v3 records the source filename of executed code as well as importer reads.
+This covers warm bytecode, external cache directories and modules loaded without a persistent
+`sys.modules` entry. V1/v2 recordings are retained, but require full checks after a change until
+refreshed; their cache-name observations could miss an affected test.
 Refresh the whole recorder folder from the current AnaxiGraph installation before recording again.
 
 `--scope` names the folders the suite depends on, and `--run-root` the folder it ran in. The

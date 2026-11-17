@@ -22,7 +22,7 @@ from anaxigraph.indexing.python import runs_bodies
 from anaxigraph.indexing.test_run import verify
 
 FORMAT = "anaxigraph-test-record-v2"
-READS = "anaxigraph-reads-v2"
+READS = "anaxigraph-reads-v3"
 
 
 def _executions(
@@ -143,7 +143,7 @@ def _report(part: Path) -> dict[str, Any]:
         found = None
     if (
         not isinstance(found, dict)
-        or found.get("format") not in {READS, "anaxigraph-reads-v1"}
+        or found.get("format") not in {READS, "anaxigraph-reads-v1", "anaxigraph-reads-v2"}
         or "loaded" not in found
     ):
         raise ValueError(f"Not a reads report: {part}")

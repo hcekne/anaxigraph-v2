@@ -291,7 +291,7 @@ def _recording_limit(record: dict[str, Any]) -> str | None:
         return (
             "Recording source/run is unverified; record again with --start and the reads recorder"
         )
-    if provenance.get("observations") != "anaxigraph-reads-v2":
+    if provenance.get("observations") != "anaxigraph-reads-v3":
         return "Older observation rules; update the recorder, then record the suite again"
     return None
 

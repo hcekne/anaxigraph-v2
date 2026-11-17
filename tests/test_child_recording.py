@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import py_compile
 import shutil
 import subprocess
 import sys
@@ -81,6 +82,36 @@ def make_recording(tmp_path_factory, mode):
         for name in CLIENTS:
             path = root / name
             path.write_text(path.read_text().replace("app.client", "app.cache"))
+    cache_prefix = None
+    if mode.startswith("cached_"):
+        name = "plugin.config.py" if mode == "cached_dotted" else "plugin.py"
+        source = root / "app" / name
+        source.write_text("VALUE = 7\n")
+        if mode == "cached_dotted":
+            (root / "app/plugin.py").write_text("VALUE = 99\n")
+        cache_prefix = str(folder / "bytecode") if mode == "cached_prefix" else None
+        previous_prefix = sys.pycache_prefix
+        try:
+            sys.pycache_prefix = cache_prefix
+            py_compile.compile(
+                str(source), doraise=True, optimize=1 if mode == "cached_optimized" else 0
+            )
+        finally:
+            sys.pycache_prefix = previous_prefix
+        (root / "app/worker.py").write_text(
+            "import importlib.util, os, sys\nfrom pathlib import Path\n"
+            f"path = Path(__file__).with_name({name!r})\n"
+            "spec = importlib.util.spec_from_file_location('dynamic_plugin', path)\n"
+            "module = importlib.util.module_from_spec(spec)\n"
+            "original = spec.loader.get_data\n"
+            "def cached(name):\n"
+            "    if name == str(path) and os.environ.get('REQUIRE_WARM_CACHE'):\n"
+            "        raise RuntimeError('Baseline must use compiled bytecode')\n"
+            "    return original(name)\n"
+            "spec.loader.get_data = cached\n"
+            "spec.loader.exec_module(module)\n"
+            "assert 'dynamic_plugin' not in sys.modules\nprint(module.VALUE)\n"
+        )
     startup_python = None
     if mode in {"startup_hook", "parent_startup"}:
         prefix = folder / "startup-env"
@@ -128,6 +159,12 @@ def make_recording(tmp_path_factory, mode):
         "READY_MARKER": str(folder / "child.ready"),
         "PARENT_ONLY_VALUE": "fixture",
     }
+    if mode.startswith("cached_"):
+        environment["REQUIRE_WARM_CACHE"] = "1"
+    if cache_prefix:
+        environment["PYTHONPYCACHEPREFIX"] = cache_prefix
+    if mode == "cached_optimized":
+        environment["PYTHONOPTIMIZE"] = "1"
     if startup_python:
         environment.update(CHILD_PYTHON=startup_python, STARTUP_INPUT=str(root / "app/value.txt"))
     if mode == "parent_startup":
@@ -203,6 +240,45 @@ def save(root, original, folder):
         junit=[folder / "junit.xml"],
         reads=folder / "reads.json",
     )
+
+
+@pytest.mark.parametrize(
+    "mode", ["cached_plain", "cached_dotted", "cached_prefix", "cached_optimized"]
+)
+def test_warm_bytecode_dynamic_loads_retain_every_failing_consumer(
+    tmp_path_factory, tmp_path, mode
+):
+    from anaxigraph.indexing.test_record import junit_files
+
+    original, _ = make_recording(tmp_path_factory, mode)
+    root = Path(shutil.copytree(original, tmp_path / "clone"))
+    assert save(root, original, original.parent)["provenance"]["status"] == "verified"
+    name = "app/plugin.config.py" if mode == "cached_dotted" else "app/plugin.py"
+    saved = json.loads((root / ".anaxigraph-v2/test-records/app.json").read_text())
+    assert name not in saved["unloaded"]
+    assert saved["executed"][name]
+    if mode == "cached_dotted":
+        assert "app/plugin.py" in saved["unloaded"]
+        sibling = root / "app/plugin.py"
+        sibling.write_text("VALUE = 999\n")
+        [unrelated] = Application(root).tests_for_change()["suites"]
+        assert unrelated["status"] != "all"
+        assert "tests/test_first.py" not in unrelated["test_files"]
+        sibling.write_text("VALUE = 99\n")
+    (root / name).write_text("VALUE = 17\n")
+    [selected] = Application(root).tests_for_change()["suites"]
+    report = tmp_path / "mutated.xml"
+    done = subprocess.run(
+        [sys.executable, "-m", "pytest", "tests", "-q", f"--junitxml={report}"],
+        cwd=root,
+        env=os.environ | {"PYTHONPATH": str(root), "MODE": mode},
+        text=True,
+        capture_output=True,
+    )
+    assert done.returncode == 1, done.stdout + done.stderr
+    failed = junit_files([report], ".", saved["files"])[1]
+    assert failed == set(CLIENTS)
+    assert failed <= set(selected["test_files"])
 
 
 def test_child_code_and_data_reach_cached_callers_but_unrelated_work_stays_local(

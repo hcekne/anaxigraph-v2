@@ -810,7 +810,7 @@ def test_invalid_recording_cannot_replace_the_last_good_record(checkout, run, tm
     assert saved.read_bytes() == before
 
 
-@pytest.mark.parametrize("observations", [None, "anaxigraph-reads-v1"])
+@pytest.mark.parametrize("observations", [None, "anaxigraph-reads-v1", "anaxigraph-reads-v2"])
 def test_older_observers_remain_readable_but_cannot_narrow_checks(checkout, observations):
     import json
 
@@ -826,6 +826,28 @@ def test_older_observers_remain_readable_but_cannot_narrow_checks(checkout, obse
         "Older observation rules; update the recorder, then record the suite again"
         in suite["everything_because"]
     )
+
+
+def test_bound_v2_report_import_preserves_observations_without_authorizing_narrow_checks(
+    checkout, run, tmp_path
+):
+    import json
+
+    reports = Path(
+        shutil.copytree(run.parent, tmp_path / "reports", ignore=lambda *_: ["checkout"])
+    )
+    path = reports / "reads.json"
+    report = json.loads(path.read_text())
+    report["format"] = "anaxigraph-reads-v2"
+    path.write_text(json.dumps(report))
+    saved = record(checkout, run, reads=True, reports=reports)
+    assert saved["provenance"]["status"] == "verified"
+    assert saved["provenance"]["observations"] == "anaxigraph-reads-v2"
+    assert saved["sources_executed"] > 0
+    (checkout / "shop/pkg/orders.py").write_text("def place(items):\n    return {}\n")
+    suite = picked(checkout)
+    assert suite["status"] == "all"
+    assert any("Older observation rules" in reason for reason in suite["everything_because"])
 
 
 def test_a_legacy_recording_is_preserved_but_cannot_authorize_narrow_checks(

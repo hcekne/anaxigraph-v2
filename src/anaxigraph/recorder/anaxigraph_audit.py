@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import os
-import posixpath
+import re
 import site
 import sys
 import threading
 from typing import Any
 
-FORMAT = "anaxigraph-reads-v2"
+FORMAT = "anaxigraph-reads-v3"
+_CACHE_SUFFIX = re.compile(r"\.[^.]+(?:\.opt-[^.]+)?\.pyc$")
 _EVENTS = {
+    "exec": "loaded",
     "open": "opened",
     "os.listdir": "listed",
     "os.scandir": "listed",
@@ -127,11 +129,10 @@ def _importing(frame: Any) -> bool:
 
 
 def _module(path: str) -> str | None:
-    """The source file the import system loads when it reads a path: the path itself, or
-    the source of cached bytecode."""
+    """An importer-read hint; exec events also record the actual code filename."""
     folder, _, name = path.rpartition("/")
     if name.endswith(".pyc") and folder.endswith("__pycache__"):
-        return posixpath.join(posixpath.dirname(folder), name.partition(".")[0] + ".py")
+        return folder.removesuffix("__pycache__") + _CACHE_SUFFIX.sub(".py", name)
     return path if name.endswith(".py") else None
 
 
@@ -201,16 +202,16 @@ def _note(kind: str, event: str, args: tuple, frame: Any) -> None:
     elif kind == "opened" and isinstance(args[1], str) and args[1][:1] in {"w", "x"}:
         path = None  # Created or replaced, not read.
     else:
-        path = _relative(args[0])
+        path = _relative(args[0].co_filename if kind == "loaded" else args[0])
     if path is None:
         return
-    if kind != "started" and _importing(frame):
+    if kind in {"opened", "listed"} and _importing(frame):
         module = _module(path) if kind == "opened" else None
         if module is not None:
             _SEEN["loaded"].setdefault(module, set())
         if module is not None or kind == "listed":
             return  # A module being loaded, or a folder searched for one: code, not data.
-    _SEEN[kind].setdefault(path, set()).update(_readers(frame))
+    _SEEN[kind].setdefault(path, set()).update(() if kind == "loaded" else _readers(frame))
 
 
 def _audit(event: str, args: tuple) -> None:

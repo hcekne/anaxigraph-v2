@@ -173,6 +173,9 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
   Completed analyses survive graph-checkpoint pruning and disclose stale inputs.
   Writers coordinate across processes; readers remain concurrent. Compact failure diagnostics
   survive progress rotation in a bounded ledger exposed by workflow status.
+- Test observation v3 records executed code filenames, including cached dynamic modules and
+  child entry points. Importer-read hints and runtime consumers remain separate from statement
+  coverage. Older recordings stay readable and conservatively require full checks after a change.
 - One `anaxigraph/record.json` carries canonical annotations, analyses and provenance through Git,
   without source, SQLite or deterministic graphs. Clone imports compare source, dependency and
   analysis input identities; product child identities are reconstructed in dependency order.
