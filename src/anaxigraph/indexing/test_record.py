@@ -367,7 +367,7 @@ def record_from_coverage(
     known = graph.snapshot.files
     reports = junit or []
     prefix = (recorded_root or graph.snapshot.root).rstrip("/") + "/"
-    folders = tuple(item.rstrip("/") + "/" for item in scope)
+    folders = tuple("" if item == "." else item + "/" for item in map(posixpath.normpath, scope))
     provenance = verify(reads, graph, database, reports)
     executed, loaded, measured = _executed(database, known, prefix, folders, run_root)
     seconds, failed = junit_cases(reports, run_root, known)

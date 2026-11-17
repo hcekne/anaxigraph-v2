@@ -8,10 +8,9 @@ from collections import Counter
 from collections.abc import Collection, Iterable
 from typing import Any
 
-from anaxigraph.contracts import Node
+from anaxigraph.contracts import Edge, Node
 from anaxigraph.indexing.facts import (
     Module,
-    edges_for,
     is_test,
     module_id,
     module_names,
@@ -227,8 +226,6 @@ def parse_module(
             bool(line.strip()) and not line.lstrip().startswith("#") for line in source.splitlines()
         ),
         "physical_lines": len(source.splitlines()),
-        "function_count": 0,
-        "class_count": 0,
         "is_test": is_test(path),
         "basis": "observed",
         "parse_status": "parsed",
@@ -302,8 +299,19 @@ def _populate(module: Module, data: dict, tree: ast.Module) -> None:
     data["interface_fingerprint"] = interface_fingerprint(tree)
     module.exports, module.export_basis = _declared_exports(tree)
     _Definitions(module).visit(tree)
+    functions = [n.data["qualified_name"] for n in module.nodes if n.kind == "function"]
+    if not data["is_test"] and any(name.startswith("test_") for name in functions):
+        fixtures = any(
+            origin.rsplit(".", 1)[-1] == "conftest"
+            for bindings in module.bindings[""].values()
+            for _kind, origin, _member in bindings
+        )
+        if fixtures:
+            data.update(is_test=True, test_basis="conftest-import-and-test-definition")
+    for node in module.nodes:
+        node.data["is_test"] = data["is_test"]
     data["public_surface"] = _export_metadata(module)
-    data["function_count"] = sum(node.kind == "function" for node in module.nodes)
+    data["function_count"] = len(functions)
     data["class_count"] = sum(node.kind in {"class", "interface"} for node in module.nodes)
     data["docstring"] = (ast.get_docstring(tree) or "")[:600]
     data["truncated_fields"] = ["docstring"] if len(ast.get_docstring(tree) or "") > 600 else []
@@ -356,7 +364,6 @@ def _common_metadata(module: Module, node, qualified: str) -> dict:
         "end_line": node.end_lineno,
         "lines_of_code": (node.end_lineno or node.lineno) - node.lineno + 1,
         "docstring": docstring[:400],
-        "is_test": is_test(module.path),
         "decorators": [expression(item) for item in node.decorator_list[:10]],
         "decorator_count": len(node.decorator_list),
         "truncated_fields": truncated,
@@ -500,9 +507,7 @@ class _References(ast.NodeVisitor):
         self.symbols = {(node.line, node.data["qualified_name"]): node for node in module.nodes}
 
     def emit(self, target: str, kind: str, line: int, resolution: str = "resolved") -> None:
-        self.module.edges.extend(
-            edges_for(self.module.path, self.owner, target, kind, line, resolution)
-        )
+        self.module.edges.append(Edge(self.owner, target, kind, self.module.path, line, resolution))
 
     def _method(self, names: list[str]) -> str | None:
         if names[0] not in {"self", "cls"} or len(names) != 2 or "." not in self.scope:

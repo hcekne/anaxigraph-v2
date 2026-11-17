@@ -16,10 +16,9 @@ import tree_sitter_typescript
 from tree_sitter import Language, Parser
 from tree_sitter import Node as Syntax
 
-from anaxigraph.contracts import Node
+from anaxigraph.contracts import Edge, Node
 from anaxigraph.indexing.facts import (
     Module,
-    edges_for,
     is_test,
     module_id,
     script_names,
@@ -134,9 +133,7 @@ class _Reader:
         symbol = Node(identity, kind, name, self.path, _line(node), data)
         self.module.nodes.append(symbol)
         self.module.definitions[name] = symbol
-        self.module.edges.extend(
-            edges_for(self.path, self.owner, identity, "contains", symbol.line, "resolved")
-        )
+        self.module.edges.append(Edge(self.owner, identity, "contains", self.path, symbol.line))
         self.bodies.append((identity, shape))
 
     def _bind(self, local: str, spec: str, imported: str, line: int) -> None:
@@ -253,9 +250,7 @@ class _Reader:
         if bindings is None:
             target = self.module.definitions[name].id
             if target != owner:
-                self.module.edges.extend(
-                    edges_for(self.path, owner, target, kind, _line(node), "resolved")
-                )
+                self.module.edges.append(Edge(owner, target, kind, self.path, _line(node)))
             return
         if any(binding[0] != "module" for binding in bindings):
             attributes = []  # A member of an imported symbol is not resolved: link the symbol.

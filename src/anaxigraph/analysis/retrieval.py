@@ -67,6 +67,7 @@ def _match(module, symbols, source_terms, task, weights) -> dict[str, Any]:
         "match_reasons": reasons,
         "evidence": [{"path": module.path, "line": exact.line}],
         "matched_symbol": exact.name,
+        "explicit_match": scores.get("exact_path", scores.get("exact_symbol")) == 20.0,
         "annotation_status": module.data.get("annotation_status", "missing"),
     }
 
@@ -125,7 +126,7 @@ def rank_owners(
         ranked,
         key=lambda row: (
             -int("exact_path" in row["match_scores"]),
-            bool(modules[row["path"]].data.get("is_test")),
+            bool(modules[row["path"]].data.get("is_test")) and not row["explicit_match"],
             -row["score"],
             row["path"],
         ),

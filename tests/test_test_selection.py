@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -275,6 +276,21 @@ def test_an_unchanged_checkout_needs_no_test_and_a_missing_record_says_so(checko
     bare.mkdir()
     (bare / "a.py").write_text("x = 1\n")
     assert Application(bare).tests_for_change()["status"] == "no_record"
+
+
+@pytest.mark.parametrize(
+    "scope", [["./"], ["./shop/"], ["/shop/"], ["../shop/"], ["shop//"], ["shop/../"], ["shop/./"]]
+)
+def test_legacy_unmatched_scope_requires_full_checks_after_an_edit(checkout, scope):
+    path = checkout / ".anaxigraph-v2/test-records/shop.json"
+    record = json.loads(path.read_text())
+    record["scope"] = scope
+    path.write_text(json.dumps(record))
+    (checkout / "shop/pkg/settings.py").write_text("LIMIT = 4\n")
+    result = picked(checkout)
+    assert result["status"] == "all"
+    assert result["selected"] == result["total"] == TOTAL
+    assert any("scope is not normalized" in reason for reason in result["everything_because"])
 
 
 def test_a_change_inside_a_function_picks_the_tests_that_executed_the_file(checkout):

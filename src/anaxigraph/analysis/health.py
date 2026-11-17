@@ -12,7 +12,7 @@ def _a_test(node: Node) -> bool:
     """A file of tests, as opposed to a conftest or a helper kept beside them."""
     stem = PurePosixPath(node.path).stem
     named = stem.startswith("test_") or stem.endswith(("_test", ".test", ".spec"))
-    return bool(node.data.get("is_test")) and named
+    return bool(node.data.get("is_test") and (named or node.data.get("test_basis")))
 
 
 def _imports(graph: Graph, nodes: dict[str, Node]) -> tuple[int, list[dict[str, Any]]]:

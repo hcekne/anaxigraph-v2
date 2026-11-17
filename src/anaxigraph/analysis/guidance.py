@@ -241,11 +241,14 @@ def _fit_brief(brief: dict[str, Any]) -> dict[str, Any]:
 
 
 def _candidates(modules: dict[str, Node], matches: list[dict[str, Any]]) -> list[Node]:
-    paths = dict.fromkeys(match.get("path") for match in matches)
-    explicit = {m["path"] for m in matches if "exact_path" in m.get("match_scores", {})}
+    explicit = {
+        m["path"]
+        for m in matches
+        if m.get("explicit_match", "exact_path" in m.get("match_scores", {}))
+    }
     return [
         modules[path]
-        for path in paths
+        for path in dict.fromkeys(match.get("path") for match in matches)
         if path in modules
         and modules[path].data.get("parse_status", "parsed") == "parsed"
         and path.endswith(SOURCE_SUFFIXES)

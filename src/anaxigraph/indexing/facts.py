@@ -110,14 +110,6 @@ class Module:
         self.interface = hashlib.sha256(json.dumps(surface).encode()).hexdigest()
 
 
-def edges_for(path: str, owner: str, target: str, kind: str, line: int, status: str) -> list[Edge]:
-    """One observed relationship; a test file's calls and imports also count as its tests."""
-    edges = [Edge(owner, target, kind, path, line, status)]
-    if kind in {"calls", "imports"} and is_test(path) and not target.startswith("external:"):
-        edges.append(Edge(module_id(path), target, "tests", path, line, status))
-    return edges
-
-
 def unknown_node(path: str, scope: str, name: str, internal: bool = False) -> Node:
     return Node(
         f"external:{path}#{scope or '<module>'}:{name}",

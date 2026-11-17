@@ -21,6 +21,7 @@ which did it.
 from __future__ import annotations
 
 import posixpath
+import re
 from collections import defaultdict, deque
 from pathlib import PurePosixPath
 from typing import Any
@@ -118,8 +119,8 @@ class _Selection:
         if PurePosixPath(path).name == "conftest.py":
             folder = str(PurePosixPath(path).parent) + "/"
             return {test for test in self.known if test.startswith(folder) or folder == "./"}
-        if self.modules[path].data.get("is_test"):
-            return None  # A helper beside the tests: every test file that reaches it.
+        if self.modules[path].data.get("is_test") and "test_basis" not in self.modules[path].data:
+            return None  # Path-convention helper; source hints cannot erase recorded consumers.
         return self.executed(path) or None  # A module no test executed passes the question on.
 
     def _orphan(self, path: str) -> bool:
@@ -287,10 +288,10 @@ def _changed(record: dict[str, Any], graph: Graph) -> list[str]:
 
 def _recording_limit(record: dict[str, Any]) -> str | None:
     provenance = record.get("provenance", {})
+    if any(re.search(r"(^/|(^|/)\.{1,2}/|//)", folder) for folder in record["scope"]):
+        return "Recording scope is not normalized; record the suite again"
     if provenance.get("status") != "verified":
-        return (
-            "Recording source/run is unverified; record again with --start and the reads recorder"
-        )
+        return "Recording source/run is unverified; repeat with --start and the reads recorder"
     if provenance.get("observations") != "anaxigraph-reads-v3":
         return "Older observation rules; update the recorder, then record the suite again"
     return None

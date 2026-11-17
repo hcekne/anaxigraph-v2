@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from itertools import chain
 from pathlib import Path
 
-from anaxigraph.contracts import FilePart, Graph, Snapshot
+from anaxigraph.contracts import Edge, FilePart, Graph, Snapshot
 from anaxigraph.indexing import discovery
 from anaxigraph.indexing.discovery import SourceCache, capture_sources, discover, worktrees
 from anaxigraph.indexing.facts import SCRIPT_SUFFIXES, Indexed, restore
@@ -119,6 +119,12 @@ def _link(current: dict[str, Indexed], known: dict[str, Indexed], files: dict[st
             item = current[path] = Indexed(saved.identity, saved.module, saved.node, saved.error)
         if item.module is not None:
             item.edges, item.external, item.used, item.asked = link(item.module, resolver)
+            if item.node.data["is_test"]:
+                item.edges.extend(
+                    Edge(item.node.id, edge.target, "tests", edge.path, edge.line, edge.resolution)
+                    for edge in (*item.module.edges, *item.edges)
+                    if edge.kind in {"calls", "imports"} and not edge.target.startswith("external:")
+                )
         item.build(discovery.INDEX_VERSION)
     return sum(current[path].module is not None for path in stale)
 

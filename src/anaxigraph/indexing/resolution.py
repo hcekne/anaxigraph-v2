@@ -16,7 +16,6 @@ from anaxigraph.indexing.facts import (
     SCRIPT_SUFFIXES,
     Binding,
     Module,
-    edges_for,
     module_id,
     unknown_node,
 )
@@ -187,7 +186,7 @@ def link(
         if target is None:
             node = unknown_node(module.path, scope, name, internal)
             external[node.id], target = node, node.id
-        edges.extend(edges_for(module.path, owner, target, kind, line, status))
+        edges.append(Edge(owner, target, kind, module.path, line, status))
 
     for kind, owner, *rest in module.pending:
         if kind == "ref":

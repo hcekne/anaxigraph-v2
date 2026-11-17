@@ -251,6 +251,21 @@ check that sixty old warnings cannot hide a new cycle/private access, equal coun
 changed evidence, and more than fifty new findings remain retrievable. These local timings do
 not establish production latency, better architectural judgment or faster CI.
 
+Source-role qualification used frozen public `c2dcd23` source (313 modules, 20,991 nodes).
+All 45,258 ordinary reference edges and every prior test link matched the old indexer. Sixty-five
+files with test functions and `conftest` imports gained a test role and 1,767 static test links;
+default model scope fell from 194 to 129 modules. No model calls or elapsed-model savings were
+measured. Explicit test-symbol lookup and manual review scopes remain available. The same frozen
+nineteen eligible owner-replay cases retained 2 first-owner and 5 top-three hits: broader ownership
+relevance remains unresolved. [Qualification record](evidence/test-role-qualification.json).
+
+A recorded mutation fixture exposed two safety issues before shipping: root-level inputs were
+outside an old `--scope .` prefix, and treating an inferred test role as a filename-convention
+helper could omit a dynamic consumer. Root scopes now normalize correctly, ambiguous old scopes
+require full checks after edits, and source-role hints retain measured runtime consumers. The
+mutation fails both direct and dynamic tests, and selection retains both. Unknown native/shard
+observations keep their existing fallbacks; this does not qualify broader CI savings.
+
 A synthetic 133-finding qualification, recreating the application between batches, recorded all
 133 decisions in one checkpoint with no model calls. Median assessment was 43.58 ms, the largest
 reply 13,454 bytes and the fixture database 167,936 bytes. These measure small-fixture bookkeeping,

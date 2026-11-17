@@ -159,6 +159,10 @@ Default semantic Mapping covers executable production modules. Tests and inert n
 remain in the structural map; use explicit module scopes or configuration `include_tests: true`
 to annotate them too. Progress reports needed/reused/excluded module counts. Unchanged compatible
 annotations need no model calls; explicit saved model and review choices remain part of reuse.
+Python files with module-level test functions and imports from `conftest` also follow this test
+policy, even with unconventional filenames. Full inspection records the source convention in
+`test_basis`; this is not proof that a runner collected the file. Explicit test function names
+and paths remain discoverable, and explicit review scopes include these files.
 
 Pattern runs include catalogue screening, detailed review of selected opportunities, and focused
 workers for boundaries, package/repository options, independent verification and CI/CD. Screening,
@@ -270,6 +274,9 @@ Refresh the whole recorder folder from the current AnaxiGraph installation befor
 
 `--scope` names the folders the suite depends on, and `--run-root` the folder it ran in. The
 record lands in `.anaxigraph-v2/test-records/`; carry it between machines as a CI artifact.
+Use `--scope .` for the whole checkout, including root-level modules; relative folder paths are
+normalized. Older records with ambiguous scopes require full checks after edits until refreshed.
+Source-based test-role hints never remove recorded runtime consumers from this selection.
 A worktree without one uses the record of the worktree that recorded most recently.
 
 Module inspection also shows recorded file-level test consumers, with pagination, baseline

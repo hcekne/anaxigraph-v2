@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-17",
+  "subject_commit": "c2dcd2315c5450bfc37d0f24213118b2096dd5a4",
+  "scope": "Identical frozen public AnaxiGraph source, structural analysis only",
+  "modules": 313,
+  "nodes": 20991,
+  "ordinary_edges_preserved": 45258,
+  "ordinary_edges_sha256": "707ed1aa3f87f145120cbcffe216717c426bcc258ca8902d4dc9bdbf2fac8341",
+  "all_prior_test_edges_retained": true,
+  "new_source_supported_test_modules": 65,
+  "additional_static_test_edges": 1767,
+  "default_model_scope_modules": {"before": 194, "after": 129},
+  "owner_replay": {
+    "frozen_commits": 20,
+    "eligible_existing_python_owner_cases": 19,
+    "before": {"hit_at_1": 2, "hit_at_3": 5},
+    "after": {"hit_at_1": 2, "hit_at_3": 5},
+    "gains": 0,
+    "losses": 0,
+    "label_limit": "Commit-message proxies with Python-only gold; no cross-language or held-out claim"
+  },
+  "runtime_mutation": {
+    "fixture": "A retained module value shared by a static importer and a dynamically loaded consumer",
+    "failing_test_files": 2,
+    "selected_failing_test_files": 2,
+    "coverage": "Actual pytest recording and subsequent mutation; root and mixed relative scopes",
+    "scope": "Constructed regression, not universal recall evidence"
+  },
+  "model_calls": 0,
+  "limits": "Scope reduction is not measured model time/cost, architectural superiority, or qualified CI savings. Native processes and separately launched shards remain conservative."
+}

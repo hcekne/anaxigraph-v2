@@ -113,6 +113,12 @@ still carry their original source payload. Fresh Eyes receives neither implement
 the source-aware envelope. Supplying code enables implementation critique; it does not establish
 recommendation quality.
 
+Source-supported Python test roles require both top-level test function definitions and imports
+from `conftest`. This convention guides navigation and default model scope. One index-linking
+stage creates test links for both local and imported references, using the saved module role;
+reopening or relinking cannot revert to filename-only detection. Inferred roles never override
+recorded runtime consumers when selecting checks. Parse failures leave symbol counts unknown.
+
 Annotation validity includes its own source and public interfaces of resolved outgoing dependencies.
 Comment and body-only dependency edits preserve callers; changed signatures, documentation and
 exports invalidate them. A separate implementation-change flag preserves behavioral uncertainty;
