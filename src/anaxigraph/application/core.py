@@ -184,8 +184,8 @@ class Application:
         behavior_problems = annotation_behavior_problems(graph)
         nodes = []
         for node in graph.nodes:
-            data = dict(node.data)
-            annotation = data.get("annotation")
+            annotation = node.data.get("annotation")
+            data = dict(node.data) if annotation else node.data
             if annotation and (
                 annotation.get("context_fingerprint")
                 != annotation_context(graph, annotation, contexts.get(node.path))
@@ -202,7 +202,7 @@ class Application:
                     prior != implementations[node.path] if prior is not None else None
                 )
                 data["behavioral_validation"] = "not_independently_verified"
-            nodes.append(replace(node, data=data))
+            nodes.append(replace(node, data=data) if annotation else node)
         return replace(graph, nodes=tuple(nodes))
 
     def _require_live(self, graph: Graph, snapshot_id: str | None = None) -> None:

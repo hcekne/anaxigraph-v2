@@ -383,3 +383,15 @@ synthetic API overhead probes, not model throughput or semantic-quality evidence
 still lose to serial and their median submit cost worsened; structural-view rebuilding and cache
 contention remain. Production is 14,998 lines under the unchanged ceiling.
 [Qualification](evidence/behavior-index-qualification.json).
+
+Freshness decoration also copied every structural node after an annotation save. It now keeps
+unannotated nodes and copies only nodes whose derived metadata it may change. Eight full-graph
+comparisons on 90,228 nodes and 263,029 edges retain identical outputs and untouched inputs;
+187 related tests pass. A separate concurrent profile reduced dataclass replacements from 721,905
+to 206, although scheduling changed and profiled wall time did not improve.
+
+With identical source and scopes, sixteen unprofiled request/save cycles with four workers fell
+from 18.50 to 12.19 seconds. Serial time remained approximately unchanged at 12.35/12.52 seconds.
+These are synthetic API overhead probes on a shared machine, without model delay or a claim about
+semantic quality. Source checks and the 14,998 production lines are unchanged.
+[Qualification](evidence/annotation-views-qualification.json).

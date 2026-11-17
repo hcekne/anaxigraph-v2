@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-17",
+  "before_commit": "ad4497edf6ed345213db5ca7a88d3e96a6d63203",
+  "runtime_before": "19a0c133fdc773a06143e45aaed91adecd7d43531e6d913c1d27c0e1a0b685ff",
+  "runtime_after": "d005b95969c4147efd3e93584e13f19b2c521ee527b9f76b2471823be96fcf51",
+  "cycle_harness_sha256": "2944bf4a8506b4aec26694b0e4bb971004b7d4f8922635587be9cbcce01d0842",
+  "profile_harness_sha256": "f553523dfac63f07eb3a67e44d1b42f6abee6cdea4eadaf13a9f63048d2e3446",
+  "subject": {"modules": 2380, "nodes": 90228, "edges": 263029, "identical_source_and_module_scopes": true},
+  "mechanism": "Retain unannotated structural nodes during freshness decoration; copy annotated nodes before changing their derived freshness metadata",
+  "serial_request_submit_probe": {
+    "timed_annotations": 16,
+    "wall_seconds": {"before": 12.354, "after": 12.524},
+    "median_request_ms": {"before": 230.98, "after": 237.79},
+    "median_submit_ms": {"before": 512.21, "after": 514.53},
+    "limit": "Serial timings are approximately unchanged; no serial speed improvement is claimed."
+  },
+  "four_worker_request_submit_probe": {
+    "timed_annotations": 16,
+    "wall_seconds": {"before": 18.504, "after": 12.192},
+    "median_request_ms": {"before": 2896.41, "after": 1990.21},
+    "median_submit_ms": {"before": 1344.85, "after": 987.72}
+  },
+  "separate_sixteen_cycle_profile": {
+    "dataclass_replace_calls": {"before": 721905, "after": 206},
+    "freshness_decoration_calls": {"before": 8, "after": 12},
+    "wall_seconds": {"before": 26.623, "after": 29.701},
+    "limit": "Individual worker profiles include overhead and thread scheduling. Reload counts differ, and profiled wall time did not improve; use unprofiled timings above for latency, these profiles for allocation attribution."
+  },
+  "correctness": {
+    "complete_graph_comparison_cases": 8,
+    "all_outputs_identical": true,
+    "all_inputs_preserved": true,
+    "covers": ["current annotations", "changed context", "legacy contract", "missing implementation provenance", "source identity in behavior", "empty annotation", "current cited contract", "changed cited contract"],
+    "related_local_cases_passed": 187,
+    "source_freshness_and_concurrency_checks_unchanged": true
+  },
+  "production_physical_lines": 14998,
+  "real_model_calls": 0,
+  "target_source_writes": 0,
+  "limits": "Single local probe per worker count on a shared machine, synthetic annotations in separate disposable databases and no model delay. Initial scans and one extra profiling cycle are outside the timed sixteen. No claim of production mapping throughput, novel recommendations or better architecture."
+}
