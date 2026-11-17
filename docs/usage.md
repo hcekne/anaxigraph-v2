@@ -266,9 +266,11 @@ The whole suite is selected, with the reason, when a changed input cannot be att
 
 - a file inside the scope that nothing in the recorded run read, such as a container file,
   or a file the test run itself read;
-- a dependency list or lock file inside the scope (`requirements*.txt`, `constraints*.txt`,
+- a dependency list or lock file inside the scope or an ancestor folder (`requirements*.txt`, `constraints*.txt`,
   `pyproject.toml`, `setup.py`, `setup.cfg`, `Pipfile`, `*.lock`): the suite is installed from
   it before any test runs, so a test that reads it does not stand for what depends on it;
+- a GitHub workflow or local action under `.github/workflows/` or `.github/actions/`: it can
+  change the environment and commands before recording starts;
 - a Python file that was removed: what still imports it is not in the record;
 - a module that nothing imports and whose folder nothing scanned, when it is new, was not
   measured, or changed what it does at import. Something other than an import statement loads
@@ -279,9 +281,9 @@ Prose, source in another language and files outside the scope select only the te
 them. A Python file that the recorded run did not load selects nothing.
 
 A legacy record or one made without source-bound `--reads` remains readable, but selects the
-whole suite after a recorded input changes. Its underlying coverage-only rules additionally mean: a changed file inside the
-scope that the suite cannot import (data, configuration, source in another language) selects
-the whole suite; files outside the scope are not compared at all; and only a file that coverage
+whole suite when any mapped input differs or is absent from its baseline. Its underlying
+coverage-only rules additionally mean: a changed file inside the scope that the suite cannot
+import (data, configuration, source in another language) selects the whole suite; only a file that coverage
 lists without a line counts as not loaded, which takes the `--cov` setting above. Run AnaxiGraph
 under the same Python version when it saves the record and when it is asked: the identity of
 what a file does at import comes from that version's parser, so another version treats every

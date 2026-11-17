@@ -52,6 +52,12 @@ def _installs(path: str) -> bool:
     return listed or named or name.endswith(".lock")
 
 
+def _shared_setup(path: str, ancestors: set[PurePosixPath]) -> bool:
+    return path.startswith((".github/workflows/", ".github/actions/")) or (
+        _installs(path) and PurePosixPath(path).parent in ancestors
+    )
+
+
 def _users(graph: Graph, inside: set[str]) -> tuple[dict[str, set[str]], Any]:
     """Among the suite's files, those that link to each file, and those among them whose
     import-time code uses it.
@@ -82,6 +88,9 @@ class _Selection:
         self.known = set(self.tests)
         self.modules = {node.path: node for node in graph.nodes if node.kind == "module"}
         self.scope = tuple(record["scope"])
+        self.ancestors = {
+            parent for folder in self.scope for parent in PurePosixPath(folder).parents
+        }
         inside = {path for path in self.modules if path.startswith(self.scope)} | self.known
         self.users, self.importing = _users(graph, inside)
         self.idle = set(record["unloaded"])  # Known not to have been loaded by the run.
@@ -218,6 +227,9 @@ class _Selection:
         node = self.modules.get(path)
         read = self.read(path)
         python = path.endswith(".py")
+        if _shared_setup(path, self.ancestors):
+            self.everything.append(f"{path}: shared installation or CI setup changed")
+            return
         if not path.startswith(self.scope):
             return  # Outside the suite's folders only what a test read counts.
         if python and path not in self.files:
@@ -263,15 +275,8 @@ def _unseen(selection: _Selection, tests: list[str]) -> None:
 
 
 def _changed(record: dict[str, Any], graph: Graph) -> list[str]:
-    """Every file that differs from the recorded run: in the suite's scope, or anywhere when
-    the record knows what tests read."""
-    scope, recorded = tuple(record["scope"]), record["files"]
-    everywhere = record["reads"] is not None
-    current = {
-        path: found
-        for path, found in graph.snapshot.files.items()
-        if everywhere or path.startswith(scope)
-    }
+    """Compare every mapped input; unbound legacy scope cannot rule out shared setup."""
+    recorded, current = record["files"], graph.snapshot.files
     paths = recorded.keys() | current.keys()
     return sorted(path for path in paths if recorded.get(path) != current.get(path))
 

@@ -104,10 +104,7 @@ def delivery_packet(graph: Graph, context: dict) -> tuple[dict, dict]:
     }
 
 
-def _text(value: Any, field: str, limit: int = 300) -> str:
-    return field_checks.text(value, field, limit)
-
-
+_text = field_checks.text
 _strings = field_checks.texts
 _assessments = partial(field_checks.assessments, key="pipeline_id")
 _members = partial(field_checks.members, label="requested pipeline")

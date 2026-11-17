@@ -405,8 +405,8 @@ def test_without_recorded_reads_a_data_file_picks_everything(unread):
     )
     assert suite["reads_recorded"] is False and "reads a file as data" in suite["assurance"]
     (unread / "shop/pkg/taxes.json").write_text('{"vat": 0.2}\n')
-    (unread / "web/routes.json").write_text("[]\n")  # Outside the scope: not seen at all.
-    assert picked(unread)["status"] == "nothing_to_run"
+    (unread / "web/routes.json").write_text("[]\n")
+    assert picked(unread)["status"] == "all"  # Unbound evidence cannot rule out shared inputs.
 
 
 def test_source_in_another_language_is_ruled_out_only_by_recorded_reads(checkout, unread):
@@ -426,6 +426,48 @@ def test_a_dependency_list_picks_everything_though_a_test_reads_it(checkout):
     # test_pins.py read the file, but every test runs on what was installed from it.
     assert suite["status"] == "all"
     assert suite["everything_because"] == ["shop/requirements.txt: the suite is installed from it"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "uv.lock",
+        "requirements-dev.txt",
+        "constraints.txt",
+        "pyproject.toml",
+        ".github/workflows/ci.yml",
+        ".github/actions/setup/action.yml",
+    ],
+)
+@pytest.mark.parametrize("fixture", ["checkout", "unread"])
+def test_shared_setup_outside_the_scope_cannot_be_ignored(request, fixture, name):
+    root = request.getfixturevalue(fixture)
+    path = root / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# changed shared setup\n")
+    suite = picked(root)
+    assert suite["status"] == "all"
+    assert any(name in reason for reason in suite["everything_because"])
+
+
+def test_an_ancestor_dependency_list_widens_nested_scopes(checkout, run):
+    app = Application(checkout)
+    app.record_tests(
+        run.parent / "shop.coverage",
+        "shop",
+        ["shop/pkg", "shop/tests"],
+        run_root="shop",
+        recorded_root=str(run),
+        junit=[run.parent / "junit.xml"],
+        reads=run.parent / "reads.json",
+    )
+    (checkout / "shop/requirements.txt").write_text("pytest\nrequests\n")
+    assert picked(checkout)["status"] == "all"
+
+
+def test_another_project_dependency_list_does_not_widen_this_suite(checkout):
+    (checkout / "web/requirements.txt").write_text("a-frontend-tool\n")
+    assert picked(checkout)["test_files"] == chosen()
 
 
 def test_a_binary_file_is_compared_like_any_other_input(checkout):

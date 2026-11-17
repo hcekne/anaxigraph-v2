@@ -200,6 +200,11 @@ The 23 new tests exercise real subprocesses, including interrupted children and 
 three also passed using the recorder from an installed wheel. Production size is 14,995 lines,
 within the unchanged ceiling. This has not been measured on the private target.
 
+Selection also widens for dependency inputs above a declared scope and for GitHub workflows
+or local actions. Regression tests preserve isolation for another project's dependency list;
+unbound legacy evidence can no longer hide changes outside its old scope. Production size
+after this safety fix is 14,997 lines.
+
 Next: qualify sharded recordings and worker startup; refresh the target's whole recorder folder
 before new measurements. Use prospective shadow runs
 and actual selected runs before claiming CI savings. Better architectural advice needs real-task
