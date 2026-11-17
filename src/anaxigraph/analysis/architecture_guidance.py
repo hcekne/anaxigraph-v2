@@ -7,12 +7,12 @@ from typing import Any
 
 from anaxigraph.contracts import Graph
 
-from .fields import references, short
+from .fields import fingerprint, references, short
 from .patterns import rated_opportunities
 
 
 def pattern_proposals(
-    rows: list[dict], owners: set[str], graph: Graph, limit: int = 2
+    rows: list[dict], owners: set[str], graph: Graph, limit: int | None = 2
 ) -> list[dict]:
     items = []
     for item in rated_opportunities(rows):
@@ -27,7 +27,7 @@ def pattern_proposals(
         items.append(
             {
                 "kind": "pattern",
-                "proposal_id": f"{item['review_id']}:{item['module_id']}:{item['pattern_id']}",
+                "proposal_id": f"{item['review_id']}:{fingerprint(item)}",
                 "review_id": item["review_id"],
                 "title": f"{item['pattern_id']} in {item['module_id']}",
                 "status": "proposal-needs-source-verification",
@@ -48,19 +48,19 @@ def pattern_proposals(
     return items[:limit]
 
 
-def proposals(rows: list[dict[str, Any]], owners: set[str], limit: int = 2) -> list[dict]:
+def proposals(rows: list[dict[str, Any]], owners: set[str], limit: int | None = 2) -> list[dict]:
     items = []
     for row in rows:
         if row.get("kind") != "architecture" or row.get("status") != "current":
             continue
         result = row["result"]["result"]
-        for index, item in enumerate(result["findings"]):
+        for item in result["findings"]:
             if not owners.intersection(item["module_ids"]):
                 continue
             items.append(
                 {
                     "kind": "architecture",
-                    "proposal_id": f"{row['id']}:{index}",
+                    "proposal_id": f"{row['id']}:{fingerprint(item)}",
                     "review_id": row["id"],
                     "lens": result["lens"],
                     "title": item["title"],
@@ -146,7 +146,8 @@ def decide(
     *,
     advisory: Sequence[dict] = (),
     truncated: bool = False,
-) -> dict:
+    previous: Sequence[dict] = (),
+) -> tuple[dict, list[dict]]:
     """Require an explicit disposition, never agreement with a model proposal.
 
     Advisory findings come from structural observation alone: a decision about one is recorded
@@ -154,16 +155,12 @@ def decide(
     """
     required = {item["proposal_id"] for item in requirements}
     expected = required | {item["proposal_id"] for item in advisory}
-    if decisions is not None and (not isinstance(decisions, list) or len(decisions) > 12):
-        raise ValueError("Architecture decisions must be a list of at most twelve dispositions")
-    accepted: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for item in decisions or []:
-        item = _decision(item, expected - seen)
-        accepted.append(item)
-        seen.add(item["proposal_id"])
-    pending = sorted(required - seen)
-    return {
+    accepted = _accepted(decisions, previous, expected)
+    pending = required - accepted.keys()
+    ordered = sorted(requirements, key=lambda item: (-item["opportunity"], item["proposal_id"]))
+    page = [item for item in ordered if item["proposal_id"] in pending][:12] or ordered[:12]
+    shown = {item["proposal_id"] for item in (*page, *advisory[:6])}
+    result = {
         "status": "scope_incomplete"
         if truncated
         else "decision_required"
@@ -171,14 +168,55 @@ def decide(
         else "decisions_recorded"
         if accepted
         else "no_current_material_proposals",
-        "requirements": requirements,
-        "advisory": list(advisory),
-        "decisions": accepted,
-        "pending_ids": pending,
-        "truncated": truncated,
+        "requirements": page,
+        "advisory": list(advisory[:6]),
+        "decisions": [item for key, item in accepted.items() if key in shown],
+        "pending_ids": [item["proposal_id"] for item in page if item["proposal_id"] in pending],
+        "total": len(required),
+        "remaining": len(pending),
+        "resolved": len(required) - len(pending),
+        "truncated": truncated or len(page) < len(requirements),
+        "expand": {"entity_id": "plan", "full": True},
         "implementation_status": "unverified",
         "coverage": "Bounded current owner-scoped material proposals; no proposal is a mandatory rewrite or proof of design quality.",
     }
+    return result, list(accepted.values())
+
+
+def _accepted(decisions: Any, previous: Sequence[dict], expected: set[str]) -> dict:
+    if decisions is not None and (not isinstance(decisions, list) or len(decisions) > 12):
+        raise ValueError(
+            "Architecture decisions must be a list of at most twelve dispositions per batch"
+        )
+    accepted = {item["proposal_id"]: item for item in previous if item["proposal_id"] in expected}
+    seen: set[str] = set()
+    for item in decisions or []:
+        item = _decision(item, expected - seen)
+        accepted[item["proposal_id"]] = item
+        seen.add(item["proposal_id"])
+    return accepted
+
+
+def assess_proposals(rows, owners, graph, prior, decisions, structural) -> dict:
+    known = dict(prior.get("known", {}))
+    scouted = [
+        item
+        for item in proposals(rows, owners, None) + pattern_proposals(rows, owners, graph, None)
+        if item["opportunity"] >= 2
+    ]
+    for required, candidates in ((True, scouted), (False, structural or [])):
+        for item in candidates:
+            known[item["proposal_id"]] = item | {
+                "required": required,
+                "assessed_snapshot_id": graph.snapshot.id,
+            }
+    view, choices = decide(
+        [item for item in known.values() if item["required"]],
+        decisions,
+        advisory=[item for item in known.values() if not item["required"]],
+        previous=prior.get("choices", []),
+    )
+    return {"known": known, "choices": choices, "view": view}
 
 
 def _decision(item: Any, expected: set[str]) -> dict:
@@ -196,7 +234,7 @@ def _decision(item: Any, expected: set[str]) -> dict:
     if not isinstance(item["proposal_id"], str) or item["proposal_id"] not in expected:
         raise ValueError(
             "Architecture decision names an unknown or duplicate proposal; "
-            f"remaining proposal IDs: {sorted(expected)}"
+            f"available proposal IDs (first twelve): {sorted(expected)[:12]}"
         )
     if item["decision"] not in ("adopt", "defer", "reject"):
         raise ValueError("Architecture decision must adopt, defer or reject")

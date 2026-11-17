@@ -96,7 +96,7 @@ class Store:
         with self._connection(write=True) as db:
             db.execute("PRAGMA journal_mode=DELETE")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 3, 4, 5, 6, 7, SCHEMA_VERSION):
+            if version not in (0, 3, 4, 5, 6, 7, 8, SCHEMA_VERSION):
                 raise ValueError(f"Unsupported knowledge-store schema: {version}")
             if version != SCHEMA_VERSION:
                 if version:
@@ -189,28 +189,30 @@ class Store:
         with self._connection(write=True) as db:
             db.execute("BEGIN IMMEDIATE")
             old = db.execute("SELECT * FROM baselines WHERE root=?", (root,)).fetchone()
+            prior = dict(old) if old else {}
             current = self._current(db, root)
             if current is None:
                 raise ValueError("Baseline must identify a retained snapshot of this checkout")
             selected = snapshot_id or current["current_id"]
-            if (
-                snapshot_id is None
-                and old
+            continuing = bool(
+                prior
                 and (
                     continue_task
                     or task_key is None
-                    or (old["task_key"] == task_key and old["revision"] == revision)
+                    or (prior["task_key"] == task_key and prior["revision"] == revision)
                 )
-            ):
-                selected = old["snapshot_id"]
+            )
+            if snapshot_id is None and continuing:
+                selected = prior["snapshot_id"]
             if (
-                not selected
-                or db.execute(
+                db.execute(
                     "SELECT 1 FROM snapshots WHERE root=? AND id=?", (root, selected)
                 ).fetchone()
                 is None
             ):
                 raise ValueError("Baseline must identify a retained snapshot of this checkout")
+            if not continuing or selected != prior.get("snapshot_id"):
+                db.execute("DELETE FROM reviews WHERE root=? AND kind='plan'", (root,))
             db.execute(
                 "INSERT INTO baselines(root,snapshot_id,task_key,revision) VALUES (?,?,?,?) "
                 "ON CONFLICT(root) DO UPDATE SET snapshot_id=excluded.snapshot_id,"
@@ -218,8 +220,8 @@ class Store:
                 (
                     root,
                     selected,
-                    task_key if task_key is not None else (old["task_key"] if old else None),
-                    revision if task_key is not None else (old["revision"] if old else revision),
+                    task_key if task_key is not None else prior.get("task_key"),
+                    revision if task_key is not None else prior.get("revision", revision),
                 ),
             )
             if old is None or old["snapshot_id"] != selected:
@@ -586,7 +588,14 @@ class Store:
         return True
 
     def save_review(
-        self, root: str, snapshot_id: str, review_id: str, kind: str, result: dict[str, Any]
+        self,
+        root: str,
+        snapshot_id: str,
+        review_id: str,
+        kind: str,
+        result: dict[str, Any],
+        *,
+        expected_digest: str | None = None,
     ) -> None:
         root = _root(root)
         if not review_id or not kind:
@@ -600,6 +609,20 @@ class Store:
                 (root, review_id, kind),
             ).fetchone()
             previous = _review_text(old["result"], self.max_record_bytes) if old else None
+            if (
+                expected_digest is not None
+                and sha256((previous or "null").encode()).hexdigest() != expected_digest
+            ):
+                raise ValueError("Plan checkpoint changed; assess the plan again")
+            if (
+                kind == "plan"
+                and db.execute(
+                    "SELECT 1 FROM baselines WHERE root=? AND snapshot_id=? AND task_key=?",
+                    (root, result["baseline_id"], result["task_context"]),
+                ).fetchone()
+                is None
+            ):
+                raise ValueError("Task baseline changed; prepare the task again")
             result = _preserve_selected_intent(result, previous)
             # Task sizing belongs to the request; the database retains its complete budget.
             body = _encode(result, limit=self.max_record_bytes)
@@ -629,7 +652,7 @@ class Store:
                     "DELETE FROM reviews WHERE root=? AND kind=? AND scope_key=? AND id!=?",
                     (root, kind, scope_key, review_id),
                 )
-            if kind != "request":
+            if kind not in {"request", "plan"}:
                 self._changed(db, "reviews:" + root)
 
     def get_review(
@@ -692,7 +715,7 @@ class Store:
                 statement += " AND id=?"
                 parameters.append(review_id)
             if not include_requests:
-                statement += " AND kind!='request'"
+                statement += " AND kind NOT IN ('request','plan')"
             if module_ids is not None:
                 placeholders = ",".join("?" for _ in module_ids)
                 statement += (

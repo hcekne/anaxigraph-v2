@@ -225,3 +225,22 @@ fetching keep production at 15,000 lines, without raising the ceiling.
 Next: qualify sharded recordings and worker startup; refresh the target's whole recorder folder
 before new measurements. Use prospective shadow runs and actual selected runs before claiming
 CI savings. Better architectural advice needs real-task evaluation separately.
+
+An audit then reproduced a plan with thirteen material findings that could never finish: only
+twelve were shown and submitting them left the scope incomplete. Decisions now live in one
+current task checkpoint, independently of optional trial logging, with resumable batches and
+full inspection. Changed finding content requires a new disposition; source edits retain prior
+obligations. Concurrent stale writes and a late assessment for another task are rejected.
+Schema 9 backs up the existing store before upgrading and excludes local task plans from exports.
+
+A synthetic 133-finding qualification, recreating the application between batches, recorded all
+133 decisions in one checkpoint with no model calls. Median assessment was 43.58 ms, the largest
+reply 13,454 bytes and the fixture database 167,936 bytes. These measure small-fixture bookkeeping,
+not architectural quality or a large-repository latency guarantee. HTTP, MCP and dashboard-handler
+tests exercise the same batch progression; optional logging disabled/pruned, changed recommendations,
+and concurrent task/disposition races have regression coverage.
+
+The duplicate static "implemented" predicate and automatic folder-only CI prescription were also
+removed. Import reach no longer predicts future test savings. Observed boundary deltas remain
+available, while freeform proposal implementation stays unverified. Production is 14,999 lines
+under the unchanged 15,000-line ceiling. No paid campaign or target-suite rerun was made.

@@ -97,7 +97,8 @@ proposed work.
 The [architecture scouts](change-request-architecture-scouts.md) now perform focused source-aware
 searches, compare local/workspace/separate-repository package options, feed task guidance and
 require dispositions for material plan findings. Detailed Pattern findings use the same decision
-and followthrough path, with stable identities for each review/module/card pair. Preparation keeps
+and followthrough path. IDs bind the review and full finding content: reordering preserves them,
+while changed advice needs a fresh decision. Preparation keeps
 the highest-priority proposals across both kinds; recent blind reviews cannot displace them.
 They reuse the shared runner and do not alter
 Fresh Eyes isolation. New Pattern runs also include a separate repository-level delivery specialist;
@@ -148,6 +149,12 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 - Content, revision and analysis identity pin snapshots, including eligible untracked source.
 - Current graph, one previous graph and one pinned change baseline; repeated unchanged scans do not
   append history. A new task or Git HEAD repins by default; explicit continuation preserves the pin.
+- One current task-plan checkpoint in the core database retains assessed proposals and reasoned
+  dispositions across edits and restarts. Batches advance through required decisions without
+  dropping earlier choices. Compare-and-swap and task-context checks reject concurrent stale writes.
+  Optional `architecture_decisions` audit events contain compact summaries; pruning or disabling
+  that log does not remove the plan. Plan checkpoints stay out of review listings and portable
+  exports. Schema 9 upgrades preserve saved analyses with a pre-migration database backup.
 - One canonical module annotation contains its sentence, paragraph, function sentences and contracts.
   Owner retrieval combines verified source, paths/symbols and current annotations at module level.
   The superseded FTS prose index is removed through a backed-up schema upgrade; source and

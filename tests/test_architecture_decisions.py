@@ -152,7 +152,7 @@ def test_invalid_dispositions_are_rejected_not_silently_ignored(application, cha
 
 
 def test_truncated_material_scope_is_not_reported_as_fully_decided():
-    result = decide([], [], truncated=True)
+    result, _decisions = decide([], [], truncated=True)
     assert result["status"] == "scope_incomplete"
     assert result["implementation_status"] == "unverified"
 

@@ -359,15 +359,17 @@ class Application:
                 "charter", "charter", "Architecture principles", {"principles": CHARTER}
             )
         graph = self._live()
+        if entity_id == "plan":
+            row = self.store.get_review(str(self.root), "current-plan", "plan")
+            if row is None:
+                raise ValueError("No active plan; assess a plan first")
+            data = row["result"] if full else row["result"]["view"]
+            return _record_view("plan", "plan", "Current task plan", data, graph.snapshot.id)
         if entity_id.startswith("review:"):
-            row = next(
-                (
-                    row
-                    for row in self.store.reviews(str(self.root), include_requests=False)
-                    if row["kind"] != "request" and row["id"] == entity_id[7:]
-                ),
-                None,
+            rows = self.store.reviews(
+                str(self.root), review_id=entity_id[7:], include_requests=False
             )
+            row = rows[0] if rows else None
             if row is None:
                 raise ValueError("Saved review not found")
             row = self._review_state(row, graph)
@@ -433,6 +435,7 @@ class Application:
             delivery_advice=delivery.advice(self, graph, sorted(matched_paths)),
         )
         result["baseline_id"] = pinned
+        result["task_context"] = task_key
         result["historical_associations"] = self._history_advice(
             graph,
             {owner["path"] for owner in result["likely_owners"]},

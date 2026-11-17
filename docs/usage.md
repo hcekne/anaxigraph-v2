@@ -104,22 +104,29 @@ migrate an already running legacy service.
    when its description is reworded. Adopt, defer or reject relevant material architecture findings
    from a review, with a reason. An extension-point finding, for a plan that adds a member to a
    family by editing its registrar, is advice under `architecture.advisory`: nothing is required,
-   and a decision you do record for it is checked at validation. A family is a set of modules in
+   and a decision you record remains visible at validation. A family is a set of modules in
    one folder whose classes share a base class or protocol; sharing a helper module is not one.
    An accepted recommendation is a decision to do work, not evidence that it is done.
+   Assessment shows up to twelve required decisions per batch, with total/resolved/remaining
+   counts. Submit that batch and assess again for the next one. Decisions survive process
+   restarts and optional trial-log pruning. Use `inspect("plan", full=True)` (CLI:
+   `anaxigraph inspect plan --full`) to read the complete current task checkpoint.
 4. **Implement and check** the change. Prefer local behavior and public-contract tests; include
    consumers when contracts, behavior, shared resources or configuration can affect them. Keep the
    project's required checks.
 5. **Validate** the candidate against the original baseline. Supply check commands, exit
    codes and the candidate snapshot ID. Explain unresolved findings or missing checks.
    Validation compares observed private accesses, cycles and consumers with the pinned baseline.
-   Persisted proposal obligations receive narrow predicate checks where possible; adopting a
-   proposal never establishes that its full behavior was implemented.
+   Persisted proposal obligations remain unverified: neither a disposition nor the disappearance
+   of a static warning establishes that the proposal's behavior was implemented.
 
 Start a separate task with a new `prepare_change`. Use `continue_task=true` or an explicit
 `baseline_id` when continuing across changed wording or commits. Scanning alone does not advance
 the pinned baseline. Source changes during a model run require a new run for the new snapshot; compatible accepted
 batches are reused. Stronger models cannot fix stale inputs.
+Previously assessed obligations remain with the task after source edits. Reordering review findings
+preserves their IDs; changing a finding's content requires a fresh decision. A new task clears the
+local plan checkpoint. It is not part of the portable analysis record.
 
 ## Reviews are requested, not scheduled
 

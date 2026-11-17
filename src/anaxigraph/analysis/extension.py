@@ -211,35 +211,26 @@ def _finding(graph: Graph, family: dict, joining: list[str], edited: list[str]) 
         "kind": "extension-point",
         "proposal_id": f"extension:{directory}:{family['contract']}#{family['interface']}",
         "status": "closed-family",
-        "title": f"Adding to {directory}/ edits shared registrars; open the family instead",
+        "title": f"Adding to {directory}/ edits shared registrars",
         "opportunity": 3,
         "adding": joining[:6],
         "editing_registrars": edited[:6],
         "family": view,
-        "ci_cost": f"These registrar edits reach {share} through imports, and a selector that "
-        "treats shared wiring as global runs the whole suite. Every later addition repeats that, "
-        "and parallel additions conflict in the same files.",
+        "ci_cost": f"These registrar edits reach {share} through imports. Import reach is not "
+        "an observed test selection or a measured CI duration.",
         "thousand_requests": f"After 1,000 more members, would {', '.join(edited[:3])} still be "
         "the right place to list them, and would every addition still run that much CI?",
         "suggestion": (
-            f"Before adding this member, make {directory}/ an open extension point: (1) each member "
-            f"exports one object implementing {family['interface']} ({family['contract']}) that "
-            "declares its capabilities, settings and any routes; (2) one loader discovers members "
-            "(for example pkgutil.iter_modules over the package, or entry points), so no existing "
-            "file names a member; (3) contract tests parametrize over discovered members, and each "
-            "member's own tests live in its own test directory; (4) the CI selector maps a member "
-            "file to its own tests plus the contract tests, and only loader or contract changes "
-            "select everything. The next member then adds files only."
+            f"Compare explicit registration with discovery (for example pkgutil or entry points) "
+            f"behind {family['interface']} ({family['contract']}). Check ownership, loading failures "
+            "and consumer contracts before choosing. Retain observed consumer and shared-input "
+            "checks; folder names and unchanged signatures do not justify narrowing CI."
         ),
-        "cost_of_staying_closed": f"Every future member edits {', '.join(edited[:3])} and so "
-        f"selects about {reach['test_modules']} test modules instead of its own tests plus the "
-        "contract tests. Across 1,000 more members that "
-        f"is about {1000 * reach['test_modules']:,} test-module runs and 1,000 edits to the same "
-        "shared files.",
+        "cost_of_staying_closed": "Future additions may edit shared registration, increasing "
+        "coordination. The actual test and delivery cost requires recorded execution evidence.",
         "decision": "Advice, not a gate: nothing is required. You may record adopt, defer or "
-        "reject for this proposal_id in assess_plan; an adopted one is checked at validation. "
-        "An explicit registry or selector map is still a hand-written list, so it is not an "
-        "open family.",
+        "reject for this proposal_id in assess_plan. Validation retains the intent; implementation "
+        "and behavior remain unverified without appropriate evidence.",
         "limitations": LIMITATION,
     }
 

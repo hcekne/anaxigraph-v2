@@ -75,90 +75,16 @@ def boundary_delta(graph: Graph, previous: Graph | None) -> dict:
 
 def obligation(item: dict) -> dict:
     """Persist bounded material requirements, not review transcripts or entire briefs."""
-    result = {
+    return {
         "proposal_id": item["proposal_id"],
         "kind": item["kind"],
         "title": item["title"][:120],
         "public_contract": item.get("public_contract", item.get("suggestion", ""))[:160],
         "verification": [text[:100] for text in item.get("verification", [])[:1]],
         "module_ids": item.get("module_ids", [])[:3],
+        "assessed_snapshot_id": item.get("assessed_snapshot_id"),
         "predicate": "unresolved-freeform-proposal",
     }
-    if item["kind"] == "extension-point":
-        result.update(
-            predicate="no-static-registrar-enumeration",
-            directory=item["family"]["directory"],
-            adding=item["adding"],
-            registrars=item["editing_registrars"],
-        )
-    return result
-
-
-def _named(text: str, members: set[str]) -> set[str]:
-    return {
-        member
-        for member in members
-        if any(
-            name in text
-            for name in (
-                member,
-                member.removesuffix(".py"),
-                member.removesuffix(".py").replace("/", "."),
-            )
-        )
-    }
-
-
-def _family_members(graph: Graph, directory: str) -> set[str]:
-    return {
-        path
-        for path in graph.snapshot.files
-        if path.startswith(directory + "/")
-        and path.endswith(".py")
-        and not path.endswith("/__init__.py")
-    }
-
-
-def _extension_evidence(item: dict, graph: Graph, previous: Graph, sources: dict) -> tuple:
-    members = _family_members(graph, item["directory"])
-    _, raw = relations(graph)
-    need = max(2, (len(members) + 1) // 2)
-    registrars = (
-        set(item["registrars"])
-        | {path for path in changed_paths(graph, previous) if path.endswith(".py")}
-        | {path for path, row in raw.items() if len(row["dependencies"] & members) >= need}
-    ) - members
-    evidence: list[dict] = []
-    unknown = bool(_input_errors(graph))
-    for path in sorted(registrars):
-        unknown |= path in graph.snapshot.files and path not in sources
-        named = _named(sources.get(path, ""), members)
-        named |= raw.get(path, {}).get("dependencies", set()) & members
-        if path in item["registrars"] or len(named) >= need:
-            evidence.extend({"registrar": path, "member": member} for member in sorted(named))
-    if not set(item["adding"]) <= set(graph.snapshot.files):
-        return "unresolved", evidence
-    return "violated" if evidence else "unresolved" if unknown else "implemented", evidence
-
-
-def verify_obligations(
-    items: list[dict], graph: Graph, previous: Graph, sources: dict[str, str]
-) -> list[dict]:
-    results = []
-    for item in items:
-        status, evidence = ("unresolved", [])
-        if item["predicate"] == "no-static-registrar-enumeration":
-            status, evidence = _extension_evidence(item, graph, previous, sources)
-        results.append(
-            item
-            | {
-                "status": status,
-                "evidence": evidence[:10],
-                "proposal_status": "unresolved",
-                "note": "Only the stated static predicate is checked; discovery, contracts and full behavior remain unverified.",
-            }
-        )
-    return results
 
 
 def independent_verification(graph: Graph, previous: Graph | None, checks: list[dict]) -> dict:

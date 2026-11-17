@@ -149,11 +149,13 @@ def test_validation_reports_closed_family_growth_from_the_diff(tmp_path):
     assert review["change_check_reach"]["test_modules"] == 1
 
 
-def test_a_deferral_is_recorded_without_conditions_and_costs_are_stated(tmp_path):
+def test_a_deferral_is_recorded_without_predicting_ci_savings_from_imports(tmp_path):
     app = _closed_repo(tmp_path)
     files = ["app/providers/geo.py", "app/main.py"]
     [advice] = app.assess_plan("Add a geo provider", files)["architecture"]["advisory"]
-    assert "1,000 more members" in advice["cost_of_staying_closed"]
+    assert "recorded execution evidence" in advice["cost_of_staying_closed"]
+    assert "not an observed test selection" in advice["ci_cost"]
+    assert "Retain observed consumer" in advice["suggestion"]
     assert advice["decision"].startswith("Advice, not a gate")
     plain = {"proposal_id": advice["proposal_id"], "decision": "defer", "reason": "Later."}
     deferred = app.assess_plan("Add a geo provider", files, [plain])

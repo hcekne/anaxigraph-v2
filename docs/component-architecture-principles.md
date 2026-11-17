@@ -131,14 +131,14 @@ merely import the same helper, settings or errors module are not a family. A fam
 when a production module (a composition root or hand-written registry) imports its members one by
 one; a module must list at least half of the members to count. A file that names members as paths
 or module strings, such as a CI test-selection map, also counts when a change edits it. Adding a
-member then edits that registrar, and safe CI for the edit reaches every check that imports it.
+member then edits that registrar. Import reach indicates possible coupling, not observed CI cost.
 `prepare_change` lists closed families near the task in its `design_brief`. When a plan adds a
 member and edits a registrar, `assess_plan` reports the finding with the cost of staying closed
 under `architecture.advisory`. It is advice: no decision is required, and one that is recorded is
 followed through. `validate_change` reports the same growth from the diff, only for registrar
-edits that name the new member. The suggested remedy is discovery: members export one contract
-object, a loader finds them, contract tests parametrize over discovered members and CI maps each
-member to its own tests plus the contract tests. Detection uses resolved inheritance and static
+edits that name the new member. The advice compares explicit registration with discovery behind
+the existing contract, including ownership and loading failures. Retain recorded consumer and
+shared-input checks: module folders do not establish safe test boundaries. Detection uses resolved inheritance and static
 imports only, so a family built on duck typing, on a base class from an installed package, or
 wired through strings or configuration is not seen.
 
@@ -232,7 +232,9 @@ The shared charter informs pattern screening, selected detailed review and blind
 Screening, Pattern detail and architecture reviews receive verified implementation for the selected
 modules; Fresh Eyes receives behavior only. `prepare_change` surfaces current owner-scoped proposals
 with evidence, costs and expansion links. Material Pattern and architecture proposals enter the
-same `assess_plan` adopt/defer/reject path. Pair-based Pattern IDs survive model result reordering.
+same `assess_plan` adopt/defer/reject path. Content-bound finding IDs survive reordering and require
+a fresh decision when the advice changes. The core task checkpoint retains earlier decisions as
+successive batches are assessed; optional trial logging is not required.
 `validate_change` retains the decision and its unresolved obligation; recording intent does not
 establish implementation. Behavioral and shared-resource changes remain reasons to widen checks.
 

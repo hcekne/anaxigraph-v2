@@ -113,9 +113,7 @@ function moduleRow(node) {
   const row = document.createElement("tr");
   row.classList.toggle("selected", node.id === state.selected);
   const moduleCell = document.createElement("td");
-  const button = textElement("button", title(node), "module-link");
-  button.addEventListener("click", () => selectEntity(node.id).catch((error) => notice(error.message, true)));
-  moduleCell.append(button);
+  moduleCell.append(entityButton(node.id, title(node), "module-link"));
   const overview = (node.data?.annotation?.overview || "Purpose not annotated yet")
     + (node.data?.annotation_status === "stale" ? " · stale annotation" : "");
   moduleCell.append(textElement("div", overview, "module-overview"));
@@ -164,14 +162,13 @@ function addLinkGroup(name, edges, direction, nodes) {
   section.append(textElement("h3", `${name} (${edges.length})`));
   for (const edge of edges.slice(0, 12)) {
     const id = direction === "incoming" ? edge.source : edge.target;
-    const button = textElement("button", `${edge.kind} · ${short(nodes.get(id)?.name || id, 55)}${edge.resolution !== "resolved" ? ` · ${edge.resolution}` : ""}`);
-    button.addEventListener("click", () => selectEntity(id).catch((error) => notice(error.message, true)));
-    section.append(button);
+    section.append(entityButton(id, `${edge.kind} · ${short(nodes.get(id)?.name || id, 55)}${edge.resolution !== "resolved" ? ` · ${edge.resolution}` : ""}`));
   }
   $("#entity-links").append(section);
 }
 
 async function selectEntity(id) {
+  switchPage("explore");
   const generation = ++entityGeneration;
   const result = await api(`/api/entity?${new URLSearchParams({ entity_id: id, limit: 20, full: true })}`);
   if (generation !== entityGeneration) return;
@@ -179,7 +176,7 @@ async function selectEntity(id) {
   state.selected = entity.id;
   const annotation = entity.data?.annotation || {};
   $("#entity-title").textContent = title(entity);
-  $("#entity-overview").textContent = annotation.overview || entity.data?.overview || "No semantic annotation yet. Source facts are available below.";
+  $("#entity-overview").textContent = entity.kind === "plan" ? "Saved task decisions and proposals. Full details are below; implementation remains unverified." : (annotation.overview || entity.data?.overview || "No semantic annotation yet. Source facts are available below.");
   $("#entity-detail").textContent = annotation.detail || "";
   $("#entity-facts").replaceChildren();
   for (const value of [entity.kind, entity.data?.loc === undefined ? null : `${entity.data.loc} lines`, `line ${entity.line || 1}`, entity.data?.annotation_status, entity.data?.parse_status].filter(Boolean)) {
@@ -194,9 +191,7 @@ async function selectEntity(id) {
     section.append(textElement("h3", `Recorded tests · ${observation.suite} · ${observation.total}/${observation.suite_test_files} files`));
     section.append(textElement("p", `${observation.source_matches ? "Baseline observations" : "Source changed since recording"}${observation.changed_test_files ? ` · ${observation.changed_test_files} observed test files changed` : ""}. File execution and reads; CI scope can be wider.`, "section-note"));
     for (const path of observation.test_files.slice(0, 6)) {
-      const button = textElement("button", path);
-      button.addEventListener("click", () => selectEntity(`module:${path}`).catch((error) => notice(error.message, true)));
-      section.append(button);
+      section.append(entityButton(`module:${path}`, path));
     }
     $("#entity-links").append(section);
   }
@@ -290,6 +285,12 @@ function textElement(tag, text, className) {
   element.textContent = text;
   if (className) element.className = className;
   return element;
+}
+
+function entityButton(id, label, className) {
+  const button = textElement("button", label, className);
+  button.addEventListener("click", () => selectEntity(id).catch((error) => notice(error.message, true)));
+  return button;
 }
 
 function reviewTradeoffs(parent, label, items) {
@@ -562,7 +563,9 @@ function renderPlanAssessment(result, request) {
   if (!architecture) return;
   const labels = { decision_required: "Choose how to address these proposals", decisions_recorded: "Decisions recorded", no_current_material_proposals: "No current material proposals for this plan", scope_incomplete: "Review a narrower scope to account for more proposals" };
   parent.append(textElement("h3", "Architecture decisions"), textElement("p", `${labels[architecture.status] || "Review status unavailable"}. Implementation remains unverified.`, "section-note"));
-  if (architecture.truncated) parent.append(textElement("p", "More relevant proposals exist. Expand the saved reviews and assess a narrower scope.", "review-stale"));
+  if (architecture.remaining !== undefined) parent.append(textElement("p", `${architecture.resolved} of ${architecture.total} required decisions recorded · ${architecture.remaining} remaining.`, "section-note"));
+  else if (architecture.truncated) parent.append(textElement("p", "More relevant proposals exist. Expand the saved reviews and assess a narrower scope.", "review-stale"));
+  parent.append(entityButton("plan", "Inspect full saved plan", "quiet"));
   const entries = [];
   for (const requirement of architecture.requirements || []) {
     const card = textElement("div", "", "alternative-card");
@@ -580,12 +583,12 @@ function renderPlanAssessment(result, request) {
     entries.push({ proposal_id: requirement.proposal_id, choice, reason });
   }
   if (!entries.length) return;
-  const save = textElement("button", "Record architecture decisions", "secondary");
+  const save = textElement("button", "Record this batch", "secondary");
   save.addEventListener("click", () => action(save, async () => {
     const decisions = entries.map((item) => ({ proposal_id: item.proposal_id, decision: item.choice.value, reason: item.reason.value.trim() }));
     if (decisions.some((item) => !item.decision || !item.reason)) throw new Error("Choose a decision and give a reason for each proposal.");
     renderPlanAssessment(await api("/api/assess", { ...request, decisions }), request);
-    notice("Architecture decisions recorded. This does not verify their implementation.");
+    notice("Decision batch recorded. Review the remaining count above; implementation stays unverified.");
   }));
   parent.append(save);
 }

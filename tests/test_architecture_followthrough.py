@@ -1,4 +1,4 @@
-"""Source observations, rather than adopted advice, establish narrow predicates."""
+"""Observed boundaries and adopted advice do not attest proposed behavior."""
 
 from test_extension_points import MEMBER, _closed_repo, _write
 
@@ -67,7 +67,7 @@ def test_removed_private_access_and_cycle_are_observed_against_pinned_baseline(t
     assert all(f["change"] == "improved" and f["status"] == "improved" for f in fixed)
 
 
-def test_extension_obligation_requires_actual_source_and_does_not_attest_discovery(tmp_path):
+def test_extension_adoption_stays_unverified_when_the_public_entry_point_is_removed(tmp_path):
     app = _closed_repo(tmp_path)
     files = ["app/providers/geo.py", "app/main.py"]
     [requirement] = app.assess_plan("Add geo", files)["architecture"]["advisory"]
@@ -87,11 +87,12 @@ def test_extension_obligation_requires_actual_source_and_does_not_attest_discove
     (tmp_path / "app/providers/geo.py").write_text(MEMBER.format(cls="Geo", name="geo"))
     app.scan()
     [closed] = app.validate_change()["architecture"]["obligations"]
-    assert closed["status"] == "violated"
+    assert closed["status"] == "unresolved"
     (tmp_path / "app/main.py").write_text("import pkgutil\nimport app.providers\n")
     app.scan()
+    assert not any(n.path == "app/main.py" and n.name == "providers" for n in app._current().nodes)
     [opened] = app.validate_change()["architecture"]["obligations"]
-    assert opened["status"] == "implemented"
+    assert opened["status"] == "unresolved"
     assert opened["proposal_status"] == "unresolved"
     # Moving enumeration to another file cannot make the obligation appear satisfied.
     (tmp_path / "app/wiring.py").write_text(
@@ -99,7 +100,7 @@ def test_extension_obligation_requires_actual_source_and_does_not_attest_discove
     )
     app.scan()
     [moved] = app.validate_change()["architecture"]["obligations"]
-    assert moved["status"] == "violated"
+    assert moved["status"] == "unresolved"
 
 
 def test_a_parse_failure_cannot_appear_to_fix_a_boundary_and_needs_no_scan_first(tmp_path):

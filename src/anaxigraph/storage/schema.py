@@ -1,6 +1,6 @@
 """The V2 schema: one record per file of each graph, plus small mutable indexes."""
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS snapshots (

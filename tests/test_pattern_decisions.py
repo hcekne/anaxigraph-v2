@@ -13,14 +13,18 @@ from anaxigraph.analysis.packets import catalogue
 from anaxigraph.application import Application
 
 
-@pytest.fixture
-def application(tmp_path):
+def make_application(tmp_path):
     (tmp_path / "delivery.py").write_text("def deliver(items):\n    return list(items)\n")
     (tmp_path / "unrelated.py").write_text("def lookup(value):\n    return value\n")
     app = Application(tmp_path)
     app.scan()
     annotate(app)
     return app
+
+
+@pytest.fixture
+def application(tmp_path):
+    return make_application(tmp_path)
 
 
 def review(app, scores=(3,), path="delivery.py"):

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from anaxigraph.analysis.architecture_guidance import coverage, decide, pattern_proposals, proposals
+from anaxigraph.analysis.architecture_guidance import assess_proposals, coverage
 from anaxigraph.analysis.architecture_verification import (
     boundary_delta,
     independent_verification,
     obligation,
-    verify_obligations,
 )
+from anaxigraph.analysis.fields import fingerprint, short
 from anaxigraph.indexing.package_metadata import capture_package_metadata
 
 
@@ -25,15 +25,11 @@ def package_context(app: Any, graph) -> dict:
     return cached[1]
 
 
-def owner_reviews(
-    app: Any, graph, owners: tuple[str, ...], kinds: tuple[str, ...], *, limit: int = 6
-) -> list[dict]:
+def owner_reviews(app: Any, graph, owners: tuple[str, ...], kinds: tuple[str, ...]) -> list[dict]:
     return [
         app._review_state(row, graph)
         for kind in kinds
-        for row in app.store.reviews(
-            str(app.root), kind, include_requests=False, module_ids=owners, limit=limit
-        )
+        for row in app.store.reviews(str(app.root), kind, include_requests=False, module_ids=owners)
     ]
 
 
@@ -44,38 +40,46 @@ def assess(
     graph = app._current()
     owners = {item["id"] for item in brief["likely_owners"]}
     owners.update(node.id for node in graph.nodes if node.kind == "module" and node.path in files)
-    rows = owner_reviews(app, graph, tuple(sorted(owners)), ("architecture", "patterns"), limit=19)
-    scouted = sorted(
-        (
-            item
-            for item in proposals(rows, owners, 57) + pattern_proposals(rows, owners, graph, 13)
-            if item["opportunity"] >= 2
-        ),
-        key=lambda item: (-item["opportunity"], item["proposal_id"]),
-    )
-    result = decide(
-        scouted[:12],
-        decisions,
-        advisory=(structural or [])[:6],
-        truncated=len(rows) > 18 or len(scouted) > 12,
+    rows = owner_reviews(app, graph, tuple(sorted(owners)), ("architecture", "patterns"))
+    saved = app.store.get_review(str(app.root), "current-plan", "plan")
+    prior = saved["result"] if saved else {}
+    checkpoint = assess_proposals(rows, owners, graph, prior, decisions, structural) | {
+        "snapshot_id": graph.snapshot.id,
+        "baseline_id": brief["baseline_id"],
+        "task_context": brief["task_context"],
+        "files": files,
+    }
+    result = checkpoint["view"]
+    app._require_live(graph)
+    app.store.save_review(
+        str(app.root),
+        graph.snapshot.id,
+        "current-plan",
+        "plan",
+        checkpoint,
+        expected_digest=fingerprint(prior if saved else None),
     )
     event = app.evidence.record(
-        "architecture_plan",
+        "architecture_decisions",
         {
             "snapshot_id": graph.snapshot.id,
             "baseline_id": brief["baseline_id"],
             "operation": "assess_plan",
-            "files": files,
             "status": result["status"],
-            "metrics": {key: result[key] for key in ("decisions", "pending_ids", "truncated")}
+            "metrics": {key: result[key] for key in ("total", "remaining", "resolved")}
             | {
-                "obligations": [
-                    obligation(item) for item in (*result["advisory"], *result["requirements"])
-                ]
+                "planned_files": len(files),
+                "decisions": [
+                    item | {"reason": short(item["reason"], 200)} for item in decisions or []
+                ],
             },
         },
     )
-    return result | {"recorded": event is not None, "scout_coverage": coverage(rows, owners)}
+    return result | {
+        "recorded": True,
+        "audit_recorded": event is not None,
+        "scout_coverage": coverage(rows, owners),
+    }
 
 
 def followthrough(app: Any, baseline_id: str | None, graph, previous, checks: list[dict]) -> dict:
@@ -83,8 +87,9 @@ def followthrough(app: Any, baseline_id: str | None, graph, previous, checks: li
         "boundary_changes": boundary_delta(graph, previous),
         "independent_verification": independent_verification(graph, previous, checks),
     }
-    event = app.evidence.latest("architecture_plan")
-    if event is None:
+    saved = app.store.get_review(str(app.root), "current-plan", "plan")
+    event = saved["result"] if saved else app.evidence.latest("architecture_plan")
+    if event is None or (not saved and "obligations" not in event.get("metrics", {})):
         return observed | {"status": "not_assessed", "implementation_status": "unverified"}
     if (
         event.get("baseline_id") != baseline_id
@@ -92,19 +97,20 @@ def followthrough(app: Any, baseline_id: str | None, graph, previous, checks: li
         or previous.snapshot.id != baseline_id
     ):
         return observed | {"status": "baseline_changed", "implementation_status": "unverified"}
-    metrics = event["metrics"]
-    obligations = metrics.get("obligations", [])
-    sources = (
-        app.indexer.captured_sources(graph.snapshot)
-        if any(item["predicate"] == "no-static-registrar-enumeration" for item in obligations)
-        else {}
+    metrics = event.get("view", event.get("metrics", {}))
+    obligations = (
+        [obligation(item) for item in (*metrics["requirements"], *metrics["advisory"])]
+        if "view" in event
+        else metrics.get("obligations", [])
     )
-    verified = verify_obligations(obligations, graph, previous, sources)
+    verified = [
+        item | {"status": "unresolved", "proposal_status": "unresolved"} for item in obligations
+    ]
     return observed | {
-        "status": event["status"],
+        "status": metrics.get("status", event.get("status", "not_assessed")),
         "assessed_snapshot_id": event["snapshot_id"],
-        **metrics,
+        **{key: value for key, value in metrics.items() if key not in {"requirements", "advisory"}},
         "obligations": verified,
         "implementation_status": "unverified",
-        "note": "Dispositions record intent. Per-obligation predicates do not establish full proposal implementation or behavior.",
+        "note": "Dispositions record intent. Observed source changes do not establish proposal implementation or behavior.",
     }

@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from anaxigraph.contracts import Graph
+
+
+def fingerprint(value: Any) -> str:
+    body = json.dumps(
+        value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+    )
+    return hashlib.sha256(body.encode()).hexdigest()
 
 
 def short(value: Any, maximum: int = 240) -> str:
