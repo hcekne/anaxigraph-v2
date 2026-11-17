@@ -377,6 +377,9 @@ class Application:
         result = neighborhood(graph, entity_id, _bounds(limit), offset, full)
         result["snapshot_id"] = graph.snapshot.id
         entity = result["entity"]
+        observations = selection.observed_tests(self, graph, entity["path"], _bounds(limit), offset)
+        if observations:
+            result["test_observations"] = observations
         if entity["kind"] == "function":
             owner = module_for(graph, entity["path"])
             if owner:

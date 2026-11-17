@@ -250,8 +250,8 @@ def design_brief(graph: Graph, near: set[str]) -> dict[str, Any]:
     questions = [
         "List the existing files this request will edit. If the next similar request would "
         "edit the same ones, they are an extension point to open now, not a place to append.",
-        "Which room owns this, and which tests prove that room on its own? A change inside one "
-        "room should select only its tests plus the contract tests of its interface.",
+        "Which component owns this, and which tests verify it and its consumers? Use recorded "
+        "execution and reads to justify narrow checks; shared inputs and unknown impact widen them.",
     ]
     for family in families:
         reach = family["registrar_check_reach"]

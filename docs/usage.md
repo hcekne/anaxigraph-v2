@@ -224,6 +224,10 @@ provide that protocol.
 record lands in `.anaxigraph-v2/test-records/`; carry it between machines as a CI artifact.
 A worktree without one uses the record of the worktree that recorded most recently.
 
+Module inspection also shows recorded file-level test consumers, with pagination, baseline
+provenance and changed-source/test indicators. The dashboard links those tests from the module
+panel. These observations help examine coupling; they are not complete current CI scope.
+
 Ask with the `tests_for_change` tool, or in CI with `anaxigraph tests --paths`, which prints one
 test file per line and nothing when the whole suite is needed. The record is compared with the
 checkout itself, so everything that differs from the recorded run counts and the selection

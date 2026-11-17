@@ -117,6 +117,39 @@ def _records(app: Any) -> list[dict[str, Any]]:
     return [record for record in records if record.get("format") == FORMAT]
 
 
+def observed_tests(app: Any, graph: Any, path: str, limit: int, offset: int) -> list[dict]:
+    """File-level runtime observations, distinct from static links and current CI scope."""
+    rows = []
+    for record in _records(app):
+        if path not in record["files"]:
+            continue
+        executed = set(record["executed"].get(path, []))
+        opened = set((record["reads"] or {}).get("opened", {}).get(path, []))
+        found = sorted(record["tests"][index] for index in executed | opened)
+        seconds = record["seconds"]
+        spent = sum(seconds[index] for index in executed | opened)
+        rows.append(
+            {
+                "suite": record["suite"],
+                "recorded_revision": record["revision"],
+                "provenance": record.get("provenance", {"status": "unverified"}),
+                "source_matches": record["files"][path] == graph.snapshot.files.get(path),
+                "executing_test_files": len(executed),
+                "reading_test_files": len(opened),
+                "test_files": found[offset : offset + limit],
+                "total": len(found),
+                "suite_test_files": len(record["tests"]),
+                "recorded_duration_share": round(spent / sum(seconds), 3) if sum(seconds) else None,
+                "changed_test_files": sum(
+                    record["files"].get(test) != graph.snapshot.files.get(test) for test in found
+                ),
+                "next_offset": offset + limit if offset + limit < len(found) else None,
+                "basis": "Recorded file execution and direct reads; not function coverage, complete consumers or permission to narrow CI.",
+            }
+        )
+    return rows
+
+
 def _shadow(
     record: dict[str, Any], picked: dict[str, Any], graph: Any, ran: list[Path], reads: Path | None
 ) -> dict:

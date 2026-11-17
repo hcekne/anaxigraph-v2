@@ -55,7 +55,7 @@ CHARTER = (
     {
         "id": "extension-points",
         "principle": "Let open-ended families grow by adding files, not by editing shared ones.",
-        "guidance": "When integrations, providers or channels keep multiplying, members implement one contract and a loader discovers them; no composition root, registry, contract test or CI selection map lists members by hand. CI then maps each member to its own tests plus the contract tests.",
+        "guidance": "Keep consumers of growing provider families on one public contract; add implementations without changing shared orchestration. Prefer discovery over repeated registry edits. Preserve validation and authorization. Derive CI scope from observed consumers, not folders.",
     },
     {
         "id": "simplicity",

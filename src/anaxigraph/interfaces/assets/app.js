@@ -83,7 +83,7 @@ function renderCheckout(snapshot, root) {
 function renderCoverage(data) {
   const diagnostics = data.diagnostics || [];
   $("#map-state").textContent = data.snapshot ? (diagnostics.length ? "Partial coverage" : "Available") : "Not mapped";
-  $("#coverage-summary").textContent = `${data.coverage || "Python/PYI syntax and scoped references"}. Other languages are not parsed in this milestone. ${data.unresolved_relationships || 0} ambiguous or unresolved relationships.`;
+  $("#coverage-summary").textContent = `${data.coverage || "Python/PYI and JavaScript/TypeScript syntax and scoped references"}. ${data.unresolved_relationships || 0} ambiguous or unresolved relationships.`;
   $("#coverage-diagnostics").hidden = !diagnostics.length;
   $("#diagnostic-count").textContent = `${diagnostics.length} reported analysis diagnostics — inspect coverage gaps`;
   $("#diagnostic-items").replaceChildren(...diagnostics.map((item) => textElement("li", item)));
@@ -189,6 +189,17 @@ async function selectEntity(id) {
   const nodes = new Map((result.neighbors || []).map((node) => [node.id, node]));
   nodes.set(entity.id, entity);
   $("#entity-links").replaceChildren();
+  for (const observation of result.test_observations || []) {
+    const section = textElement("section", "", "link-group");
+    section.append(textElement("h3", `Recorded tests · ${observation.suite} · ${observation.total}/${observation.suite_test_files} files`));
+    section.append(textElement("p", `${observation.source_matches ? "Baseline observations" : "Source changed since recording"}${observation.changed_test_files ? ` · ${observation.changed_test_files} observed test files changed` : ""}. File execution and reads; CI scope can be wider.`, "section-note"));
+    for (const path of observation.test_files.slice(0, 6)) {
+      const button = textElement("button", path);
+      button.addEventListener("click", () => selectEntity(`module:${path}`).catch((error) => notice(error.message, true)));
+      section.append(button);
+    }
+    $("#entity-links").append(section);
+  }
   addLinkGroup("Incoming", result.incoming || [], "incoming", nodes);
   addLinkGroup("Outgoing", result.outgoing || [], "outgoing", nodes);
   drawGraph(entity, result.incoming || [], result.outgoing || [], nodes);

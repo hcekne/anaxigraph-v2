@@ -156,49 +156,43 @@ test, so its run says nothing about what a selection leaves out; it shows a chan
 test checks still costing 82% of suite time: a class body runs when its module is imported,
 and 186 test files test the modules that use that one.
 
-## Follow-up qualification — 16 November 2026
+## Follow-up qualification — 17 November 2026
 
-The 70-change selection replay applies historical changed paths to one checkout and one recorded
-run. Zero omitted recorded consumers is a consistency result, not 70 independently executed PR
-transitions. Time shares sum recorded JUnit testcase durations; they are not measured CI wall-clock
-savings. The hypothetical 44% median is not delivered subprocess attribution.
+Step 5 is implemented; qualification remains incomplete. The 70-change replay applies historical
+paths to one checkout and one recording, not 70 independently executed PR transitions. Time
+shares sum recorded JUnit durations, not measured CI wall time; 44% remains a counterfactual.
 
-Opaque processes started outside a test now retain a whole-suite fallback. Shadow comparison
-uses failed testcase identities instead of subtracting entire already-failing files; legacy
-records without those identities subtract no failures. The focused selection suite passed all
-36 tests locally, together with ruff, mypy and the unchanged source budget (14,939 lines).
+Implemented since the handover:
 
-Next: bind reports to their source/run and prove worker completeness, then implement attributed
-Python children without removing fallbacks for unobserved work. Refresh the recorder before new
-measurements. Real CI needs prospective shadow comparisons and actual selected runs before savings
-can be claimed. Better architectural advice needs real-task evaluation separately.
+- The supplied-evidence audit and gate live in `experiments/declared_ci/`; the feature-drift
+  runner applies its own qualification. Ordinary validation retains failed/stale/unchecked
+  check states without requiring the experiment's selector protocol.
+- Opaque starts outside a test retain a whole-suite fallback. Measured process-starting helpers
+  keep every observed consumer selected; unmeasured helpers require the full suite.
+- Failed testcase identities prevent an existing failure from hiding a second regression in
+  the same file. Legacy baselines without those identities subtract no failures.
+- `record-tests --start` pins source inputs. The recorder checks them at startup/completion,
+  fingerprints coverage/JUnit output, declares xdist workers and counts finished tests. Invalid,
+  mixed, missing or interrupted evidence cannot replace the last record. Unbound legacy records
+  require full checks after a change. One pytest invocation, including xdist, is supported;
+  separately launched/multi-machine shards need a completion protocol first.
+- Shadow reports distinguish source-bound candidate invocations, unverified JUnit and missing
+  recorded test files. Unmatched testcases are rejected. The supplied invocation remains the
+  project's declaration, not independent proof of complete behavioral coverage.
+- Module inspection and the dashboard show paged file-level runtime test consumers, baseline
+  provenance, source/test changes and recorded duration share. This evidence is distinct from
+  static links and permission to narrow CI. Advice now requires observed consumers rather than
+  assuming folder boundaries imply isolated checks.
 
-The experiment-specific evidence audit and gate now live with the declared CI experiment;
-feature-drift verification applies that gate externally. Ordinary validation preserves failed,
-stale and unchecked receipt states. Product CI reviews still inspect pipeline declarations, and
-recorded selection remains available. Production size after retirement: 14,497 lines, down 442
-from the first safety fixes; the 15,000-line ceiling has not changed.
+Local evidence: 848 product tests passed in the end-to-end instrumented run, producing a 128,758
+byte record. The subsequent focused regression run passed 80 tests, including module-inspection
+paging and stale-source/test attribution. CI is green on `21f8fc9`; its existing suite publishes
+source-bound test records on Python 3.11 and 3.12. The first instrumented CI attempt exposed
+nested coverage output collisions; invocation-specific configuration and isolated fixture outputs
+fixed them. Production size is now 14,803 lines, 121 fewer than the handover; the 15,000-line
+ceiling is unchanged. No paid model calls or new private-target measurements were made here.
 
-Recording now starts with a source manifest (`record-tests --start`). The pytest recorder
-checks those inputs at startup and completion, binds coverage/JUnit bytes, declares xdist
-workers and counts finished tests. Import rejects source drift, altered outputs, incomplete
-runs and mixed/missing workers before replacing the last record. Legacy recordings remain
-readable but cannot authorize narrow checks after a change. This contract covers one pytest
-invocation, including xdist; independently launched shards need a completion protocol first.
-Local qualification: 48 selection tests passed, including real serial and two-worker pytest
-runs and interruption/missing-worker cases. Production size: 14,725 lines, below the unchanged
-15,000-line ceiling. No new measurement on the private target has been made.
-
-Shadow results now distinguish unverified JUnit, a source-bound completed candidate invocation,
-and an incomplete test-file inventory. `tests --ran ... --reads ...` checks the candidate's
-recording without replacing the baseline. Unknown JUnit testcases are rejected. This verifies
-the supplied invocation, not the completeness of the project's declared suite or future
-behavior. Selective CI still requires prospective comparisons. Local selection regression
-coverage has increased to 49 cases, with no paid model calls.
-
-Self-recording exposed a performance mistake in the initial opaque-process fix: a measured
-helper named with `+module` was treated like an unowned import-time start. Such helpers now
-keep every test that executed them selected; only unknown/unmeasured process context requires
-the whole suite. CI measures the experimental helpers its unit tests actually call as well.
-Local selection regression coverage: 50 passed. Production size: 14,756 lines, 168 fewer than
-the handover, with the original ceiling unchanged.
+Next: attribute Python child work without dropping unobserved descendants; qualify sharded
+recordings; refresh the target's recorder before new measurements. Use prospective shadow runs
+and actual selected runs before claiming CI savings. Better architectural advice needs real-task
+evaluation separately. Reuse scheduled verification where possible rather than duplicating suites.

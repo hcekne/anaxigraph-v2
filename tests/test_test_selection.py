@@ -632,6 +632,26 @@ def test_an_unmatched_junit_case_is_not_silently_treated_as_no_failures(checkout
         Application(checkout).tests_for_change(ran=[report])
 
 
+def test_inspection_exposes_paged_runtime_consumers_and_marks_source_and_test_changes(checkout):
+    app = Application(checkout)
+    path = "shop/pkg/fees.py"
+    [first] = app.inspect("module:" + path, limit=1)["test_observations"]
+    [second] = app.inspect("module:" + path, limit=1, offset=1)["test_observations"]
+    assert first["source_matches"] is True and first["changed_test_files"] == 0
+    assert first["executing_test_files"] == first["total"] == 2
+    assert first["next_offset"] == 1 and second["next_offset"] is None
+    assert first["test_files"] + second["test_files"] == [T("fees_card"), T("fees_cash")]
+    assert first["provenance"]["status"] == "verified"
+    assert 0 <= first["recorded_duration_share"] <= 1
+    (checkout / path).write_text((checkout / path).read_text() + "\n# implementation edit\n")
+    (checkout / T("fees_cash")).write_text(
+        (checkout / T("fees_cash")).read_text() + "\n# test edit\n"
+    )
+    [changed] = app.inspect("module:" + path)["test_observations"]
+    assert changed["source_matches"] is False and changed["changed_test_files"] == 1
+    assert changed["total"] == 2  # Retain baseline facts rather than calling them fresh coverage.
+
+
 @pytest.mark.parametrize("reader", ["@", "@shop/pkg/regions.py", "+missing.py"])
 def test_unattributed_processes_survive_recording_and_force_the_whole_suite(run, tmp_path, reader):
     import json

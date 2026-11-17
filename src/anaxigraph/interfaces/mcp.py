@@ -91,7 +91,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
     def inspect(
         entity_id: str, limit: PageSize = 30, offset: PageOffset = 0, full: bool = False
     ) -> dict:
-        """Page observed relationships; full=True expands entity metadata and annotations."""
+        """Page source links and recorded file-level test consumers; full=True expands metadata."""
         return application.inspect(entity_id, limit, offset, full)
 
     @tool
