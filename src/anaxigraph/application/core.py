@@ -496,6 +496,7 @@ class Application:
         self,
         receipts: list[dict[str, Any]] | None = None,
         baseline_id: str | None = None,
+        full: bool = False,
     ) -> dict[str, Any]:
         graph = self._live()
         if baseline_id is not None and (not isinstance(baseline_id, str) or not baseline_id):
@@ -512,7 +513,7 @@ class Application:
             if baseline_id
             else ("pinned-change-baseline" if stats.get("pinned_snapshot_id") else "previous-scan")
         )
-        result = change_review(graph, previous, receipts) | {
+        result = change_review(graph, previous, receipts, full) | {
             "baseline_id": selected,
             "baseline_basis": basis,
             "comparison": {

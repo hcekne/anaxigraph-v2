@@ -233,6 +233,24 @@ full inspection. Changed finding content requires a new disposition; source edit
 obligations. Concurrent stale writes and a late assessment for another task are rejected.
 Schema 9 backs up the existing store before upgrading and excludes local task plans from exports.
 
+Agent-response profiling used the same frozen public `5c8933d` checkout for both runtimes:
+309 modules, 20,882 nodes and 48,151 edges, structural only, no test record, trial logging off
+and no model calls. Nine warm samples per operation on the shared development machine gave:
+
+| Operation | Previous median | Updated median | Previous / updated reply bytes |
+| --- | ---: | ---: | ---: |
+| Inspect contracts module | 212 ms | 101 ms | 6,416 / 6,416 |
+| Inspect application module | 228 ms | 105 ms | 6,136 / 6,136 |
+| Validate unchanged checkout | 435 ms | 165 ms | 43,768 / 3,413 |
+
+All 66 complete structural findings, all module facts, every page of both inspections and
+extension test reach had matching canonical digests. Preparation and assessment had no material
+improvement. Compact inspection now derives relationships once; comparisons reuse both graph
+views. Validation counts unchanged observations and expands them explicitly. Regression fixtures
+check that sixty old warnings cannot hide a new cycle/private access, equal counts cannot hide
+changed evidence, and more than fifty new findings remain retrievable. These local timings do
+not establish production latency, better architectural judgment or faster CI.
+
 A synthetic 133-finding qualification, recreating the application between batches, recorded all
 133 decisions in one checkpoint with no model calls. Median assessment was 43.58 ms, the largest
 reply 13,454 bytes and the fixture database 167,936 bytes. These measure small-fixture bookkeeping,

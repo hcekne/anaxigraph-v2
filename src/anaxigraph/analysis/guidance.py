@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections import Counter, deque
+from collections import deque
 from dataclasses import asdict
 from typing import Any
 
@@ -13,7 +13,8 @@ from anaxigraph.contracts import SOURCE_SUFFIXES, Graph, Node
 from .architecture_guidance import brief_proposals as architecture_proposals
 from .architecture_guidance import coverage as architecture_coverage
 from .architecture_guidance import pattern_proposals
-from .charter import CHARTER, boundary_findings, module_facts, relations
+from .charter import CHARTER, module_facts, relations
+from .charter import structural_findings as structural_findings
 from .fields import references as _references
 from .fields import short as _short
 
@@ -78,8 +79,10 @@ def _entity_relations(graph: Graph, entity: Node) -> tuple[list[dict], list[dict
     return incoming, outgoing
 
 
-def _relationship_page(graph: Graph, entity: Node, limit: int, offset: int) -> dict[str, Any]:
-    incoming, outgoing = _entity_relations(graph, entity)
+def _relationship_page(
+    graph: Graph, entity: Node, limit: int, offset: int, links: tuple[list[dict], list[dict]]
+) -> dict[str, Any]:
+    incoming, outgoing = links
     page = [("incoming", edge) for edge in incoming] + [("outgoing", edge) for edge in outgoing]
     selected = page[offset : offset + limit]
     related = {e["source"] for _, e in selected} | {e["target"] for _, e in selected}
@@ -87,7 +90,9 @@ def _relationship_page(graph: Graph, entity: Node, limit: int, offset: int) -> d
     return {
         "incoming": [edge for direction, edge in selected if direction == "incoming"],
         "outgoing": [edge for direction, edge in selected if direction == "outgoing"],
-        "neighbors": [_compact_node(n) for n in graph.nodes if n.id in related - {entity.id}],
+        "neighbors": [
+            _compact_node(n) for n in graph.nodes if n.id != entity.id and n.id in related
+        ],
         "incoming_total": len(incoming),
         "outgoing_total": len(outgoing),
         "offset": offset,
@@ -106,7 +111,8 @@ def neighborhood(
         raise ValueError("Entity not found; use modules to discover valid entity IDs")
     if type(offset) is not int or offset < 0:
         raise ValueError("offset must be a nonnegative integer")
-    result = _relationship_page(graph, entity, limit, offset) | {
+    links = _entity_relations(graph, entity)
+    result = _relationship_page(graph, entity, limit, offset, links) | {
         "entity": asdict(entity) if full else _compact_node(entity),
         "detail": "full" if full else "compact",
         "expand": {"entity_id": entity.id, "full": True},
@@ -118,8 +124,9 @@ def neighborhood(
         contracts = _contracts(graph, {entity.path}, {entity.id})
         result["contracts"] = contracts[:3]
         result["contract_overflow"] = max(0, len(contracts) - 3)
-        if limit > 1 and len(json.dumps(result, ensure_ascii=False, indent=2).encode()) > 8000:
-            return neighborhood(graph, entity_id, max(1, limit // 2), offset, full)
+        while limit > 1 and len(json.dumps(result, ensure_ascii=False, indent=2).encode()) > 8000:
+            limit = max(1, limit // 2)
+            result.update(_relationship_page(graph, entity, limit, offset, links))
     return result
 
 
@@ -330,46 +337,3 @@ def prepare(
     if brief["task"] != task:
         brief["task_truncated"] = True
     return _fit_brief(brief)
-
-
-def structural_findings(graph: Graph) -> list[dict[str, Any]]:
-    modules = [node for node in graph.nodes if node.kind == "module"]
-    owners = {node.id: node.path for node in graph.nodes}
-    module_ids = {node.path: node.id for node in modules}
-    incoming = Counter(
-        target
-        for source, target in {
-            (owners.get(edge.source), module_ids.get(owners.get(edge.target, "")))
-            for edge in graph.edges
-            if edge.resolution == "resolved" and owners.get(edge.source) != owners.get(edge.target)
-        }
-        if source and target
-    )
-    findings = []
-    for node in modules:
-        for kind, measured, threshold, message in (
-            (
-                "large-module",
-                node.data.get("loc", 0),
-                500,
-                "Inspect responsibility boundaries; size alone is not a defect.",
-            ),
-            (
-                "high-fan-in",
-                incoming[node.id],
-                15,
-                "Check public contract stability before changing this shared dependency.",
-            ),
-        ):
-            if measured > threshold:
-                findings.append(
-                    {
-                        "kind": kind,
-                        "entity": node.id,
-                        "measured": measured,
-                        "threshold": threshold,
-                        "status": "concern",
-                        "message": message,
-                    }
-                )
-    return findings + boundary_findings(graph)

@@ -111,6 +111,7 @@
         </section>
         <section class="panel"><p class="eyebrow">CHECK BEFORE AND AFTER</p><h2>Assess and verify</h2><form id="assess-form"><label for="planned-files">Proposed files, one per line</label><textarea id="planned-files" rows="4" required placeholder="src/billing/export.py"></textarea><button class="secondary" type="submit">Assess placement</button></form><div id="architecture-decisions"></div>
           <div class="validation-area"><label for="receipts">Optional check receipts JSON array</label><textarea id="receipts" rows="3" spellcheck="false" placeholder="[]"></textarea><button id="validate-change" class="secondary">Compare with change baseline</button></div>
+          <label class="section-note"><input id="validation-full" type="checkbox"> Include unchanged structural findings</label>
           <p class="section-note">Run project tests through your agent or CI. Supplied results are attributed to their exact source fingerprint.</p><pre id="change-validation">No assessment or comparison yet.</pre>
         </section>
       </div>

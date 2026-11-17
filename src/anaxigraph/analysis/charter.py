@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import threading
-import weakref
 from copy import deepcopy
 from typing import Any
 
 from anaxigraph.contracts import Graph, Node
+
+from .cache import graph_cached
 
 CHARTER = (
     {
@@ -69,8 +69,6 @@ CHARTER = (
     },
 )
 
-_CACHE: tuple[weakref.ReferenceType[Graph], dict[str, dict[str, Any]]] | None = None
-_CACHE_LOCK = threading.Lock()
 _LIMITATION = (
     "Static references are incomplete for dynamic dispatch and unparsed languages. "
     "Test associations do not establish behavioral coverage or permission to skip required checks. "
@@ -149,17 +147,12 @@ def _relations(graph: Graph, modules: dict[str, Node]):
     return raw, witnesses
 
 
-_LATEST: tuple[weakref.ReferenceType[Graph], tuple[Any, Any, Any]] | None = None
-
-
+@graph_cached
 def _latest(graph: Graph) -> tuple[Any, Any, Any]:
-    """Modules, relations and witnesses of a graph, derived once for all the answers it gives."""
-    global _LATEST
-    cached = _LATEST
-    if cached is None or cached[0]() is not graph:
-        modules = {node.path: node for node in graph.nodes if node.kind == "module"}
-        cached = _LATEST = (weakref.ref(graph), (modules, *_relations(graph, modules)))
-    return cached[1]
+    """Modules, relations and facts, derived once for all the answers a graph gives."""
+    modules = {node.path: node for node in graph.nodes if node.kind == "module"}
+    raw, witnesses = _relations(graph, modules)
+    return modules, raw, _observations(modules, raw, witnesses)
 
 
 def relations(graph: Graph) -> tuple[dict[str, Node], dict[str, dict[str, Any]]]:
@@ -167,12 +160,10 @@ def relations(graph: Graph) -> tuple[dict[str, Node], dict[str, dict[str, Any]]]
 
     Shared by every caller for the same graph; treat the result as read-only.
     """
-    modules, raw, _witnesses = _latest(graph)
-    return modules, raw
+    return _latest(graph)[:2]
 
 
-def _observations(graph: Graph) -> dict[str, dict[str, Any]]:
-    modules, raw, witnesses = _latest(graph)
+def _observations(modules, raw, witnesses) -> dict[str, dict[str, Any]]:
     production = {path for path, node in modules.items() if not node.data.get("is_test")}
     cycles = _cycles({path: raw[path]["dependencies"] & production for path in production})
     facts = {}
@@ -222,43 +213,55 @@ def _observations(graph: Graph) -> dict[str, dict[str, Any]]:
 
 def module_facts(graph: Graph, module: Node) -> dict[str, Any]:
     """Observed scoped facts, with no annotation, snapshot or execution metadata."""
-    global _CACHE
-    with _CACHE_LOCK:
-        if _CACHE is None or _CACHE[0]() is not graph:
-            _CACHE = (weakref.ref(graph), _observations(graph))
-        cached = _CACHE
-    return deepcopy(cached[1][module.path])
+    return deepcopy(_latest(graph)[2][module.path])
 
 
-def boundary_findings(graph: Graph) -> list[dict[str, Any]]:
+def structural_findings(graph: Graph) -> list[dict[str, Any]]:
     findings = []
     for node in graph.nodes:
-        if node.kind != "module" or node.data.get("is_test"):
+        if node.kind != "module":
             continue
         facts = module_facts(graph, node)
-        if facts["private_access_count"]:
-            findings.append(
-                {
-                    "kind": "private-interface-access",
-                    "entity": node.id,
-                    "measured": facts["private_access_count"],
-                    "threshold": 0,
-                    "status": "concern",
-                    "message": "Use the other owner's public contract, or deliberately declare a shared internal seam.",
-                    "evidence": facts["private_accesses"],
-                }
-            )
-        if facts["cycle_size"]:
-            findings.append(
-                {
-                    "kind": "dependency-cycle",
-                    "entity": node.id,
-                    "measured": facts["cycle_size"],
-                    "threshold": 1,
-                    "status": "concern",
-                    "message": "These resolved dependencies form a cycle; inspect ownership and a one-way contract.",
-                    "members": facts["cycle_paths"],
-                    "evidence": facts["cycle_evidence"],
-                }
-            )
+        rules = [
+            (
+                "large-module",
+                node.data.get("loc", 0),
+                500,
+                "Inspect responsibility boundaries; size alone is not a defect.",
+            ),
+            (
+                "high-fan-in",
+                facts["consumer_count"],
+                15,
+                "Check public contract stability before changing this shared dependency.",
+            ),
+            (
+                "private-interface-access",
+                0 if node.data.get("is_test") else facts["private_access_count"],
+                0,
+                "Use the other owner's public contract, or deliberately declare a shared internal seam.",
+            ),
+            (
+                "dependency-cycle",
+                facts["cycle_size"],
+                1,
+                "These resolved dependencies form a cycle; inspect ownership and a one-way contract.",
+            ),
+        ]
+        for kind, measured, threshold, message in rules:
+            if measured <= threshold:
+                continue
+            finding: dict[str, Any] = {
+                "kind": kind,
+                "entity": node.id,
+                "measured": measured,
+                "threshold": threshold,
+                "status": "concern",
+                "message": message,
+            }
+            if kind == "private-interface-access":
+                finding["evidence"] = facts["private_accesses"]
+            elif kind == "dependency-cycle":
+                finding.update(members=facts["cycle_paths"], evidence=facts["cycle_evidence"])
+            findings.append(finding)
     return findings

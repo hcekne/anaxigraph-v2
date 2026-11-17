@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from anaxigraph.contracts import Graph
@@ -52,30 +53,37 @@ def findings_delta(graph: Graph, previous: Graph | None) -> list[dict[str, Any]]
         finding["change"] = (
             "introduced"
             if prior is None
-            else (
-                "worsened"
-                if finding["measured"] > prior["measured"]
-                else "improved"
-                if finding["measured"] < prior["measured"]
-                else "unchanged"
-            )
+            else "worsened"
+            if finding["measured"] > prior["measured"]
+            else "improved"
+            if finding["measured"] < prior["measured"]
+            else "unchanged"
+            if finding == prior
+            else "changed"
         )
         if prior:
             finding["previous_measured"] = prior["measured"]
         findings.append(finding)
-    return findings
+    return sorted(findings, key=lambda item: item["change"] in {"unchanged", "improved"})
 
 
 def change_review(
-    graph: Graph, previous: Graph | None, receipts: list[dict[str, Any]] | None
+    graph: Graph, previous: Graph | None, receipts: list[dict[str, Any]] | None, full: bool = False
 ) -> dict[str, Any]:
     changed = changed_paths(graph, previous)
+    base_id = previous.snapshot.id if previous else None
+    findings = findings_delta(graph, previous)
+    selected = findings if full else [item for item in findings if item["change"] != "unchanged"]
     return {
-        "base_snapshot_id": previous.snapshot.id if previous else None,
+        "base_snapshot_id": base_id,
         "candidate_snapshot_id": graph.snapshot.id,
         "changed_paths": changed[:100],
         "changed_total": len(changed),
-        "findings": findings_delta(graph, previous)[:50],
+        "findings": selected if full else selected[:50],
+        "findings_total": len(findings),
+        "findings_summary": dict(Counter(item["change"] for item in findings)),
+        "findings_truncated": not full and len(selected) > 50,
+        "findings_expand": {"full": True, "baseline_id": base_id},
         "checks": attribute_checks(receipts, graph.snapshot.id),
         "uncertainty": "Supplied checks are attributed reports. AnaxiGraph did not run target code; static facts do not prove behavior.",
     }

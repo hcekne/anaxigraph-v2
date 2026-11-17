@@ -13,19 +13,16 @@ finding here.
 from __future__ import annotations
 
 import math
-import threading
-import weakref
 from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from anaxigraph.analysis.cache import graph_cached
 from anaxigraph.analysis.charter import relations
 from anaxigraph.contracts import Graph
 
 _SKIP = {"__init__.py", "__main__.py", "conftest.py"}
 _TEXT_LIMIT = 1_000_000
-_CACHE: tuple[weakref.ReferenceType[Graph], dict[str, Any]] | None = None
-_LOCK = threading.Lock()
 LIMITATION = (
     "Families are found from resolved inheritance; a family built on duck typing or on a base "
     "class from an installed package is not seen. Files that name members as strings are seen "
@@ -50,7 +47,8 @@ def _implementers(graph: Graph, tests: set[str]) -> dict[tuple[str, str], set[st
     return found
 
 
-def _analyse(graph: Graph) -> dict[str, Any]:
+@graph_cached
+def _state(graph: Graph) -> dict[str, Any]:
     modules, raw = relations(graph)
     tests = {path for path, node in modules.items() if node.data.get("is_test")}
     bases = {node.id: node for node in graph.nodes if node.kind in {"class", "interface"}}
@@ -76,14 +74,6 @@ def _analyse(graph: Graph) -> dict[str, Any]:
         if family["registrars"]:
             closed.append(family)
     return {"modules": modules, "raw": raw, "tests": tests, "families": closed}
-
-
-def _state(graph: Graph) -> dict[str, Any]:
-    global _CACHE
-    with _LOCK:
-        if _CACHE is None or _CACHE[0]() is not graph:
-            _CACHE = (weakref.ref(graph), _analyse(graph))
-        return _CACHE[1]
 
 
 def check_reach(graph: Graph, paths: set[str] | list[str]) -> dict[str, Any]:

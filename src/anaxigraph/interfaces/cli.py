@@ -136,6 +136,7 @@ def parser() -> argparse.ArgumentParser:
                     help="Continue the existing task across new wording or commits",
                 )
         elif name == "validate":
+            command.add_argument("--full", action="store_true", help="Include all findings")
             command.add_argument("--receipts", type=Path, help="JSON array of check receipts")
             command.add_argument("--baseline-id", help="Compare against this retained snapshot")
         elif name == "request":
@@ -226,6 +227,7 @@ def dispatch(application: Any, args: argparse.Namespace) -> dict[str, Any]:
         return application.validate_change(
             _read_json(args.receipts, list),
             args.baseline_id,
+            args.full,
         )
     if args.command in {"tests", "record-tests"}:
         return _test_dispatch(application, args)

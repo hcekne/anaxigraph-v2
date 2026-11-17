@@ -49,7 +49,8 @@ def test_checkout_options_work_before_or_after_command(position: str, tmp_path: 
             "assess_plan",
             ("Add export", ["export.py"], None, False),
         ),
-        (["validate"], "validate_change", (None, None)),
+        (["validate"], "validate_change", (None, None, False)),
+        (["validate", "--full"], "validate_change", (None, None, True)),
         (["request", "fresh-eyes"], "analysis_request", ("fresh-eyes", None)),
         (["reviews", "--kind", "patterns"], "reviews", ("patterns", 12, 0)),
         (["run", "mapping"], "workflow_start", ("mapping", None, None, True)),
@@ -63,7 +64,7 @@ def test_checkout_options_work_before_or_after_command(position: str, tmp_path: 
             "prepare_change",
             ("Add export", 12, "base", False),
         ),
-        (["validate", "--baseline-id", "base"], "validate_change", (None, "base")),
+        (["validate", "--baseline-id", "base"], "validate_change", (None, "base", False)),
     ],
 )
 def test_cli_uses_application_contract(arguments, operation, expected) -> None:
@@ -83,7 +84,7 @@ def test_cli_reads_submission_and_receipts_without_reinterpreting_them(tmp_path:
     receipts = [{"command": "pytest", "exit_status": 0, "fingerprint": "current"}]
     receipts_path.write_text(json.dumps(receipts))
     dispatch(application, parser().parse_args(["validate", "--receipts", str(receipts_path)]))
-    assert application.calls[-1] == ("validate_change", (receipts, None))
+    assert application.calls[-1] == ("validate_change", (receipts, None, False))
     with pytest.raises(ValueError, match="JSON list"):
         dispatch(application, parser().parse_args(["validate", "--receipts", str(result_path)]))
 
@@ -122,8 +123,9 @@ def test_dashboard_assets_and_bounded_http_dispatch() -> None:
             "assess_plan",
             ["Add export", ["export.py"], None, False],
         ),
-        ("validate", {}, "validate_change", [None, None]),
-        ("validate", {"baseline_id": "base"}, "validate_change", [None, "base"]),
+        ("validate", {}, "validate_change", [None, None, False]),
+        ("validate", {"full": True}, "validate_change", [None, None, True]),
+        ("validate", {"baseline_id": "base"}, "validate_change", [None, "base", False]),
         (
             "prepare",
             {"task": "Add export", "baseline_id": "base"},

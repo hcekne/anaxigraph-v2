@@ -166,6 +166,11 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
   annotations/search. The application keeps at most one materialized current graph in memory;
   knowledge mutations from any process invalidate it. Request bookkeeping does not force a graph
   reload. Own annotation writes update cached modules only when no concurrent writer intervened.
+- Derived relation and architecture views keep at most two graph identities per view, allowing
+  baseline/candidate comparisons without repeatedly rebuilding the same facts. Keys are weak
+  references; returned module facts remain copies. One structural-finding producer uses those
+  canonical facts. Compact inspection derives relationships once, then pages within its prose
+  budget without recomputing edges or dropping their original witnesses.
 - The default database ceiling is 100 MB. Writes fail atomically and preserve the last valid map.
   SQLite rollback journals are temporary; retained data is not an unbounded history archive.
 - Compressed requests and current per-scope reviews live within the database budget. Current workflow

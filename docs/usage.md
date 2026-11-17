@@ -117,6 +117,12 @@ migrate an already running legacy service.
 5. **Validate** the candidate against the original baseline. Supply check commands, exit
    codes and the candidate snapshot ID. Explain unresolved findings or missing checks.
    Validation compares observed private accesses, cycles and consumers with the pinned baseline.
+   Its default `findings` show introduced, worsened, changed or improved observations; unchanged
+   observations are counted in `findings_summary`. Changed evidence remains visible even when
+   the count stays equal. New concerns precede improvements. `findings_truncated` reports the
+   50-item default limit. Pass the returned `findings_expand` arguments, use CLI `validate --full`,
+   or select **Include unchanged structural findings** in the dashboard for the complete list.
+   This changes the display, not test selection, check status or the comparison baseline.
    Persisted proposal obligations remain unverified: neither a disposition nor the disappearance
    of a static warning establishes that the proposal's behavior was implemented.
 

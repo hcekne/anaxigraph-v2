@@ -5,6 +5,7 @@ import json
 from fastapi.testclient import TestClient
 from test_interfaces import RecordingApplication
 
+from anaxigraph.analysis import guidance
 from anaxigraph.analysis.guidance import neighborhood, prepare
 from anaxigraph.application import Application
 from anaxigraph.contracts import Edge, Graph, Node, Snapshot
@@ -12,7 +13,7 @@ from anaxigraph.interfaces.cli import dispatch, parser
 from anaxigraph.interfaces.http import create_app
 
 
-def test_neighborhood_pages_all_relations_with_their_original_evidence():
+def test_neighborhood_pages_all_relations_with_their_original_evidence(monkeypatch):
     owner = Node(
         "module:owner.py",
         "module",
@@ -44,9 +45,21 @@ def test_neighborhood_pages_all_relations_with_their_original_evidence():
         tuple(Edge(n.id, owner.id, "imports", n.path) for n in callers)
         + tuple(Edge(owner.id, n.id, "imports", owner.path) for n in callers[:40]),
     )
+    original = guidance._entity_relations
+    derivations = []
+
+    def derive(*args):
+        derivations.append(args[1].id)
+        return original(*args)
+
+    monkeypatch.setattr(guidance, "_entity_relations", derive)
     found, offset = [], 0
     while True:
+        calls = len(derivations)
         result = neighborhood(graph, owner.id, limit=30, offset=offset)
+        assert len(derivations) == calls + 1
+        assert len(result["incoming"] + result["outgoing"]) < 30
+        assert result["incoming_total"] == 80 and result["outgoing_total"] == 40
         assert len(json.dumps(result, indent=2).encode()) <= 8000
         assert result["contracts"][0]["evidence"] == [{"path": "owner.py", "line": 1}]
         assert "detail" not in result["entity"]["data"]["annotation"]
@@ -188,7 +201,7 @@ def test_real_mcp_schema_rejects_malformed_inputs_before_application_work():
         assert not result.get("isError")
         assert app.calls[-1] == (
             "validate_change",
-            ([{"command": "pytest", "exit_code": 0, "snapshot_id": "current"}], None),
+            ([{"command": "pytest", "exit_code": 0, "snapshot_id": "current"}], None, False),
         )
 
 
