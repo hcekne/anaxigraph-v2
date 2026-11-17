@@ -12,7 +12,7 @@ from dataclasses import asdict
 from importlib.resources import files
 from typing import Any
 
-from anaxigraph.contracts import SOURCE_REVIEW_KINDS, Graph, Node
+from anaxigraph.contracts import Graph, Node
 
 from .architecture import architecture_packet, architecture_scopes
 from .behavior import check_behaviors as _check_behaviors
@@ -20,6 +20,7 @@ from .delivery import delivery_packet
 from .patterns import production_modules
 
 KINDS = {"annotate", "pattern-screen", "patterns", "fresh-eyes", "architecture", "delivery"}
+SOURCE_REVIEW_KINDS = frozenset({"pattern-screen", "patterns", "architecture"})
 DEFAULT_PACKET_BYTES = 2_000_000
 DEFAULT_RESULT_BYTES = 8_000_000
 

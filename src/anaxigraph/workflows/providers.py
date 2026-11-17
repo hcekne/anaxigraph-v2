@@ -18,7 +18,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from anaxigraph.contracts import SOURCE_REVIEW_KINDS
+from anaxigraph.analysis.packets import SOURCE_REVIEW_KINDS
 from anaxigraph.evidence import provider_usage
 
 NO_TOOLS = (

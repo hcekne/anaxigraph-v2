@@ -16,7 +16,7 @@ from anaxigraph.analysis import (
 from anaxigraph.analysis.architecture import reconcile_architecture
 from anaxigraph.analysis.architecture_guidance import proposals as scout_proposals
 from anaxigraph.analysis.delivery import capture_coverage, reconcile_delivery
-from anaxigraph.analysis.packets import catalogue, request_modules
+from anaxigraph.analysis.packets import SOURCE_REVIEW_KINDS, catalogue, request_modules
 from anaxigraph.analysis.patterns import (
     actionable_opportunities,
     excluded_modules,
@@ -33,7 +33,7 @@ from anaxigraph.application.context import (
     dependency_implementation_fingerprints,
 )
 from anaxigraph.application.reuse import reuse_analysis, review_context
-from anaxigraph.contracts import SOURCE_REVIEW_KINDS, Graph, Node
+from anaxigraph.contracts import Graph, Node
 from anaxigraph.indexing import capture_sources
 
 if TYPE_CHECKING:
