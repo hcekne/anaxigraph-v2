@@ -127,7 +127,9 @@ def parser() -> argparse.ArgumentParser:
                 )
             else:
                 command.add_argument("--limit", type=int, default=12)
-                command.add_argument("--baseline-id", help="Explicitly pin a new change baseline")
+                command.add_argument(
+                    "--baseline-id", help="Pin a snapshot ID, or current for a fresh task"
+                )
                 command.add_argument(
                     "--continue-task",
                     action="store_true",

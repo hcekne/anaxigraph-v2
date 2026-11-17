@@ -414,10 +414,11 @@ class Application:
         task_key = hashlib.sha256(" ".join(task.casefold().split()).encode()).hexdigest()
         pinned = self.store.pin_baseline(
             str(self.root),
-            baseline_id,
+            graph.snapshot.id if baseline_id == "current" else baseline_id,
             task_key=task_key,
             revision=graph.snapshot.revision,
             continue_task=continue_task,
+            restart=baseline_id == "current",
         )
         matched_paths = {match["path"] for match in matches}
         owner_ids = tuple(
@@ -444,7 +445,12 @@ class Application:
             else self.store.revision(str(self.root), pinned),
         )
         result["task_id"] = self.evidence.start_task(
-            task, graph.snapshot.revision, graph.snapshot.id, pinned, continue_task=continue_task
+            task,
+            graph.snapshot.revision,
+            graph.snapshot.id,
+            pinned,
+            continue_task=continue_task,
+            restart=baseline_id == "current",
         )
         self.evidence.record(
             "context_supplied",

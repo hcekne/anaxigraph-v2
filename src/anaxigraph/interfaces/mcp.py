@@ -98,7 +98,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
     def prepare_change(
         task: str, limit: int = 12, baseline_id: str | None = None, continue_task: bool = False
     ) -> dict:
-        """Find existing responsibilities, reuse opportunities and checks before editing."""
+        """Find owners/reuse/checks; baseline_id='current' starts fresh from working files."""
         return application.prepare_change(task, limit, baseline_id, continue_task)
 
     @tool

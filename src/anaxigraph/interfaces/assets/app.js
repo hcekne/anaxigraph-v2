@@ -593,6 +593,14 @@ function renderPlanAssessment(result, request) {
   parent.append(save);
 }
 
+async function prepareChange(reset = false) {
+  const task = $("#change-task").value;
+  if (!task.trim()) throw new Error("Describe your intended change first.");
+  const brief = await api("/api/prepare", { task, ...(reset ? { baseline_id: "current" } : {}) });
+  $("#change-brief").textContent = formatJSON(brief);
+  $("#change-baseline").textContent = `Pinned baseline ${brief.baseline_id} · preserved across scans until you start another change.`;
+}
+
 document.querySelectorAll("[data-run]").forEach((button) => button.addEventListener("click", () => action(button, () => startWorkflow(button.dataset.run))));
 $("#load-workflows").addEventListener("click", () => action($("#load-workflows"), refreshWorkflows));
 $("#save-workflow-settings").addEventListener("click", () => action($("#save-workflow-settings"), async () => {
@@ -622,21 +630,10 @@ $("#previous").addEventListener("click", () => { state.offset = Math.max(0, stat
 $("#next").addEventListener("click", () => { state.offset += state.limit; refreshModules().catch((error) => notice(error.message, true)); });
 $("#load-reviews").addEventListener("click", () => action($("#load-reviews"), refreshReviews));
 $("#more-reviews").addEventListener("click", () => action($("#more-reviews"), () => refreshReviews(true)));
-$("#new-change-baseline").addEventListener("click", () => action($("#new-change-baseline"), async () => {
-  if (!$("#change-task").value.trim()) throw new Error("Describe the new change first.");
-  const status = await api("/api/status");
-  if (!status.snapshot) throw new Error("Refresh the structural map first.");
-  const brief = await api("/api/prepare", { task: $("#change-task").value, baseline_id: status.snapshot.id });
-  $("#change-brief").textContent = formatJSON(brief);
-  $("#change-baseline").textContent = `Pinned baseline ${brief.baseline_id} · preserved across scans until you start another change.`;
-}));
+$("#new-change-baseline").addEventListener("click", () => action($("#new-change-baseline"), () => prepareChange(true)));
 $("#prepare-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  action(event.submitter, async () => {
-    const brief = await api("/api/prepare", { task: $("#change-task").value });
-    $("#change-brief").textContent = formatJSON(brief);
-    $("#change-baseline").textContent = `Pinned baseline ${brief.baseline_id} · preserved across scans until you start another change.`;
-  });
+  return action(event.submitter, () => prepareChange());
 });
 $("#assess-form").addEventListener("submit", (event) => {
   event.preventDefault();

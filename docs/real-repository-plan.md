@@ -257,3 +257,16 @@ authorize narrow checks after a change. This repairs an observed omission; it do
 complete test recall. Separately launched shards and the conservative xdist-controller fallback
 remain unchanged. Production is 15,000 lines under the existing ceiling. No target suite or paid
 model run was started for this qualification.
+
+A parallel-worker prototype captured Python startup and deferred final worker reports through
+process exit. Tracing showed that both workers also run a native `uname -p` platform probe. That
+process's reads remain unobserved, so full checks still apply. The prototype was retained outside
+the repository rather than shipped as a narrow-selection improvement. No command-name exemption
+was introduced. Separately launched shards still need a completion protocol.
+
+The same audit found the dashboard's new-baseline button pinning a cached status snapshot after
+source edits. It now asks the shared preparation operation to capture the working files directly,
+in one request. Explicit restart clears prior plan intent and starts a new trial identity; ordinary
+preparation stays pinned. The captured source identity survives an interleaved scan by another
+process. CLI, MCP, real HTTP responses and dashboard handlers have regression coverage. Shared
+snapshot-retention normalization removes duplication and keeps production at 15,000 lines.

@@ -205,6 +205,7 @@ class Evidence:
         baseline_id: str,
         *,
         continue_task: bool = False,
+        restart: bool = False,
     ) -> str | None:
         if not self.enabled:
             return None
@@ -216,13 +217,14 @@ class Evidence:
             "starting_revision": revision,
             "starting_snapshot_id": snapshot_id,
             "baseline_id": baseline_id,
-            "continued": continue_task,
+            "continued": continue_task and not restart,
         }
         _bounded(payload)
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             existing = self._get(db, "active_task")
-            if existing and (continue_task or self._get(db, "active_task_key") == key):
+            continuing = existing and (continue_task or self._get(db, "active_task_key") == key)
+            if continuing and not restart:
                 self._set(db, "active_task_key", key)
                 return existing
             identity = uuid.uuid4().hex

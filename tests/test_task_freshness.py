@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import sqlite3
 import subprocess
+from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from anaxigraph.analysis.packets import _check_behaviors
 from anaxigraph.application import Application
 from anaxigraph.indexing import index
 from anaxigraph.indexing.python import parse_module
+from anaxigraph.interfaces import cli
+from anaxigraph.interfaces.http import create_app
+from anaxigraph.interfaces.mcp import create_mcp
 from anaxigraph.storage import Store
 from anaxigraph.storage.schema import SCHEMA_VERSION
 
@@ -73,6 +80,114 @@ def test_plan_rewording_cannot_rebase_an_in_progress_change(tmp_path):
     assert plan["task_id"] == initial["task_id"]
     assert any(f["change"] == "introduced" for f in app.validate_change()["findings"])
     assert app.prepare_change("Begin a separate feature")["baseline_id"] != initial["baseline_id"]
+
+
+@pytest.mark.parametrize("interface", ["application", "cli", "mcp"])
+def test_current_baseline_captures_working_files_and_then_stays_pinned(tmp_path, capsys, interface):
+    app = application(tmp_path)
+    task = "Improve service"
+    initial = app.prepare_change(task)["baseline_id"]
+    source = app.root / "service.py"
+    source.write_text("\n".join(f"value_{n} = {n}" for n in range(612)))
+    assert app.status()["snapshot"]["id"] == initial  # Saved status does not refresh source.
+    if interface == "application":
+        fresh = app.prepare_change(task, baseline_id="current")
+    elif interface == "cli":
+        assert cli.main(["prepare", task, "--repo", str(app.root), "--baseline-id", "current"]) == 0
+        fresh = json.loads(capsys.readouterr().out)
+    else:
+
+        async def call():
+            result = await create_mcp(app).call_tool(
+                "prepare_change", {"task": task, "baseline_id": "current"}
+            )
+            return json.loads(result[0].text)
+
+        fresh = asyncio.run(call())
+    assert fresh["baseline_id"] == fresh["snapshot_id"] != initial
+    source.write_text(source.read_text() + "\nfollowup = 1\n")
+    followup = app.prepare_change(task)
+    assert followup["baseline_id"] == fresh["baseline_id"] != followup["snapshot_id"]
+    assert any(f["change"] == "worsened" for f in app.validate_change()["findings"])
+
+
+@pytest.mark.parametrize("logging", [True, False])
+def test_explicit_current_baseline_resets_the_local_plan_even_without_source_edits(
+    tmp_path, logging
+):
+    app = application(tmp_path)
+    app.evidence.enabled = logging
+    assessed = app.assess_plan("Improve service", ["service.py"])
+    app.evidence.record(
+        "architecture_plan",
+        {
+            "baseline_id": assessed["baseline_id"],
+            "snapshot_id": assessed["snapshot_id"],
+            "status": "decisions_recorded",
+            "metrics": {"obligations": []},
+        },
+    )
+    assert app.validate_change()["architecture"]["status"] != "not_assessed"
+    fresh = app.prepare_change("Improve service", baseline_id="current", continue_task=True)
+    assert fresh["baseline_id"] == assessed["baseline_id"]
+    if logging:
+        assert fresh["task_id"] != assessed["task_id"]
+        assert app.evidence.latest("architecture_plan") is None
+        assert app.evidence.latest("task_started")["continued"] is False
+    assert app.validate_change()["architecture"]["status"] == "not_assessed"
+
+
+def test_current_baseline_stays_with_its_captured_source_when_another_process_scans(
+    tmp_path, monkeypatch
+):
+    app = application(tmp_path)
+    task = "Improve service"
+    app.prepare_change(task)
+    source = app.root / "service.py"
+    source.write_text(source.read_text() + "\nfirst = 1\n")
+    other = Application(app.root)
+    original = app.store.pin_baseline
+
+    def interleave(*args, **kwargs):
+        captured = other.store.current_id(str(app.root))
+        assert args[1] == captured
+        source.write_text(source.read_text() + "\nsecond = 2\n")
+        other.scan()
+        assert other.store.current_id(str(app.root)) != captured
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(app.store, "pin_baseline", interleave)
+    prepared = app.prepare_change(task, baseline_id="current")
+    assert prepared["baseline_id"] == prepared["snapshot_id"]
+    assert prepared["baseline_id"] != other.status()["snapshot"]["id"]
+
+
+def test_dashboard_refreshes_a_new_baseline_in_one_request_and_preserves_normal_preparation(
+    tmp_path,
+):
+    app = application(tmp_path)
+    task = "Improve service"
+    initial = app.prepare_change(task)["baseline_id"]
+    client = TestClient(create_app(app), base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+    source = app.root / "service.py"
+    source.write_text(source.read_text() + "\nfirst_change = 1\n")
+    assert client.get("/api/status").json()["snapshot"]["id"] == initial
+    fresh = client.post("/api/prepare", json={"task": task, "baseline_id": "current"})
+    assert fresh.status_code == 200, fresh.text
+    fresh = fresh.json()
+    assert fresh["baseline_id"] == fresh["snapshot_id"] != initial
+    source.write_text(source.read_text() + "\nfollowup = 2\n")
+    normal = client.post("/api/prepare", json={"task": task}).json()
+    assert normal["baseline_id"] == fresh["baseline_id"] != normal["snapshot_id"]
+    restarted = client.post("/api/prepare", json={"task": task, "baseline_id": "current"}).json()
+    assert restarted["baseline_id"] == restarted["snapshot_id"] == normal["snapshot_id"]
+    packets = tmp_path / "prepare-packets.json"
+    packets.write_text(json.dumps([fresh, normal, restarted]))
+    script = Path(__file__).with_name("prepare_dashboard.cjs")
+    done = subprocess.run(
+        ["node", str(script), str(packets)], capture_output=True, text=True, check=True
+    )
+    assert json.loads(done.stdout)["requests"] == 3
 
 
 def test_dictionary_words_remain_valid_behavior_without_an_allowlist(tmp_path):

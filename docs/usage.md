@@ -122,7 +122,11 @@ migrate an already running legacy service.
 
 Start a separate task with a new `prepare_change`. Use `continue_task=true` or an explicit
 `baseline_id` when continuing across changed wording or commits. Scanning alone does not advance
-the pinned baseline. Source changes during a model run require a new run for the new snapshot; compatible accepted
+the pinned baseline. To start over from the working files, pass `baseline_id="current"` (CLI:
+`--baseline-id current`). The dashboard's **Start new change from current files** action uses this single capture;
+it clears the previous task plan even when the files and task wording are unchanged. Ordinary
+preparation keeps the original baseline. Status shows saved state and does not refresh source.
+Source changes during a model run require a new run for the new snapshot; compatible accepted
 batches are reused. Stronger models cannot fix stale inputs.
 Previously assessed obligations remain with the task after source edits. Reordering review findings
 preserves their IDs; changing a finding's content requires a fresh decision. A new task clears the

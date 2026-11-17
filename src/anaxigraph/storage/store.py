@@ -175,11 +175,12 @@ class Store:
         task_key: str | None = None,
         revision: str | None = None,
         continue_task: bool = False,
+        restart: bool = False,
     ) -> str:
         """Pin one change, rebasing for a new declared task or base revision.
 
-        Low-level callers without task identity keep explicit-pin behavior. Application
-        callers supply the task and HEAD; continuation deliberately retains the pin.
+        Restart begins a new task at the supplied snapshot. Other low-level callers keep
+        explicit pins; task/HEAD identity and deliberate continuation retain the pin.
         """
         root = _root(root)
         if snapshot_id is not None and (not isinstance(snapshot_id, str) or not snapshot_id):
@@ -196,6 +197,7 @@ class Store:
             selected = snapshot_id or current["current_id"]
             continuing = bool(
                 prior
+                and not restart
                 and (
                     continue_task
                     or task_key is None
@@ -224,13 +226,8 @@ class Store:
                     revision if task_key is not None else prior.get("revision", revision),
                 ),
             )
-            if old is None or old["snapshot_id"] != selected:
-                keep = tuple(
-                    dict.fromkeys(
-                        x for x in (current["current_id"], current["previous_id"], selected) if x
-                    )
-                )
-                self._prune(db, root, keep)
+            if prior.get("snapshot_id") != selected:
+                self._prune(db, root, (current["current_id"], current["previous_id"], selected))
             return selected
 
     @contextmanager
@@ -349,7 +346,8 @@ class Store:
         )
 
     @staticmethod
-    def _prune(db: sqlite3.Connection, root: str, keep: tuple[str, ...]) -> None:
+    def _prune(db: sqlite3.Connection, root: str, keep: tuple[str | None, ...]) -> None:
+        keep = tuple(dict.fromkeys(key for key in keep if key))
         placeholders = ",".join("?" for _ in keep)
         db.execute(
             f"DELETE FROM snapshots WHERE root=? AND id NOT IN ({placeholders})", (root, *keep)
@@ -456,12 +454,7 @@ class Store:
             baseline = db.execute(
                 "SELECT snapshot_id FROM baselines WHERE root=?", (root,)
             ).fetchone()
-            keep = tuple(
-                dict.fromkeys(
-                    x for x in (graph.snapshot.id, previous, baseline[0] if baseline else None) if x
-                )
-            )
-            self._prune(db, root, keep)
+            self._prune(db, root, (graph.snapshot.id, previous, baseline[0] if baseline else None))
             self._changed(db, root)
             version = db.execute(
                 "SELECT version FROM knowledge_versions WHERE root=?", (root,)
