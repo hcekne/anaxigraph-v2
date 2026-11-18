@@ -273,6 +273,16 @@ def _import_fingerprint(tree: ast.Module) -> str:
     return hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
 
 
+def keeps_results(source: bytes) -> bool:
+    """Whether any function of the source may keep what it computed beyond its call."""
+    try:
+        nodes = list(ast.walk(ast.parse(source)))
+    except (SyntaxError, ValueError, RecursionError):
+        return True  # Unreadable: assume the most.
+    functions = (ast.FunctionDef, ast.AsyncFunctionDef)
+    return any(isinstance(node, functions) and _outlives_its_call(node) for node in nodes)
+
+
 def runs_bodies(source: bytes, lines: set[int]) -> bool:
     """Whether any of these executed lines lies inside a function body of the source."""
     try:

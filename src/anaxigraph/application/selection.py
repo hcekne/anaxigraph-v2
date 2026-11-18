@@ -6,6 +6,7 @@ import json
 import os
 import re
 import uuid
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -92,8 +93,10 @@ def record_tests(
         raise ValueError("The run names no test file of this checkout; check --run-root")
     target = app.root / _FOLDER / f"{suite}.json"
     _save(target, record)
-    return {
-        "suite": suite,
+    blind = Counter(path.rpartition("/")[0] + "/" for path in record["unmeasured"])
+    return reach(record, app._live(), []) | {
+        "loaded_but_not_measured": dict(blind.most_common(10)),
+        "next_step": _MEASURE if blind else None,
         "path": str(target),
         "test_files": len(record["tests"]),
         "sources_executed": len(record["executed"]),
@@ -151,6 +154,7 @@ def observed_tests(app: Any, graph: Any, path: str, limit: int, offset: int) -> 
     return rows
 
 
+_MEASURE = "Name those folders with --cov, and with --scope where they lie outside the suite's folders, then record again."
 _REACH = (
     "Share of the suite's recorded time a change would pick; every_change is picked whatever "
     "changes. Where top_level is well above inside_function, a new or changed name in that "
@@ -162,7 +166,7 @@ _REACH = (
 def test_reach(app: Any, graph: Graph, paths: list[str]) -> list[dict[str, Any]]:
     """What a change to each of these files would cost in tests, per recorded suite."""
     rows = [reach(record, graph, paths) for record in _records(app)]
-    return [row | {"advice": _REACH} for row in rows if row["files"]]
+    return [row | {"advice": _REACH} for row in rows if row.get("files")]
 
 
 def _shadow(

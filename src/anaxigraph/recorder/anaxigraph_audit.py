@@ -159,6 +159,16 @@ def _readers(frame: Any) -> list[str]:
     return [_TEST[0]] + ["+" + path for path in callers if path != _TEST[0]]
 
 
+def _shown(frame: Any) -> bool:
+    """Whether Python fetches source to show a line of it, in a traceback or a warning. The
+    code it belongs to ran in the same test, so the read adds nothing to what executed."""
+    names = set()
+    while frame is not None and not frame.f_code.co_filename.startswith(_ROOT + os.sep):
+        names.add(os.path.basename(frame.f_code.co_filename))
+        frame = frame.f_back
+    return "linecache.py" in names and not names.isdisjoint({"traceback.py", "warnings.py"})
+
+
 def _command(words: list[str], folder: str) -> tuple[str | None, str, list[str]]:
     """A git command's name, the folder it works in after its own options, and the absolute
     paths it is given, also as the value of an option."""
@@ -196,13 +206,19 @@ def _elsewhere(event: str, args: tuple) -> bool:
     return (command in {"init", "clone"} and words[-1] in given) or _relative(folder) is None
 
 
-def _note(kind: str, event: str, args: tuple, frame: Any) -> None:
+def _named(kind: str, event: str, args: tuple, frame: Any) -> str | None:
+    """The path an event is about, when it counts: "" for a process that may read anything."""
     if kind == "started":
-        path: str | None = None if _elsewhere(event, args) else ""
-    elif kind == "opened" and isinstance(args[1], str) and args[1][:1] in {"w", "x"}:
-        path = None  # Created or replaced, not read.
-    else:
-        path = _relative(args[0].co_filename if kind == "loaded" else args[0])
+        return None if _elsewhere(event, args) else ""
+    if kind == "opened" and isinstance(args[1], str) and args[1][:1] in {"w", "x"}:
+        return None  # Created or replaced, not read.
+    path = _relative(args[0].co_filename if kind == "loaded" else args[0])
+    shown = kind == "opened" and path is not None and path.endswith(".py") and _shown(frame)
+    return None if shown else path
+
+
+def _note(kind: str, event: str, args: tuple, frame: Any) -> None:
+    path = _named(kind, event, args, frame)
     if path is None:
         return
     if kind in {"opened", "listed"} and _importing(frame):

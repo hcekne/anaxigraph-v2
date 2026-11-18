@@ -18,7 +18,7 @@ from typing import Any
 from xml.etree import ElementTree
 
 from anaxigraph.contracts import Graph
-from anaxigraph.indexing.python import runs_bodies
+from anaxigraph.indexing.python import keeps_results, runs_bodies
 from anaxigraph.indexing.test_run import verify
 
 FORMAT = "anaxigraph-test-record-v2"
@@ -92,7 +92,7 @@ def _executed(
     database: Path, known: dict[str, str], prefix: str, scope: tuple[str, ...], run_root: str
 ) -> tuple[dict[str, set[str]], dict[str, set[int]], set[str]]:
     """Test files by the source file they executed, for every source the suite loaded the
-    lines that ran outside any test, and every source coverage was measuring."""
+    lines that ran outside any test, and every file of the checkout coverage was measuring."""
 
     def test_of(context: str) -> str:
         name = context.partition("|")[0].partition("::")[0]
@@ -109,7 +109,7 @@ def _executed(
             if test in known and test != source:
                 executed.setdefault(source, set()).add(test)
     measured = {name.removeprefix(prefix) for name in files.values()}
-    return executed, loaded, {path for path in measured if path in known and path.startswith(scope)}
+    return executed, loaded, {path for path in measured if path in known}
 
 
 def _at_import(root: Path, loaded: dict[str, set[int]]) -> list[str]:
@@ -251,8 +251,24 @@ def _marked(
     return result
 
 
+def _beyond_coverage(
+    graph: Graph, read: dict | None, seen: set[str]
+) -> tuple[list[str], Callable[[str], bool]]:
+    """Code, other than tests, that the run loaded in its own process without coverage seeing
+    it; and whether a module that started a process stands for its other tests: a test file
+    or helper does, and so does code with a function that caches or sets shared state."""
+    root = Path(graph.snapshot.root)
+    tested = {node.path for node in graph.nodes if node.kind == "module" and node.data["is_test"]}
+    loaded = (read or {}).get("loaded", {}).keys() - seen - tested
+    blind = sorted(path for path in loaded if path.endswith(".py"))
+    return blind, lambda path: path in tested or keeps_results((root / path).read_bytes())
+
+
 def _attributed(
-    reads: dict[str, dict[str, set[str]]], position: dict[str, int], known: dict[str, str]
+    reads: dict[str, dict[str, set[str]]],
+    position: dict[str, int],
+    known: dict[str, str],
+    sharing: Callable[[str], bool],
 ) -> dict[str, Any]:
     """Readers as test numbers, and as modules: `by_modules` for what was read while a module
     was imported, `through` for the code that did the reading inside a test.
@@ -272,7 +288,7 @@ def _attributed(
     started = reads["started"].get("", set())
     result["started"] = sorted(position[reader] for reader in started & position.keys())
     modules = {reader[1:] for reader in started if reader.startswith("+") and reader[1:] in known}
-    result["process_modules"] = sorted(modules)
+    result["process_modules"] = sorted(filter(sharing, modules))
     result["unattributed_processes"] = sorted(
         started - position.keys() - {"+" + module for module in modules}
     )
@@ -307,7 +323,7 @@ def _unloaded(
     if read is not None:
         idle = {path for path in known if path.startswith(scope) and path.endswith(".py")}
         return sorted(idle - ran - read["loaded"].keys())
-    return sorted(path for path in measured - ran if runs(path))
+    return sorted(path for path in measured - ran if path.startswith(scope) and runs(path))
 
 
 def _fingerprints(graph: Graph, loaded: dict[str, set[int]]) -> tuple[dict[str, Any], list[str]]:
@@ -366,6 +382,7 @@ def record_from_coverage(
     seconds, failed = junit_cases(reports, run_root, known)
     read = _recorded_reads(reads, known, executed)
     idle = _unloaded(Path(graph.snapshot.root), folders, known, set(loaded), measured, read)
+    blind, sharing = _beyond_coverage(graph, read, measured | executed.keys())
     tests = _test_files(seconds, executed, read or {}, known)
     position = {test: index for index, test in enumerate(tests)}
     imports, at_import = _fingerprints(graph, loaded)
@@ -382,10 +399,11 @@ def record_from_coverage(
         "imports": imports,
         "ran_at_import": at_import,
         "unloaded": idle,
+        "unmeasured": blind,
         "tests": tests,
         "seconds": [round(seconds.get(test, 0.0), 3) for test in tests],
         "failed": sorted(position[test] for test in failed),  # Already failing when recorded.
         "failed_cases": {path: sorted(cases) for path, cases in failed.items()},
         "executed": {path: sorted(map(position.__getitem__, by)) for path, by in executed.items()},
-        "reads": _attributed(read, position, known) if read else None,
+        "reads": _attributed(read, position, known, sharing) if read else None,
     }

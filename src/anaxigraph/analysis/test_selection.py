@@ -225,6 +225,11 @@ class _Selection:
         elif not self.users.get(path) and not read:
             self.everything.append(f"{path}: {what}, and nothing imports it")
 
+    def _outside(self, path: str) -> None:
+        """Outside the suite's folders only what a test read counts, unless it ran unmeasured."""
+        if path in self.record.get("unmeasured", ()):
+            self.everything.append(f"{path}: loaded by the recorded run, but not measured")
+
     def change(self, path: str) -> None:
         node = self.modules.get(path)
         read = self.read(path)
@@ -233,7 +238,7 @@ class _Selection:
             self.everything.append(f"{path}: shared installation or CI setup changed")
             return
         if not path.startswith(self.scope):
-            return  # Outside the suite's folders only what a test read counts.
+            return self._outside(path)
         if python and path not in self.files:
             self.everything.append(f"{path}: removed, and what still imports it is not recorded")
         elif _installs(path):
@@ -267,11 +272,13 @@ def _unseen(selection: _Selection, tests: list[str]) -> None:
     started = selection.numbered(reads.get("started", ()))
     selection.add("(anything)", "tests that started another process", started)
     for module in reads.get("process_modules", ()):
-        if module not in record["executed"]:
-            selection.everything.append(f"Process-starting code was not measured: {module}")
-        selection.add(
-            module, "tests of code that started another process", selection.executed(module)
-        )
+        found = selection.executed(module)
+        if module not in record["executed"]:  # Not measured: the tests of what uses it.
+            found, lost = selection.consumers(module)
+            found |= selection._direct(module) or set()
+            if lost or not module.startswith(selection.scope):
+                selection.everything.append(f"Process-starting code was not measured: {module}")
+        selection.add(module, "tests of code that started another process", found)
     if reads.get("unattributed_processes"):
         selection.everything.append(
             "Unobserved Python startup hooks require full checks"
@@ -341,7 +348,7 @@ def reach(record: dict[str, Any], graph: Graph, paths: list[str]) -> dict[str, A
     seconds = dict(zip(base.tests, record.get("seconds") or []))
     total = sum(seconds.get(test, 0.0) for test in tests) or 1.0
 
-    def share(path: str | None, imports: dict[str, Any]) -> float:
+    def after(path: str | None, imports: dict[str, Any]) -> tuple[float, list[str]]:
         one = copy.copy(base)
         one.record = record | {"imports": imports}
         one.picked, one.reasons, one.everything = set(), [], []
@@ -349,16 +356,18 @@ def reach(record: dict[str, Any], graph: Graph, paths: list[str]) -> dict[str, A
             one.change(path)
         _unseen(one, tests)
         spent = sum(seconds.get(test, 0.0) for test in one.picked & set(tests))
-        return 1.0 if one.everything else round(spent / total, 3)
+        return (1.0 if one.everything else round(spent / total, 3)), one.everything[:3]
 
     known = record["imports"]
-    files = [
+    rows = [
         {
             "path": path,
-            "inside_function": share(path, known),
-            "top_level": share(path, known | {path: "changed"} if path in known else known),
+            "inside_function": after(path, known)[0],
+            "top_level": after(path, known | {path: "changed"})[0],
         }
         for path in paths
         if path in record["files"] and path.startswith(base.scope)
     ]
-    return {"suite": record["suite"], "every_change": share(None, known), "files": files}
+    share, why = after(None, known)
+    found = {"suite": record["suite"], "every_change": share, "whole_suite_because": why}
+    return found | {"files": rows} if paths else found

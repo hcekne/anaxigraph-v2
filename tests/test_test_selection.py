@@ -180,6 +180,49 @@ FILES = {
         "warnings.warn('soon', DeprecationWarning, stacklevel=1)\n\n\ndef test_notes():\n"
         "    assert Path(__file__).parents[1].joinpath('notes.md').read_text()\n"
     ),
+    # A traceback is formatted inside a function: Python reads the source of its frames to
+    # show their lines. Another test runs the same module without any traceback.
+    "shop/pkg/strict.py": "def check(value):\n    raise ValueError(value)\n",
+    "shop/pkg/noisy.py": (
+        "import traceback\n\nfrom pkg.strict import check\n\n\ndef explain():\n    try:\n"
+        "        check('no')\n    except ValueError:\n        return traceback.format_exc()\n\n\n"
+        "def quiet():\n    return 'ok'\n"
+    ),
+    "shop/tests/test_noisy.py": (
+        "from pkg.noisy import explain\n\n\ndef test_explain():\n"
+        "    assert 'ValueError' in explain()\n"
+    ),
+    "shop/tests/test_quiet.py": (
+        "from pkg.noisy import quiet\n\n\ndef test_quiet():\n    assert quiet() == 'ok'\n"
+    ),
+    # A test helper that starts a process, and code outside the suite's folders that a test
+    # loads in its own process: coverage measures neither.
+    "shop/tests/launcher.py": (
+        "import subprocess\nimport sys\n\n\ndef answer():\n"
+        "    done = subprocess.run([sys.executable, '-c', 'print(5)'], capture_output=True)\n"
+        "    return int(done.stdout)\n"
+    ),
+    "shop/tests/test_launch.py": (
+        "from launcher import answer\n\n\ndef test_answer():\n    assert answer() == 5\n"
+    ),
+    # Code that starts a process and keeps nothing of it: its other test shares no result.
+    "shop/pkg/shell.py": (
+        "import subprocess\nimport sys\n\n\ndef run():\n"
+        "    done = subprocess.run([sys.executable, '-c', 'print(1)'], capture_output=True)\n"
+        "    return int(done.stdout)\n\n\ndef twice(value):\n    return value * 2\n"
+    ),
+    "shop/tests/test_shell_run.py": (
+        "from pkg.shell import run\n\n\ndef test_run():\n    assert run() == 1\n"
+    ),
+    "shop/tests/test_shell_twice.py": (
+        "from pkg.shell import twice\n\n\ndef test_twice():\n    assert twice(2) == 4\n"
+    ),
+    "extras/kit.py": "def kit():\n    return 3\n",
+    "shop/tests/test_kit.py": (
+        "import sys\nfrom pathlib import Path\n\n"
+        "sys.path.insert(0, str(Path(__file__).parents[2] / 'extras'))\n\n"
+        "import kit  # noqa: E402\n\n\ndef test_kit():\n    assert kit.kit() == 3\n"
+    ),
     "README.md": "Shop.\n",
     # The suite is started from a file of the checkout, as a .venv/bin/pytest script would be.
     "shop/run.py": "import sys\n\nimport pytest\n\nsys.exit(pytest.main(sys.argv[1:]))\n",
@@ -192,9 +235,9 @@ FILES = {
     ),
 }
 T = "shop/tests/test_{}.py".format
-TOTAL = 22  # Test files in the fixture.
+TOTAL = 28  # Test files in the fixture.
 # Selected whenever anything changed: no recorded input, and a process the record cannot see.
-ALWAYS = [T("readme"), T("tool"), T("tracked")]
+ALWAYS = [T("kit"), T("launch"), T("readme"), T("shell_run"), T("tool"), T("tracked")]
 
 
 def chosen(*names: str) -> list[str]:
@@ -330,7 +373,8 @@ def test_a_change_inside_a_function_picks_the_tests_that_executed_the_file(check
     assert suite["status"] == "selected"
     # With them the tests whose inputs the record cannot name, as for every change.
     assert suite["test_files"] == chosen("orders")
-    assert suite["selected"] == 4 and suite["total"] == TOTAL and 0 < suite["time_share"] <= 1
+    assert suite["selected"] == len(ALWAYS) + 1 and suite["total"] == TOTAL
+    assert 0 < suite["time_share"] <= 1
     rules = {reason["rule"] for reason in suite["because"]}
     assert {"tests with no recorded input", "tests that started another process"} <= rules
 
@@ -413,6 +457,42 @@ def test_a_file_the_run_read_only_to_print_a_warning_is_not_an_input_of_every_te
     target = checkout / T("notes")
     target.write_text(target.read_text() + "\n# note\n")
     assert picked(checkout)["test_files"] == chosen("notes")
+
+
+def test_source_read_to_show_a_traceback_line_is_not_data_its_reader_kept(checkout):
+    record = json.loads((checkout / ".anaxigraph-v2/test-records/shop.json").read_text())
+    assert not {"shop/pkg/strict.py", "shop/pkg/noisy.py"} & record["reads"]["opened"].keys()
+    target = checkout / "shop/pkg/strict.py"
+    target.write_text(target.read_text().replace("ValueError(value)", "ValueError(str(value))"))
+    # Only the test that ran it; not the other test of the module that formatted the traceback.
+    assert picked(checkout)["test_files"] == chosen("noisy")
+
+
+def test_recording_says_what_every_change_costs_and_what_it_could_not_measure(run, tmp_path):
+    root = Path(shutil.copytree(run, tmp_path / "checkout"))
+    saved = record(root, run, reads=True)
+    saved_record = json.loads(Path(saved["path"]).read_text())
+    assert 0 < saved["every_change"] < 1 and saved["whole_suite_because"] == []
+    assert len(saved_record["seconds"]) == TOTAL and "--cov" in saved["next_step"]
+    # Of the code that started a process, only the helper stands for other tests: the
+    # module that keeps nothing of the result does not.
+    assert saved_record["reads"]["process_modules"] == ["shop/tests/launcher.py"]
+    # The migration is loaded by path and the kit from outside the suite's folders; test
+    # files and their helpers need no measuring.
+    assert saved["loaded_but_not_measured"].keys() >= {"shop/migrations/", "extras/"}
+    assert "shop/tests/" not in saved["loaded_but_not_measured"]
+
+    # A helper that started a process stands for the tests that import it, not for all.
+    target = root / "shop/pkg/unused.py"
+    target.write_text(target.read_text().replace("None", "0"))
+    assert picked(root)["test_files"] == chosen("git")
+    # Unmeasured code outside the suite's folders: nothing says which tests ran it.
+    (root / "extras/kit.py").write_text("def kit():\n    return 4\n")
+    suite = picked(root)
+    assert suite["status"] == "all"
+    assert (
+        "extras/kit.py: loaded by the recorded run, but not measured" in suite["everything_because"]
+    )
 
 
 def test_a_file_appearing_in_a_scanned_folder_picks_the_tests_that_scanned_it(checkout):

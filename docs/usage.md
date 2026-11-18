@@ -270,9 +270,18 @@ incomplete even when pytest exits with an ordinary test-failure status. Source i
 checked before and after testing and again when saved; this is project-produced evidence,
 not independent attestation of execution or complete behavioral coverage.
 
+`record-tests` answers with what the record is worth. `every_change` is the share of the
+suite's time that any change will pick, and `whole_suite_because` says why when that is all of
+it. `loaded_but_not_measured` counts, per folder, the code other than tests that the run loaded
+without coverage measuring it; name those folders with `--cov`, and with `--scope` where they
+lie outside the suite's folders, and record again. Until then a change to such a file outside
+the suite's folders selects the whole suite, because nothing says which tests ran it.
+
 Coverage shows the code each test ran. Name every folder the suite loads code from with
 `--cov`, also one that a tool loads by path, such as database migrations: coverage then lists
 the files no test loaded as well, and a file it was not measuring cannot be told from those.
+Test files and their helpers need no measuring: a changed one stands for itself and for the
+tests that import it, also when it is a helper that started a process.
 The reads recorder adds what coverage cannot see: the files a test read as data, the folders
 it scanned, whether it started another process, and which modules the run loaded at all. It
 uses the standard library and pytest, so it runs in your test environment without
@@ -287,8 +296,12 @@ For direct children launched with the same Python interpreter, optionally set
 `ANAXIGRAPH_TRACE_CHILDREN=1` before pytest. Children that inherit the recording environment
 report source loads, data reads and further process starts into one bounded 10 MB log beside
 the reads report. Only children that exit before the parent seals its report can replace its
-opaque-process fallback. Cached results retain the launching modules' other test consumers,
-including callers that cache the result across module boundaries.
+opaque-process fallback. A module that started a process the recording could not see into
+stands for its other tests too when it has a function that caches or sets shared state, since
+those tests may share the result; a test helper or `conftest.py` that started one stands for
+the tests that use it. Code that keeps nothing beyond the call stands only for the tests that
+started the process. A result kept some other way, such as in a module-level dictionary changed
+in place, is not seen: the whole suite on the main branch remains the safety net.
 This adds no dependency to the child and does not inject recorder settings into cleaned or
 independently configured environments. Crashes, forced termination, missing or late receipts,
 isolated startup (`-I` or `-S`), existing startup customizations and unobserved descendants keep
@@ -299,6 +312,11 @@ Executable `.pth` files and custom Python startup modules can read inputs before
 loads. Such a parent run requires the full suite; such a child retains the launching tests'
 opaque-process fallback. Path-only `.pth` files and an exactly reviewed, inactive coverage
 initializer remain compatible. Changed or active startup code is not assumed harmless.
+The Python that Debian and Ubuntu ship has such a startup module (`sitecustomize`), so a
+recording made with it selects the whole suite for every change. Record with a Python that has
+none: the one `actions/setup-python` installs in CI, or one from `uv python install`.
+Source that Python opens to print a line of a traceback or a warning is not counted as data
+the test read: the code it belongs to ran in the same test.
 Older observation records remain readable but require a fresh recording before narrowing checks.
 Observation format v3 records the source filename of executed code as well as importer reads.
 This covers warm bytecode, external cache directories and modules loaded without a persistent
