@@ -218,8 +218,17 @@ name there). Where a change only adds or alters plain data members of a class, s
 settings field with a default, it follows the files that mention those members by name, in code
 or in data, instead of every file that uses the class: mean 45.0%, typical 37% against 47%.
 That is 7.2 points and the first form over the bar. It also drops the tests that merely ran the
-changed file, so the replay's check does not apply to it and it needs evidence of its own: three
-planted faults in settings defaults. Not built until they are scored.
+changed file, so the replay's check does not apply to it and it needs evidence of its own.
+Three faults were planted in settings defaults and the whole suite run for each:
+
+| Changed default of a setting that is | Test files that newly fail | Today's rule picks | The field form picks | Left out |
+| --- | ---: | ---: | ---: | ---: |
+| read in one place | 0 | 100% | 4.6% | |
+| named in a table of data | 0 | 100% | 5.4% | |
+| read widely | 23 | 100% | 34.3% | 0 |
+
+One fault that makes tests fail is thin evidence. Before it is built it needs more faults whose
+tests fail, and room under the size ceiling.
 
 **Phase 6. Advice aimed at the number.** The reach report's findings, said at the moment they
 matter. In `prepare_change`: "this file is changed in one pull request of five, and each time the
@@ -312,7 +321,7 @@ verification.
 | 2 The scoreboard | Done, 18 November | `reach_report.py`: the product in 204 seconds, this repository in 30 |
 | 3 Watch only | Pull request opened on the product, 18 November | Checked locally; first run on the product's runners is the pull request's own. 0 of 30 pull requests watched |
 | 4 Walls | First step done | `walls.py`. The product: 25 uses of private names across parts, 6 twelve weeks earlier |
-| 5 Pick by what changed in the interface | Measured: by name not built (2 points); by field 7 points, waits for its planted faults | The bar is 5 |
+| 5 Pick by what changed in the interface | Measured: by name not built (2 points); by field 7 points, not built yet | The bar is 5. Three planted settings faults: one fails tests, none left out |
 | 6 Advice aimed at the number | First step done | `test_reach` in `prepare_change` and `assess_plan`, 0.5 seconds on the product |
 | 7 With and without the buddy | Open; needs a spending limit | |
 | 8 Switch it on | Open | |
