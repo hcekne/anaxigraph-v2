@@ -3,6 +3,8 @@
 Agreed with the maintainer on 15 November 2026. The aim is an AnaxiGraph that works on a large
 product repository, measured there, and stays small.
 
+What comes next, and in which order, is in [the roadmap](roadmap.md) of 18 November.
+
 ## Why
 
 Every benchmark so far (Switchboard, ChronoWeave, AetherLoom and the anaxi_evals tracks) uses one
@@ -78,9 +80,14 @@ implementation and verification; new small benchmark applications.
 | 4 | Done | A family now needs classes that share a base class or protocol: the target has one closed family (28 model modules on one base class) where the old rule found 38, of which one had an interface. Its finding is advice under `architecture.advisory`; only reviewed proposals ask for a decision, and deferring needs no extra field. Agents are offered 15 tools instead of 20 (8,287 bytes of names, descriptions and schemas instead of 9,604); the other five stay in the CLI and dashboard. Reviews were unscheduled in step 0. Production size 14,584 lines |
 | 5 | Implemented; qualification incomplete | `record-tests`, `tests`, `tests --ran`, the `tests_for_change` tool, and a reads recorder that runs in the project's own test process. From one recorded run of the target's backend suite (632 test files, 6,615 tests) and its 70 most recent fix/feature pull requests that touch that scope: no pull request left out a test file that executed or read a changed file or a changed test, and 2 select the whole suite where 31 did before the recorder. Ten faults planted one at a time, the whole suite run for each: nine made test files fail, and every newly failing one was inside the selection (18, 1, 61, 8, 46, 1, 1, 33 and 61 files; the fifth, a changed migration, selects the whole suite); the tenth failed no test. The limit: 86 test files start another process that could read the checkout, they are 39% of suite time and run for every change, so the median pull request runs 69% of suite time (mean 72%). The declared-input planner left the product for `experiments/declared_ci/`; the supplied-evidence audit and gate stay, see below. Production size 14,924 lines |
 | 6 | Measured; nothing shipped | 77 pull requests replayed at their parent commit (13 Python only, 30 TypeScript/JavaScript only, 34 both; a median of six production files really changed). A really changed file is in the top three suggestions for 41, against 43 for plain keyword search (BM25); in the top one for 27 against 21. Reading TypeScript raised the product from 26. Adding files that changed together in history gave 48, with 13 pull requests better and 8 worse than keyword search (sign test p = 0.38), and 23 against 19 on the half it was not tuned on; boosting import neighbours gave 41. By the rule above no signal ships on this evidence. On TypeScript-only pull requests the product is behind keyword search, 14 against 18. Ranking a brief takes 0.17 s |
-| 7 | Not started | Needs a budget decision |
+| 7 | Not started | Now phase 7 of [the roadmap](roadmap.md); needs a spending limit |
 
 ## What is still open
+
+The order of this work is in [the roadmap](roadmap.md): its phase 1 covers the first two points
+below, phase 3 the fourth, and phase 7 is step 7. A replay on 18 November split the mean of 72%
+into its causes: 21 points are the tests that start another process, and 12 are top-level changes
+to a file that select the tests of every file using it. The figures are in the roadmap.
 
 - Tests that start another process. Recording inside the Python processes they start would
   let them be selected like any other test. Replaying the 70 pull requests as if that were

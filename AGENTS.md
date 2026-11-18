@@ -52,3 +52,5 @@ complete. Keep consumer obligations when narrowing checks; passing local tests a
 
 Work within the current source budget. Simplify duplicated machinery before adding layers;
 do not silently raise limits or pack code to game the count. Report measured size changes.
+
+What to work on next, and in which order, is in [the roadmap](docs/roadmap.md).
