@@ -92,14 +92,15 @@ to a file that select the tests of every file using it. The figures are in the r
 - Tests that start another process: done on 18 November. One recorded run with the current
   recorder followed all 2,197 Python programs the tests started, and the git rule as it is
   now exempted the rest of the git commands. 21 test files (2% of suite time) still start a
-  program the recording cannot see into, against 86 (39%) before. The typical pull request
-  needs 53% of suite time, against 69%. The table is in [the roadmap](roadmap.md), phase 1.
+  program the recording cannot see into, against 86 (39%) before. With a second recording that
+  names every folder the suite loads code from, the typical pull request needs 47% of suite
+  time, against 69%. The table is in [the roadmap](roadmap.md), phase 1.
 - A module that is loaded by path is not attributed to the tests that loaded it. A changed
   migration therefore selects the whole suite; a new one selects the tests that scanned its
   folder.
 - Shadow mode in the target's own CI: a nightly job that records, and `anaxigraph tests --ran`
-  on pull requests. Prepared on 18 November and checked locally; not pushed, because these are
-  changes to that repository and its CI cost.
+  on pull requests. Opened there as a pull request on 18 November, on the maintainer's word,
+  after being checked locally.
 - The supplied-evidence audit and gate have moved to `experiments/declared_ci/`. The drift
   runner applies its own qualification without adding that protocol to ordinary product use.
 - A release: these changes are on `main` only.

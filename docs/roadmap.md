@@ -108,26 +108,28 @@ do not build another way of recording.
 
 *Done on 18 November.* One pytest run recorded the suite in 69 minutes and followed all 2,197
 Python programs its tests started. The build of that morning picked the whole suite for every
-change on that recording. Three causes were found and fixed the same day (`c6b0846`): a module
-that started a program the recording could not see into stood for every test that ran the
-module, and for the whole suite when coverage had not measured it; source that Python opens to
-print a line of a traceback counted as data the test read; and code a test loads from outside
-the suite's folders counted for nothing. With the fixes:
+change on that recording. The causes were found and fixed the same day (`c6b0846`, `d7cbdb2`):
+a module that started a program the recording could not see into stood for every test that ran
+the module, and for the whole suite when coverage had not measured it; source that Python opens
+to print a line of a traceback counted as data the test read; and code a test loads from outside
+the suite's folders counted for nothing. A second recording was then made with the fixed
+recorder, with coverage naming every folder the suite loads code from. The same 70 pull requests
+throughout:
 
-| | 16 November | Morning of 18 November | Now |
-| --- | ---: | ---: | ---: |
-| Picked for every change | 40% | all | 4% |
-| Typical pull request | 69% | 100% | 53% |
-| Mean | 72% | 100% | 56% |
-| Pull requests under 20%, of 70 | 0 | 0 | 17 |
-| Whole suite by rule | 2 | 70 | 12 |
-| A needed test left out | 0 | 0 | 0 |
-| Ten planted faults: a newly failing test file left out | 0 | | 0 |
-| Ten planted faults: share of suite time picked | 50 to 82% | | 13 to 58% |
+| | 16 November | Morning of 18 November | First recording | Second recording |
+| --- | ---: | ---: | ---: | ---: |
+| Picked for every change | 40% | all | 4% | 2% |
+| Typical pull request | 69% | 100% | 53% | 47% |
+| Mean | 72% | 100% | 56% | 52% |
+| Pull requests under 20%, of 70 | 0 | 0 | 17 | 19 |
+| Whole suite by rule | 2 | 70 | 12 | 10 |
+| A needed test left out | 0 | 0 | 0 | 0 |
+| Ten planted faults: a newly failing test file left out | 0 | | 0 | 0 |
+| Ten planted faults: share of suite time picked | 50 to 82% | | 13 to 58% | 12 to 57% |
 
-Of the 12, eight change a CI workflow and two a dependency list. `record-tests` now says what a
-recording is worth when it is saved: the share every change will pick, the reason when that is
-everything, and the code the run loaded without measuring it.
+Of the 10, nine change a CI workflow or another shared setup file and one a dependency list.
+`record-tests` now says what a recording is worth when it is saved: the share every change will
+pick, the reason when that is everything, and the code the run loaded without measuring it.
 
 **Phase 2. The scoreboard.** A reach report from a saved record and the repository's history: the
 repository's number, its parts ranked, the files that cost most (how often changed, times what
@@ -152,11 +154,12 @@ Number: failing tests outside the pick over at least 30 pull requests, 0.
 Needs the maintainer's agreement, because it changes that repository's CI and its cost.
 Limit: two days of work; after that it runs by itself.
 
-*Prepared on 18 November, not pushed.* A nightly workflow records the suite; one step in the
-pull-request job reports the pick and any failing test file outside it, and never fails the job.
-Both were run locally against a real result. That repository's Python job takes 41 minutes
-today, and the step adds about two. It waits for the maintainer's word, because it opens a pull
-request there.
+*Opened as a pull request on the product on 18 November*, on the maintainer's word. A nightly
+workflow records the suite; one step in the pull-request job reports the pick and any failing
+test file outside it, and never fails the job. Both were run locally against a real result;
+the pull request's own run is their first execution on the product's runners. That repository's
+Python job takes 41 minutes today, and the step adds about two. The count towards 30 starts with
+the first nightly record after it is merged.
 
 ### Stage B: guard and advise
 
@@ -208,7 +211,15 @@ the rule. On the product, mean share of suite time: 56.1% today, 54.2% with the 
 careful form (1.9 points), 52.8% in a form that trusts decorators and base classes (3.3), 45.4%
 in the best case. The bar is 5. The settings class, the core model classes, tables of data and
 the file that wires the application together are used by name almost everywhere, so following
-names changes nothing for them. This rule starts to pay when those are split.
+names changes nothing for them.
+
+A third form was measured the same day, on the second recording (mean 52.2% today, 50.2% by
+name there). Where a change only adds or alters plain data members of a class, such as a
+settings field with a default, it follows the files that mention those members by name, in code
+or in data, instead of every file that uses the class: mean 45.0%, typical 37% against 47%.
+That is 7.2 points and the first form over the bar. It also drops the tests that merely ran the
+changed file, so the replay's check does not apply to it and it needs evidence of its own: three
+planted faults in settings defaults. Not built until they are scored.
 
 **Phase 6. Advice aimed at the number.** The reach report's findings, said at the moment they
 matter. In `prepare_change`: "this file is changed in one pull request of five, and each time the
@@ -269,8 +280,8 @@ And AnaxiGraph is still under 15,000 production lines and answers a brief in und
 | Decision | Needed for |
 | --- | --- |
 | Freeze new advice, review, workflow and dashboard features until phase 7 (agreed with the plan, 18 November) | Phase 0 |
-| A nightly recording job and a watch-only step in the product's CI (prepared; waits for the word to push) | Phase 3 |
-| Which product changes to make: settings per part, model imports, walls in the flat folder | The product's own reach |
+| A nightly recording job and a watch-only step in the product's CI (agreed 18 November; pull request opened, merging is the maintainer's) | Phase 3 |
+| Which product changes to make: settings per part, model imports, walls in the flat folder. The settings split was asked for on 18 November; reading the code first showed most new settings there are named in tables of data and read through one object that 175 functions take, so a split would move little and the field form of phase 5 is the better way to the same effect. No product change was prepared | The product's own reach |
 | A spending limit for the comparison | Phase 7 |
 | A release | Whenever wanted; `main` is ahead of 1.0.0 |
 
@@ -297,11 +308,11 @@ verification.
 | Phase | State | Measured |
 | --- | --- | --- |
 | 0 Clear the desk | Done, 18 November | Uncommitted work: 0. The unfinished dashboard fix was committed with its tests (`d40002d`) |
-| 1 A recording that counts | Done, 18 November | Typical pull request 53% (69% before), mean 56%, 17 of 70 under 20%, nothing needed left out. A second recording that measures two more folders is not in these figures |
+| 1 A recording that counts | Done, 18 November | Typical pull request 47% (69% before), mean 52% (72%), 19 of 70 under 20%, nothing needed left out, ten planted faults none left out |
 | 2 The scoreboard | Done, 18 November | `reach_report.py`: the product in 204 seconds, this repository in 30 |
-| 3 Watch only | Prepared, not pushed; waits for the maintainer | Checked locally; the product's Python job takes 41 minutes today |
+| 3 Watch only | Pull request opened on the product, 18 November | Checked locally; first run on the product's runners is the pull request's own. 0 of 30 pull requests watched |
 | 4 Walls | First step done | `walls.py`. The product: 25 uses of private names across parts, 6 twelve weeks earlier |
-| 5 Pick by what changed in the interface | Measured: not built | 1.9 points careful, 3.3 trusting; the bar is 5 |
+| 5 Pick by what changed in the interface | Measured: by name not built (2 points); by field 7 points, waits for its planted faults | The bar is 5 |
 | 6 Advice aimed at the number | First step done | `test_reach` in `prepare_change` and `assess_plan`, 0.5 seconds on the product |
 | 7 With and without the buddy | Open; needs a spending limit | |
 | 8 Switch it on | Open | |
