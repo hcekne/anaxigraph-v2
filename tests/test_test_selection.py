@@ -1128,6 +1128,9 @@ def test_reach_of_a_file_is_what_a_real_edit_then_picks(checkout):
     )
     [suite] = app.prepare_change("Change how an order label is written")["test_reach"]
     assert suite["suite"] == "shop" and suite["every_change"] == found["every_change"]
+    # A plan is told the same for the files it names, also one that is no likely owner.
+    [planned] = app.assess_plan("Raise the limit", ["shop/pkg/settings.py"])["test_reach"]
+    assert planned["files"] == [rows["shop/pkg/settings.py"]]
 
     # The simulated shares are the selection's own: a real edit of each kind picks the same.
     settings, labels = checkout / "shop/pkg/settings.py", checkout / "shop/pkg/labels.py"

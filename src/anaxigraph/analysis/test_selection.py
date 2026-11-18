@@ -225,6 +225,14 @@ class _Selection:
         elif not self.users.get(path) and not read:
             self.everything.append(f"{path}: {what}, and nothing imports it")
 
+    def _starter(self, module: str) -> set[str]:
+        """An unmeasured module that started a process stands for the tests of what uses it."""
+        found, lost = self.consumers(module)
+        inside = module in self.modules and module.startswith(self.scope)
+        if lost or not inside:
+            self.everything.append(f"Process-starting code was not measured: {module}")
+        return found | ((self._direct(module) or set()) if inside else set())
+
     def _outside(self, path: str) -> None:
         """Outside the suite's folders only what a test read counts, unless it ran unmeasured."""
         if path in self.record.get("unmeasured", ()):
@@ -272,12 +280,8 @@ def _unseen(selection: _Selection, tests: list[str]) -> None:
     started = selection.numbered(reads.get("started", ()))
     selection.add("(anything)", "tests that started another process", started)
     for module in reads.get("process_modules", ()):
-        found = selection.executed(module)
-        if module not in record["executed"]:  # Not measured: the tests of what uses it.
-            found, lost = selection.consumers(module)
-            found |= selection._direct(module) or set()
-            if lost or not module.startswith(selection.scope):
-                selection.everything.append(f"Process-starting code was not measured: {module}")
+        measured = module in record["executed"]
+        found = selection.executed(module) if measured else selection._starter(module)
         selection.add(module, "tests of code that started another process", found)
     if reads.get("unattributed_processes"):
         selection.everything.append(

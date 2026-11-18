@@ -44,7 +44,7 @@ def create_mcp(application: Any, *, operations: dict | None = None) -> FastMCP:
             "Pattern workflows include boundary, standalone-package and independent-verification scouts. "
             "They also review CI/CD configuration. Use ci for pipeline review without semantic mapping. "
             "tests_for_change names the test files a recorded run says this checkout needs, and "
-            "the whole suite when it cannot tell. "
+            "the whole suite when it cannot tell. test_reach in prepare_change and assess_plan is each file's share of that suite for a change: put a new name where it costs least. "
             "Use architecture for those searches alone; assess_plan records explicit proposal decisions. "
             "Explicit request/submit packets remain available for independent agents. "
             "Fresh Eyes packets are implementation-blind; do not add source context to that task."

@@ -467,6 +467,7 @@ class Application:
             "task_id": brief["task_id"],
             "baseline_id": brief["baseline_id"],
             "files": files,
+            "test_reach": selection.test_reach(self, self._current(), files),
             "findings": findings,
             **({"brief": brief} if include_brief else {}),
             "status": architecture["status"]

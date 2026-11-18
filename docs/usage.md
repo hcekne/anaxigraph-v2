@@ -103,7 +103,7 @@ migrate an already running legacy service.
    says what share of the suite's time a change to each likely owner would pick: inside a
    function, at its top level, and the share picked whatever changes. A file whose top-level
    share is far above the other is a shared one; a new name is cheaper to test in the part
-   that uses it.
+   that uses it. `assess_plan` says the same for the files a plan names.
    Use `inspect` to expand a module or saved review; `inspect("charter")` returns the general principles.
    Entity inspection starts compact; follow `next_offset` to page relationships, or pass `full=true`
    for complete entity annotations and contracts. Plan assessment returns changes and decisions;
