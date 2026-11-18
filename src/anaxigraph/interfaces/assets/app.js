@@ -2,6 +2,7 @@
 
 const $ = (selector) => document.querySelector(selector);
 const state = { sort: "path", descending: false, offset: 0, limit: 25, selected: null };
+const emptySelection = [".inspector", "#graph"].map((selector) => [selector, $(selector).cloneNode(true)]);
 let moduleGeneration = 0;
 let entityGeneration = 0;
 let reviewOffset = 0;
@@ -136,16 +137,23 @@ function moduleRow(node) {
   return row;
 }
 
-function renderModulePage(data) {
+function renderModulePage(data = {}) {
   const items = data.items || [];
+  if (!data.total) {
+    Object.assign(state, { offset: 0, selected: null });
+    moduleGeneration++;
+    entityGeneration++;
+    for (const [selector, template] of emptySelection) $(selector).replaceWith(template.cloneNode(true));
+  }
+  document.querySelectorAll(".page").forEach((page) => { page.inert = data.total === undefined; });
   document.querySelectorAll("[data-sort]").forEach((button) => {
     button.closest("th").setAttribute("aria-sort", button.dataset.sort === state.sort
       ? (state.descending ? "descending" : "ascending") : "none");
   });
-  $("#module-total").textContent = `${data.total || 0} modules`;
+  $("#module-total").textContent = data.total === undefined ? "Loading modules…" : `${data.total} modules`;
   $("#module-rows").replaceChildren(...items.map(moduleRow));
-  $("#module-empty").hidden = items.length > 0;
-  $("#page-label").textContent = `${items.length ? state.offset + 1 : 0}–${state.offset + items.length} of ${data.total || 0}`;
+  $("#module-empty").hidden = data.total === undefined || items.length > 0;
+  $("#page-label").textContent = data.total === undefined ? "Reading checkout…" : `${items.length ? state.offset + 1 : 0}–${state.offset + items.length} of ${data.total}`;
   $("#previous").disabled = state.offset === 0;
   $("#next").disabled = state.offset + items.length >= (data.total || 0);
 }
@@ -168,7 +176,7 @@ function addLinkGroup(name, edges, direction, nodes) {
 }
 
 async function selectEntity(id) {
-  switchPage("explore");
+  switchPage("map");
   const generation = ++entityGeneration;
   const result = await api(`/api/entity?${new URLSearchParams({ entity_id: id, limit: 20, full: true })}`);
   if (generation !== entityGeneration) return;
@@ -382,14 +390,7 @@ async function refresh() {
   const status = await refreshStatus();
   if (status.snapshot) {
     await refreshModules();
-  } else {
-    $("#module-rows").replaceChildren();
-    $("#module-empty").hidden = false;
-    $("#module-total").textContent = "0 modules";
-    $("#page-label").textContent = "0–0";
-    $("#previous").disabled = true;
-    $("#next").disabled = true;
-  }
+  } else renderModulePage({ total: 0 });
 }
 
 const stageLabels = { annotate: "Mapping", "pattern-screen": "Fast pattern screening", architecture: "Component architecture scouts", "architecture-review": "Architecture finding review", delivery: "CI/CD pipeline review", "delivery-review": "CI/CD finding review", patterns: "Detailed pattern review", "fresh-eyes": "Fresh Eyes" };
@@ -625,7 +626,7 @@ document.querySelectorAll("[data-sort]").forEach((button) => button.addEventList
   state.offset = 0;
   action(button, refreshModules);
 }));
-$("#refresh").addEventListener("click", () => action($("#refresh"), refresh));
+$("#refresh").addEventListener("click", () => action($("#refresh"), AnaxiGraphWorkspace.start));
 $("#previous").addEventListener("click", () => { state.offset = Math.max(0, state.offset - state.limit); refreshModules().catch((error) => notice(error.message, true)); });
 $("#next").addEventListener("click", () => { state.offset += state.limit; refreshModules().catch((error) => notice(error.message, true)); });
 $("#load-reviews").addEventListener("click", () => action($("#load-reviews"), refreshReviews));
@@ -649,5 +650,5 @@ $("#validate-change").addEventListener("click", () => action($("#validate-change
 }));
 AnaxiGraphCI.bind({ $, api, action, textElement, formatJSON, lines, notice, reviewTradeoffs });
 AnaxiGraphWorkspace.bind().then(() => Promise.all([
-  refresh(), api("/api/workflows/config").then(renderModelSettings), refreshWorkflows(), AnaxiGraphWorkspace.scan(),
+  AnaxiGraphWorkspace.start(), refreshStatus(), api("/api/workflows/config").then(renderModelSettings), refreshWorkflows(),
 ])).catch((error) => notice(error.message, true));

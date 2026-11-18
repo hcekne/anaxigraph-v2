@@ -2,7 +2,7 @@
 
 const AnaxiGraphWorkspace = (() => {
   let selected = new URLSearchParams(location.search).get("repository") || "";
-  let scanTimer, wasRunning = false, reconnect = false, developerLoad;
+  let scanTimer, wasRunning = false, developerLoad;
   const headers = (path) => selected && path !== "/api/repositories" ? { "X-AnaxiGraph-Repository": selected } : {};
   function navigate(id) {
     const url = new URL(location.href);
@@ -24,19 +24,20 @@ const AnaxiGraphWorkspace = (() => {
         navigate(repo.selected_repository_id);
       });
     });
-    $("#scan").addEventListener("click", async () => {
-      $("#scan").disabled = true;
-      notice("");
-      try {
-        if (reconnect) return await scan();
-        wasRunning = true;
-        renderScan(await api("/api/scan/start", {}));
-      } catch (error) { scanError(error); }
-    });
+    $("#scan").addEventListener("click", start);
     if (!catalog.repositories.some((repo) => repo.id === selected)) throw new Error("This repository is unavailable. Choose another repository above.");
   }
+  async function start() {
+    $("#scan").disabled = true;
+    notice("");
+    try {
+      if (wasRunning) return await scan();
+      wasRunning = true;
+      renderModulePage();
+      renderScan(await api("/api/scan/start", {}));
+    } catch (error) { scanError(error); }
+  }
   function scanError(error) {
-    reconnect = true;
     $("#scan").disabled = false;
     $("#scan").textContent = "Check map progress";
     $("#scan-progress").hidden = false;
@@ -45,8 +46,8 @@ const AnaxiGraphWorkspace = (() => {
   }
   function renderScan(job) {
     clearTimeout(scanTimer);
-    reconnect = false;
     const running = job.status === "running";
+    $("#module-total").textContent = running || job.status === "completed" ? "Loading modules…" : "Map not refreshed";
     $("#scan").disabled = running;
     $("#scan").textContent = running ? "Refreshing structural map…" : "Refresh structural map ↗";
     $("#scan-progress").hidden = job.status === "idle";
@@ -57,9 +58,8 @@ const AnaxiGraphWorkspace = (() => {
     } else if (wasRunning) {
       wasRunning = false;
       if (job.status === "completed") {
-        state.offset = 0;
         refresh().then(() => notice("Structural map saved. Readiness counts now reflect the completed scan.")).catch((error) => notice(error.message, true));
-      } else if (job.status === "failed") notice(job.error || "Structural map refresh failed.", true);
+      } else notice(job.error || "Structural refresh did not complete. Try refreshing the map again.", true);
     }
   }
   async function scan() {
@@ -90,5 +90,5 @@ const AnaxiGraphWorkspace = (() => {
     })().catch((error) => { developerLoad = null; throw error; });
     return developerLoad;
   }
-  return { headers, bind, scan, development };
+  return { headers, bind, start, development };
 })();

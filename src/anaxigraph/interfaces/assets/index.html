@@ -38,15 +38,15 @@
       <article><span class="metric-label">STRUCTURAL SNAPSHOT</span><strong id="map-state">—</strong><small id="snapshot-state">No saved snapshot</small></article>
       <article><span class="metric-label">MODULES / SYMBOLS</span><strong id="entity-count">—</strong><small>Source facts, available before reviews</small></article>
       <article><span class="metric-label">SEMANTIC UNDERSTANDING</span><strong id="annotation-count">—</strong><small id="annotation-state">Agent annotations are separate</small></article>
-      <article><span class="metric-label">SOURCE LINES</span><strong id="source-loc">—</strong><small>Mapped Python/PYI, excluding blank and comment lines</small></article>
+      <article><span class="metric-label">SOURCE LINES</span><strong id="source-loc">—</strong><small>Source lines across the mapped modules</small></article>
       <article><span class="metric-label">LOCAL STORAGE</span><strong id="storage-size">—</strong><small>Current understanding, bounded history</small></article>
     </section>
     <aside id="coverage-note" class="coverage-note" aria-label="Analysis coverage">
-      <p id="coverage-summary">Python/PYI structural analysis · other languages are not parsed in this milestone.</p>
+      <p id="coverage-summary">Python/PYI and JavaScript/TypeScript structural analysis</p>
       <details id="coverage-diagnostics" hidden><summary id="diagnostic-count">Analysis diagnostics</summary><ul id="diagnostic-items"></ul></details>
     </aside>
 
-    <section id="page-map" class="page">
+    <section id="page-map" class="page" inert>
       <div class="explore-grid">
         <section class="panel module-panel">
           <div class="panel-heading"><div><p class="eyebrow">THE BUILDING BLOCKS</p><h2>Module map</h2></div><span id="module-total" class="pill">0 modules</span></div>
@@ -57,7 +57,7 @@
             <th scope="col"><button data-sort="functions">Functions <span aria-hidden="true">↕</span></button></th>
             <th scope="col">Public names</th><th scope="col">Boundary concerns</th>
           </tr></thead><tbody id="module-rows"></tbody></table></div>
-          <p id="module-empty" class="empty" hidden>Build the structural map to explore modules here.</p>
+          <p id="module-empty" class="empty" hidden>No supported source modules were found in this checkout.</p>
           <footer class="pagination"><button id="previous" class="quiet">← Previous</button><span id="page-label">0–0</span><button id="next" class="quiet">Next →</button></footer>
         </section>
         <aside class="panel inspector">
@@ -74,7 +74,7 @@
       </section>
     </section>
 
-    <section id="page-workflows" class="page" hidden>
+    <section id="page-workflows" class="page" hidden inert>
       <div class="panel-heading workflow-intro"><div><p class="eyebrow">BUILD UNDERSTANDING, THEN CHALLENGE IT</p><h2>Run the full analysis, one saved batch at a time</h2></div></div>
       <div class="workflow-grid">
         <article class="panel workflow-card"><span class="step">01</span><h3>Mapping</h3><p>Refresh the source graph, annotate only missing or stale modules, then reconcile the current map.</p><button class="primary" data-run="mapping">Run full mapping →</button><small>Current annotations are reused.</small></article>
@@ -103,7 +103,7 @@
       <section class="panel"><div class="panel-heading"><h2>Saved reviews</h2><button id="load-reviews" class="quiet">Refresh reviews</button></div><div id="saved-reviews" class="empty">No reviews loaded.</div><button id="more-reviews" class="secondary" hidden>Load more reviews</button></section>
     </section>
 
-    <section id="page-change" class="page" hidden>
+    <section id="page-change" class="page" hidden inert>
       <div class="change-grid">
         <section class="panel"><p class="eyebrow">START WITH WHAT ALREADY EXISTS</p><h2>Prepare a change</h2><p class="section-note">Find an owner, reuse opportunities, affected contracts and relevant checks.</p>
           <form id="prepare-form"><label for="change-task">What are you trying to change?</label><textarea id="change-task" rows="4" required placeholder="Add CSV export of invoices while preserving tenant isolation"></textarea><button class="primary" type="submit">Prepare change brief →</button></form><p id="change-baseline" class="section-note">Preparing a change pins its baseline across subsequent scans.</p><button id="new-change-baseline" class="quiet">Start new change from current files</button>
