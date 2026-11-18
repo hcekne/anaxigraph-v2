@@ -218,6 +218,13 @@ FILES = {
         "from pkg.shell import twice\n\n\ndef test_twice():\n    assert twice(2) == 4\n"
     ),
     "extras/kit.py": "def kit():\n    return 3\n",
+    # The same from a folder outside the suite's that coverage does measure.
+    "addons/gauge.py": "def gauge():\n    return 9\n",
+    "shop/tests/test_gauge.py": (
+        "import sys\nfrom pathlib import Path\n\n"
+        "sys.path.insert(0, str(Path(__file__).parents[2] / 'addons'))\n\n"
+        "import gauge  # noqa: E402\n\n\ndef test_gauge():\n    assert gauge.gauge() == 9\n"
+    ),
     "shop/tests/test_kit.py": (
         "import sys\nfrom pathlib import Path\n\n"
         "sys.path.insert(0, str(Path(__file__).parents[2] / 'extras'))\n\n"
@@ -235,7 +242,7 @@ FILES = {
     ),
 }
 T = "shop/tests/test_{}.py".format
-TOTAL = 28  # Test files in the fixture.
+TOTAL = 29  # Test files in the fixture.
 # Selected whenever anything changed: no recorded input, and a process the record cannot see.
 ALWAYS = [T("kit"), T("launch"), T("readme"), T("shell_run"), T("tool"), T("tracked")]
 
@@ -255,7 +262,8 @@ def run(tmp_path_factory) -> Path:
         path.write_text(content)
     manifest = Application(root).start_recording("shop")["manifest"]
     command = [sys.executable, "run.py", "tests", "-q", "-p", "no:cacheprovider"]
-    command += ["--cov=pkg", "--cov-context=test", "--cov-report=", "--junitxml=junit.xml"]
+    command += ["--cov=pkg", "--cov=../addons", "--cov-context=test", "--cov-report="]
+    command += ["--junitxml=junit.xml"]
     environment = os.environ | {
         "PYTHONPATH": str(Path(recorder.__file__).parent),
         "ANAXIGRAPH_ROOT": str(root),  # The fixture is not a git checkout.
@@ -486,6 +494,9 @@ def test_recording_says_what_every_change_costs_and_what_it_could_not_measure(ru
     target = root / "shop/pkg/unused.py"
     target.write_text(target.read_text().replace("None", "0"))
     assert picked(root)["test_files"] == chosen("git")
+    # Measured code outside the suite's folders belongs to the tests that ran it.
+    (root / "addons/gauge.py").write_text("def gauge():\n    return 4 + 5\n")
+    assert picked(root)["test_files"] == chosen("git", "gauge")
     # Unmeasured code outside the suite's folders: nothing says which tests ran it.
     (root / "extras/kit.py").write_text("def kit():\n    return 4\n")
     suite = picked(root)

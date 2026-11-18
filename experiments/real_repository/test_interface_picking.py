@@ -47,3 +47,28 @@ def test_only_the_files_that_take_a_changed_name_are_followed(recorded, capsys):
     assert found["outcomes"]["by name, strict"] == {"followed by name": 2}
     assert found["left_out"] == 0
     assert "by name, strict" in capsys.readouterr().out
+
+
+def test_a_change_that_only_adds_plain_fields_names_them():
+    fields = interface_picking.changed_fields
+    before = "class Settings(BaseSettings):\n    limit: int = 2\n\n    def double(self):\n        return 2\n"
+    assert fields(
+        before, before.replace("limit: int = 2", "limit: int = 2\n    rate: int = 4")
+    ) == {"rate"}
+    assert fields(before, before.replace("= 2\n", "= 3\n", 1)) == {"limit"}
+    # Not when a member has no value, a method changes or reads the member, a member goes,
+    # the class may register itself, or anything else at the top level changes.
+    assert fields(before, before.replace("limit: int = 2", "limit: int = 2\n    rate: int")) is None
+    assert fields(before, before.replace("return 2", "return 3")) is None
+    reading = before.replace("return 2", "return self.limit")
+    assert fields(reading, reading.replace("= 2\n", "= 3\n", 1)) is None
+    assert fields(before + "    rate: int = 4\n", before) is None
+    assert (
+        fields(
+            before.replace("BaseSettings", "Base"),
+            before.replace("BaseSettings", "Base") + "    rate: int = 4\n",
+        )
+        is None
+    )
+    assert fields(before + "X = 1\n", before.replace("= 2\n", "= 3\n", 1) + "X = 2\n") is None
+    assert fields(None, before) is None

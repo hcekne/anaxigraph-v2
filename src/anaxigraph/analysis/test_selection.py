@@ -94,7 +94,7 @@ class _Selection:
             parent for folder in self.scope for parent in PurePosixPath(folder).parents
         }
         inside = {path for path in self.modules if path.startswith(self.scope)} | self.known
-        self.users, self.importing = _users(graph, inside)
+        self.users, self.importing = _users(graph, inside | record["imports"].keys())
         self.idle = set(record["unloaded"])  # Known not to have been loaded by the run.
         self.reads: dict[str, Any] | None = record["reads"]
         self.picked: set[str] = set()
@@ -233,10 +233,12 @@ class _Selection:
             self.everything.append(f"Process-starting code was not measured: {module}")
         return found | ((self._direct(module) or set()) if inside else set())
 
-    def _outside(self, path: str) -> None:
-        """Outside the suite's folders only what a test read counts, unless it ran unmeasured."""
-        if path in self.record.get("unmeasured", ()):
+    def _outside(self, path: str) -> bool:
+        """Whether only reads count for a path; unmeasured code that ran there picks everything."""
+        outside = not path.startswith(self.scope) and path not in self.record["imports"]
+        if outside and path in self.record.get("unmeasured", ()):
             self.everything.append(f"{path}: loaded by the recorded run, but not measured")
+        return outside
 
     def change(self, path: str) -> None:
         node = self.modules.get(path)
@@ -245,8 +247,8 @@ class _Selection:
         if _shared_setup(path, self.ancestors):
             self.everything.append(f"{path}: shared installation or CI setup changed")
             return
-        if not path.startswith(self.scope):
-            return self._outside(path)
+        if self._outside(path):
+            return
         if python and path not in self.files:
             self.everything.append(f"{path}: removed, and what still imports it is not recorded")
         elif _installs(path):
@@ -370,7 +372,7 @@ def reach(record: dict[str, Any], graph: Graph, paths: list[str]) -> dict[str, A
             "top_level": after(path, known | {path: "changed"})[0],
         }
         for path in paths
-        if path in record["files"] and path.startswith(base.scope)
+        if path in record["files"] and (path.startswith(base.scope) or path in known)
     ]
     share, why = after(None, known)
     found = {"suite": record["suite"], "every_change": share, "whole_suite_because": why}

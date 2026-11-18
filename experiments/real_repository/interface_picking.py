@@ -8,7 +8,10 @@ same past changes as the reach report, in two variants:
 - strict: falls back to today's rule when code outside any definition changed, a name was
   removed, or a changed definition may register itself somewhere (a decorator that is not
   known to be plain, a class with a base class from the project);
-- lenient: never falls back for those, which shows what understanding them could add.
+- lenient: never falls back for those, which shows what understanding them could add;
+- fields: strict, and where a change only adds or alters plain data members of a class
+  (a settings field with a default, say), it follows the files that mention those members
+  by name, in code or in data, instead of every file that uses the class.
 
     uv run python experiments/real_repository/interface_picking.py /scratch/clone --suite backend
 
@@ -22,6 +25,7 @@ import ast
 import collections
 import json
 import posixpath
+import re
 import subprocess
 import sys
 import time
@@ -155,6 +159,58 @@ def changed_names(before: str | None, after: str, whole: bool, strict: bool) -> 
     return carried
 
 
+INERT = {"BaseSettings", "BaseModel", "object"}  # Bases that keep no list of subclasses.
+
+
+def _members(item: ast.ClassDef) -> tuple[dict[str, str], str] | None:
+    """A class's plain data members with a value, and everything else of it as text; None
+    when the class may register itself or a member has no value to fall back on."""
+    plain = all(last(base) in INERT or last(base).endswith("Settings") for base in item.bases)
+    if item.decorator_list or item.keywords or not plain:
+        return None
+    members, rest = {}, []
+    for part in item.body:
+        named = isinstance(part, ast.AnnAssign) and isinstance(part.target, ast.Name)
+        if named and part.value is not None:
+            members[part.target.id] = ast.dump(part)
+        elif named:
+            return None
+        else:
+            rest.append(ast.dump(part))
+    return members, "".join(rest)
+
+
+def changed_fields(before: str | None, after: str) -> set[str] | None:
+    """The data members a change adds to or alters in plain classes, when it does nothing
+    else at the top level and no function of the file refers to them; else None."""
+    try:
+        old, new = ast.parse(before or ""), ast.parse(after)
+    except (SyntaxError, ValueError, RecursionError):
+        return None
+    if before is None or len(old.body) != len(new.body):
+        return None
+    found: set[str] = set()
+    for was, now in zip(old.body, new.body):
+        if ast.dump(was) == ast.dump(now):
+            continue
+        if not (isinstance(was, ast.ClassDef) and isinstance(now, ast.ClassDef)):
+            return None
+        first, second = _members(was), _members(now)
+        if first is None or second is None or first[1] != second[1] or was.name != now.name:
+            return None
+        if first[0].keys() - second[0].keys():
+            return None  # A member was removed: whatever still reads it breaks.
+        found |= {name for name, text in second[0].items() if first[0].get(name) != text}
+    inside = {
+        node.attr
+        for function in ast.walk(new)
+        if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for node in ast.walk(function)
+        if isinstance(node, ast.Attribute)
+    }
+    return found if found and not found & inside else None
+
+
 class Uses:
     """Which names of one file another file takes, read from the map and the user's source."""
 
@@ -178,6 +234,7 @@ class Uses:
             else:
                 name = target.data.get("qualified_name", target.name)
                 self.symbols[pair].add(name.split(".")[0])
+        self.texts: dict[str, str] | None = None
         self.trees: dict[str, ast.Module | None] = {}
         self.shapes: dict[str, Shape | None] = {}
         self.known: dict[tuple[str, str], tuple[set[str] | None, set[str]]] = {}
@@ -268,6 +325,39 @@ class Uses:
                 return None
         return found
 
+    def mentioning(self, base: Any, path: str, members: set[str]) -> set[str]:
+        """Tests of the files that mention these members by name: as an attribute or as a
+        quoted word in code, or anywhere in a file that tests read as data."""
+        if self.texts is None:
+            self.texts = {}
+            for name in self.replay.files:
+                try:
+                    self.texts[name] = (self.replay.repo / name).read_text()
+                except (OSError, UnicodeDecodeError):
+                    continue
+        words = "|".join(re.escape(member) for member in sorted(members))
+        code = re.compile(rf"(?:\.|[\"'])(?:{words})\b")
+        data = re.compile(rf"\b(?:{words})\b")
+        reads = base.reads or {
+            "opened": {},
+            "through": {"opened": {}},
+            "by_modules": {"opened": {}},
+        }
+        found: set[str] = set()
+        for name, text in self.texts.items():
+            if name == path or not (code if name.endswith(".py") else data).search(text):
+                continue
+            if name.endswith(".py"):
+                tests = base._direct(name) if name in base.modules else None
+                found |= tests if tests is not None else base.consumers(name)[0]
+            found |= base.numbered(reads["opened"].get(name, ()))
+            for reader in reads["through"]["opened"].get(name, ()):
+                found |= base.executed(reader)
+            for module in reads["by_modules"]["opened"].get(name, ()):
+                if module in base.modules:
+                    found |= (base._direct(module) or set()) | base.consumers(module)[0]
+        return found
+
     def passed_on(self, user: str, target: str, changed: set[str]) -> set[str] | None:
         """The names of `user` that a change to these names of `target` reaches when `user`
         is imported; None when all of them might be."""
@@ -322,9 +412,18 @@ class Trial:
     def __init__(self, replay: reach_report.Replay):
         self.replay, self.uses = replay, Uses(replay)
         self.narrow: dict[str, set[str]] = {}
+        self.members: dict[str, set[str]] = {}
         self.outcomes: collections.Counter[str] = collections.Counter()
         original = selection._Selection.consumers
+        whole_file = selection._Selection.source
         trial = self
+
+        def source(self, path, read):
+            members = trial.members.get(path)
+            if members is None:
+                return whole_file(self, path, read)
+            tests = trial.uses.mentioning(self, path, members)
+            self.add(path, "tests of the files that mention the changed members", tests)
 
         def consumers(self, path):
             names = trial.narrow.get(path)
@@ -334,28 +433,39 @@ class Trial:
                 else consumers_by_names(trial.uses, self, path, names)
             )
 
-        self._patched, self._original = consumers, original
+        self._patched, self._original = (consumers, source), (original, whole_file)
 
     def __enter__(self) -> Trial:
-        selection._Selection.consumers = self._patched  # type: ignore[method-assign]
+        selection._Selection.consumers, selection._Selection.source = self._patched  # type: ignore[method-assign]
         return self
 
     def __exit__(self, *_: Any) -> None:
-        selection._Selection.consumers = self._original  # type: ignore[method-assign]
+        selection._Selection.consumers, selection._Selection.source = self._original  # type: ignore[method-assign]
 
     def names_for(self, path: str, before: str | None, after: str, strict: bool) -> set[str] | str:
         return changed_names(before, after, path in self.replay.whole, strict)
 
-    def pick(self, files: list, sources: dict[str, tuple], strict: bool, **what_if: Any) -> dict:
+    def pick(
+        self,
+        files: list,
+        sources: dict[str, tuple],
+        strict: bool,
+        fields: bool = False,
+        **what_if: Any,
+    ) -> dict:
         """The selection for one past change; `sources` holds each changed file's text before
         and after it."""
-        self.narrow = {}
+        self.narrow, self.members = {}, {}
         for kind, path, same in files:
             top_level = kind != "A" and not same and path in sources and path in self.replay.files
             helper = self.replay.test_like(path)  # A helper's own tests are found by import.
             if top_level and not helper and path in self.replay.record["imports"]:
+                members = changed_fields(*sources[path]) if fields else None
                 names = self.names_for(path, *sources[path], strict)
-                if isinstance(names, str):
+                if members is not None:
+                    self.members[path] = members
+                    self.outcomes["followed by member"] += 1
+                elif isinstance(names, str):
                     self.outcomes[f"today's rule: {names}"] += 1
                 else:
                     self.narrow[path] = names
@@ -363,7 +473,7 @@ class Trial:
         try:
             return self.replay.pick(files, **what_if)
         finally:
-            self.narrow = {}
+            self.narrow, self.members = {}, {}
 
 
 def sources_of(replay: reach_report.Replay, change: dict[str, Any]) -> dict[str, tuple]:
@@ -398,11 +508,12 @@ def measure(repo: Path, record: dict, history: str, limit: int) -> dict[str, Any
                 rows["today" + label].append(replay.pick(files, attributed=seen)["time_share"])
                 bound_ = replay.pick(files, attributed=seen, all_local=True)["time_share"]
                 rows["every top-level change stays local" + label].append(bound_)
-            for strict in (True, False):
+            for strict, fields in ((True, False), (False, False), (True, True)):
                 trial.outcomes.clear()
-                name = ("by name, strict" if strict else "by name, lenient") + label
+                name = "by name, strict" if strict else "by name, lenient"
+                name += (" and by field" if fields else "") + label
                 for change, sources in zip(changes, texts):
-                    picked = trial.pick(change["files"], sources, strict, attributed=seen)
+                    picked = trial.pick(change["files"], sources, strict, fields, attributed=seen)
                     rows[name].append(picked["time_share"])
                     needed = replay.needed(change["files"])
                     left_out += bool(needed - set(picked["test_files"]))

@@ -103,7 +103,7 @@ def _executed(
     loaded: dict[str, set[int]] = {}
     for file_id, context_id in pairs:
         source = files[file_id].removeprefix(prefix)
-        if source in known and source.startswith(scope):
+        if source in known:  # Whatever coverage measured is the suite's code, wherever it lies.
             loaded[source] = lines.get(file_id, set())
             test = test_of(contexts[context_id])
             if test in known and test != source:
@@ -254,9 +254,8 @@ def _marked(
 def _beyond_coverage(
     graph: Graph, read: dict | None, seen: set[str]
 ) -> tuple[list[str], Callable[[str], bool]]:
-    """Code, other than tests, that the run loaded in its own process without coverage seeing
-    it; and whether a module that started a process stands for its other tests: a test file
-    or helper does, and so does code with a function that caches or sets shared state."""
+    """Code other than tests that the run loaded without coverage seeing it; and whether a
+    module that started a process stands for its other tests: a test helper, or one that caches."""
     root = Path(graph.snapshot.root)
     tested = {node.path for node in graph.nodes if node.kind == "module" and node.data["is_test"]}
     loaded = (read or {}).get("loaded", {}).keys() - seen - tested
