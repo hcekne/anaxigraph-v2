@@ -1,7 +1,7 @@
 # Roadmap: one number
 
-The direction was set by the maintainer on 18 November 2026. The phases below are the proposed
-way there; the decisions listed near the end are still the maintainer's. This continues the
+The direction was set by the maintainer on 18 November 2026, who agreed to the phases below the
+same day. The decisions listed near the end stay the maintainer's as each one comes up. This continues the
 [real-repository plan](real-repository-plan.md): its eight steps made AnaxiGraph work on a large
 repository, and this says what that is for.
 
@@ -202,7 +202,7 @@ And AnaxiGraph is still under 15,000 production lines and answers a brief in und
 
 | Decision | Needed for |
 | --- | --- |
-| Freeze new advice, review, workflow and dashboard features until phase 7 | Phase 0 |
+| Freeze new advice, review, workflow and dashboard features until phase 7 (agreed with the plan, 18 November) | Phase 0 |
 | A nightly recording job and a watch-only step in the product's CI | Phase 3 |
 | Which product changes to make: settings per part, model imports, walls in the flat folder | The product's own reach |
 | A spending limit for the comparison | Phase 7 |
@@ -230,7 +230,7 @@ verification.
 
 | Phase | State | Measured |
 | --- | --- | --- |
-| 0 Clear the desk | Open | |
+| 0 Clear the desk | Done, 18 November | Uncommitted work: 0. The unfinished dashboard fix was committed with its tests (`d40002d`) |
 | 1 A recording that counts | Open | The last recording of the product is from the build of 16 November |
 | 2 The scoreboard | Prototype outside the repository | The figures above |
 | 3 Watch only | Open; needs agreement | |
