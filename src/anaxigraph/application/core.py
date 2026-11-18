@@ -21,7 +21,6 @@ from anaxigraph.analysis.charter import CHARTER, module_facts
 from anaxigraph.analysis.fields import annotation_context
 from anaxigraph.analysis.guidance import module_for, neighborhood, prepare
 from anaxigraph.analysis.health import map_health
-from anaxigraph.analysis.history import cochange_advice
 from anaxigraph.analysis.patterns import production_modules
 from anaxigraph.analysis.portable import ANNOTATION_CONTRACT_VERSION
 from anaxigraph.analysis.retrieval import rank_owners
@@ -36,7 +35,6 @@ from anaxigraph.application.context import (
 from anaxigraph.contracts import FilePart, Graph, Node
 from anaxigraph.evidence import Evidence
 from anaxigraph.indexing import IndexSession, worktrees
-from anaxigraph.indexing.history import capture_history
 from anaxigraph.indexing.python import is_test
 from anaxigraph.storage import Store, read_parts
 from anaxigraph.workflows.engine import WorkflowRunner
@@ -209,14 +207,6 @@ class Application:
         # Never accept an old job merely because an edit has not been scanned yet.
         if self.indexer.snapshot().id != (snapshot_id or graph.snapshot.id):
             raise ValueError("Checkout changed; restart this work from current files")
-
-    def _history_advice(self, graph: Graph, paths: set[str], revision: str | None) -> dict:
-        key = (revision, tuple(sorted(graph.snapshot.files)))
-        cached = getattr(self, "_history_cache", None)
-        if cached is None or cached[0] != key:
-            cached = (key, capture_history(self.root, revision, set(graph.snapshot.files)))
-            self._history_cache = cached
-        return cochange_advice(cached[1], paths)
 
     def scan(
         self, publish: bool = False, *, progress: Callable[[str], None] | None = None
@@ -436,13 +426,8 @@ class Application:
         )
         result["baseline_id"] = pinned
         result["task_context"] = task_key
-        result["historical_associations"] = self._history_advice(
-            graph,
-            {owner["path"] for owner in result["likely_owners"]},
-            graph.snapshot.revision
-            if pinned == graph.snapshot.id
-            else self.store.revision(str(self.root), pinned),
-        )
+        owners = [owner["path"] for owner in result["likely_owners"]]
+        result["test_reach"] = selection.test_reach(self, graph, owners)
         result["task_id"] = self.evidence.start_task(
             task,
             graph.snapshot.revision,
@@ -528,11 +513,6 @@ class Application:
             self, selected, graph, previous, result["checks"], full
         )
         result["extension_points"] = _extension_review(graph, previous, self.root)
-        result["historical_associations"] = self._history_advice(
-            graph,
-            set(changed_paths(graph, previous)),
-            previous.snapshot.revision if previous else None,
-        )
         result["tests"] = selection.tests_for_snapshot(self, graph, full)
         result.update(
             delivery.validation(

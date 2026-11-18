@@ -25,8 +25,10 @@ from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "real_repository"))
 
 import scoring  # noqa: E402
+from cochange import capture_history, cochange_advice  # noqa: E402
 
 
 def git(repo: Path, *args: str) -> str:
@@ -112,13 +114,15 @@ def evaluate(app, graph, commit: dict, files: dict[str, str], label: str) -> dic
     row["symbols_owner_rank"] = scoring.rank_of_first_hit(
         [item["path"] for item in symbols], expected
     )
+    history = capture_history(app.root, graph.snapshot.revision, set(graph.snapshot.files))
     for variant, capped in ((label, True), (f"{label}_uncapped", False)):
         brief = _brief(app, commit["message"], capped=capped)
         owners = [o["path"] for o in brief["likely_owners"]]
         affected = affected_paths(graph, set(owners)) & modules
         delivered = set(brief["affected_paths"]) | set(owners)
         delivered_tests = set(brief["tests"])
-        associations = {item["path"] for item in brief["historical_associations"]["suggestions"]}
+        advice = cochange_advice(history, set(owners))  # No longer part of the brief.
+        associations = {item["path"] for item in advice["suggestions"]}
         expanded = delivered | associations
         row |= {
             f"{variant}_owners": owners,

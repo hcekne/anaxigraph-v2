@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import subprocess
+import sys
+from pathlib import Path
 
-from anaxigraph.analysis.history import cochange_advice
-from anaxigraph.application import Application
-from anaxigraph.indexing.history import capture_history
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cochange import capture_history, cochange_advice  # noqa: E402
 
 
 def git(root, *args):
@@ -72,28 +74,6 @@ def test_associations_are_bounded_and_bulk_changes_do_not_manufacture_coupling()
     assert result["suggestions_total"] == 2
     assert result["supporting_commits"] == 3
     assert "dependencies" in result["interpretation"]
-
-
-def test_validate_uses_task_baseline_history_without_changing_scope_or_claiming_checks(tmp_path):
-    baseline = history_repo(tmp_path)
-    app = Application(tmp_path, tmp_path.parent / (tmp_path.name + ".sqlite"))
-    app.scan()
-    pin = app.prepare_change("change alpha behavior")["baseline_id"]
-    commit(
-        tmp_path,
-        {"alpha.py": "def alpha():\n    return 3\n", "gamma.py": "def gamma():\n    return 3\n"},
-    )
-    app.scan()
-    result = app.validate_change()
-    assert result["baseline_id"] == pin
-    assert result["historical_associations"]["through_revision"] == baseline
-    assert [item["path"] for item in result["historical_associations"]["suggestions"]] == [
-        "beta.py"
-    ]
-    assert result["changed_paths"] == ["alpha.py", "gamma.py"]
-    assert result["checks"] == []
-    assert result["behavioral_status"] == "unchecked"
-    assert all(edge.kind == "contains" for edge in app._current().edges)
 
 
 def test_no_history_is_a_visible_normal_condition(tmp_path):

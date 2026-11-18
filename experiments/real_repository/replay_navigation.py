@@ -28,7 +28,10 @@ from anaxigraph.analysis.retrieval import rank_owners
 from anaxigraph.application.core import Application
 from anaxigraph.contracts import SOURCE_SUFFIXES
 from anaxigraph.indexing.facts import is_test
-from anaxigraph.indexing.history import capture_history
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cochange import capture_history  # noqa: E402
 
 repo, SC = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
 LIMIT = int(sys.argv[3]) if len(sys.argv) > 3 else 200

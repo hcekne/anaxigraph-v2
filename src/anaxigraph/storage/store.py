@@ -513,12 +513,6 @@ class Store:
             diagnostics,
         )
 
-    def revision(self, root: str, snapshot_id: str) -> str | None:
-        """The Git revision a retained snapshot was taken at, without loading its graph."""
-        with self._connection() as db:
-            found = self._snapshot(db, _root(root), snapshot_id)
-        return found[1].get("revision") if found else None
-
     def load_parts(self, root: str, snapshot_id: str | None = None) -> tuple[FilePart, ...] | None:
         """The saved parts of a snapshot, for an indexer that resumes from them."""
         root = _root(root)

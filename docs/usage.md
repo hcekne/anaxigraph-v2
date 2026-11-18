@@ -99,6 +99,11 @@ migrate an already running legacy service.
    The reply opens with a `design_brief`: questions to answer before planning and any closed
    families near the task (see [component principles](component-architecture-principles.md)).
    It then names likely owners, contracts, test links and relevant saved recommendations.
+   Where a test run was recorded (see [Tests for a change](#tests-for-a-change)), `test_reach`
+   says what share of the suite's time a change to each likely owner would pick: inside a
+   function, at its top level, and the share picked whatever changes. A file whose top-level
+   share is far above the other is a shared one; a new name is cheaper to test in the part
+   that uses it.
    Use `inspect` to expand a module or saved review; `inspect("charter")` returns the general principles.
    Entity inspection starts compact; follow `next_offset` to page relationships, or pass `full=true`
    for complete entity annotations and contracts. Plan assessment returns changes and decisions;

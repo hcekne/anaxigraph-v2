@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from anaxigraph.analysis.test_selection import select_tests
+from anaxigraph.analysis.test_selection import reach, select_tests
 from anaxigraph.contracts import Graph
 from anaxigraph.indexing import worktrees
 from anaxigraph.indexing.test_record import FORMAT, junit_cases, record_from_coverage
@@ -149,6 +149,20 @@ def observed_tests(app: Any, graph: Any, path: str, limit: int, offset: int) -> 
             }
         )
     return rows
+
+
+_REACH = (
+    "Share of the suite's recorded time a change would pick; every_change is picked whatever "
+    "changes. Where top_level is well above inside_function, a new or changed name in that "
+    "file reaches the tests of every file that uses it: keep the change inside functions, or "
+    "put the new name in the part that uses it."
+)
+
+
+def test_reach(app: Any, graph: Graph, paths: list[str]) -> list[dict[str, Any]]:
+    """What a change to each of these files would cost in tests, per recorded suite."""
+    rows = [reach(record, graph, paths) for record in _records(app)]
+    return [row | {"advice": _REACH} for row in rows if row["files"]]
 
 
 def _shadow(

@@ -209,8 +209,8 @@ Coverage is checked mechanically; semantic preservation remains a model claim.
 - Ordinary lists are compact and paged. Source packets and explicit review/entity expansion are
   separate from list views; task/result size ceilings remain enforced.
   Task briefs preserve three owner candidates and essential contracts; their prose budget is
-  soft. Historical co-change is separately attributed advice from the task baseline's Git history,
-  never a dependency edge, a requirement to edit associated files, or authority to skip CI.
+  soft. Test reach is the selection's own answer for each owner candidate, from the recorded
+  runs: advice about where a change is cheap to test, never authority to skip CI.
 
 ## Deliberate limits and next choices
 

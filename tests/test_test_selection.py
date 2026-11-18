@@ -1028,3 +1028,36 @@ def test_completed_and_interrupted_real_runs_have_distinct_recording_status(
     with pytest.raises(ValueError):
         app.record_tests(tmp_path / ".coverage", **kwargs)
     assert saved.read_bytes() == before
+
+
+def test_reach_of_a_file_is_what_a_real_edit_then_picks(checkout):
+    from anaxigraph.application import selection
+
+    app = Application(checkout)
+    paths = ["shop/pkg/settings.py", "shop/pkg/labels.py", "shop/tests/test_tool.py", "nowhere.py"]
+    [found] = selection.test_reach(app, app._live(), paths)
+    rows = {row["path"]: row for row in found["files"]}
+    assert found["suite"] == "shop" and "top_level" in found["advice"]
+    assert set(rows) == set(paths) - {"nowhere.py"}
+    assert all(
+        found["every_change"] <= row["inside_function"] <= row["top_level"] <= 1
+        for row in rows.values()
+    )
+    assert (
+        rows["shop/pkg/settings.py"]["top_level"] > rows["shop/pkg/settings.py"]["inside_function"]
+    )
+    [suite] = app.prepare_change("Change how an order label is written")["test_reach"]
+    assert suite["suite"] == "shop" and suite["every_change"] == found["every_change"]
+
+    # The simulated shares are the selection's own: a real edit of each kind picks the same.
+    settings, labels = checkout / "shop/pkg/settings.py", checkout / "shop/pkg/labels.py"
+    settings.write_text("LIMIT = 4\n")
+    assert picked(checkout)["time_share"] == rows["shop/pkg/settings.py"]["top_level"]
+    settings.write_text("LIMIT = 3\n")
+    labels.write_text(labels.read_text().replace("Order", "Ordre"))
+    assert picked(checkout)["time_share"] == rows["shop/pkg/labels.py"]["inside_function"]
+
+
+def test_reach_is_empty_without_a_record(tmp_path):
+    (tmp_path / "one.py").write_text("VALUE = 1\n")
+    assert Application(tmp_path).prepare_change("Change the value")["test_reach"] == []

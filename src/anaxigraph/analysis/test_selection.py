@@ -20,6 +20,7 @@ which did it.
 
 from __future__ import annotations
 
+import copy
 import posixpath
 import re
 from collections import defaultdict, deque
@@ -329,3 +330,35 @@ def select_tests(record: dict[str, Any], graph: Graph) -> dict[str, Any]:
         "reads_recorded": selection.reads is not None,
         "assurance": _ASSURANCE[selection.reads is not None],
     }
+
+
+def reach(record: dict[str, Any], graph: Graph, paths: list[str]) -> dict[str, Any]:
+    """Test reach: the share of the recorded suite's time a change would pick. For every
+    change whatever it touches, and per file for a change inside a function and for one at
+    its top level."""
+    base = _Selection(record, graph)
+    tests = [test for test in base.tests if test in graph.snapshot.files]
+    seconds = dict(zip(base.tests, record.get("seconds") or []))
+    total = sum(seconds.get(test, 0.0) for test in tests) or 1.0
+
+    def share(path: str | None, imports: dict[str, Any]) -> float:
+        one = copy.copy(base)
+        one.record = record | {"imports": imports}
+        one.picked, one.reasons, one.everything = set(), [], []
+        if path:
+            one.change(path)
+        _unseen(one, tests)
+        spent = sum(seconds.get(test, 0.0) for test in one.picked & set(tests))
+        return 1.0 if one.everything else round(spent / total, 3)
+
+    known = record["imports"]
+    files = [
+        {
+            "path": path,
+            "inside_function": share(path, known),
+            "top_level": share(path, known | {path: "changed"} if path in known else known),
+        }
+        for path in paths
+        if path in record["files"] and path.startswith(base.scope)
+    ]
+    return {"suite": record["suite"], "every_change": share(None, known), "files": files}
