@@ -283,7 +283,9 @@ def past_changes(replay: Replay, history: str, limit: int) -> list[dict[str, Any
             same = compared and path in replay.files
             files.append((kind, path, same and replay.unchanged_at_import(parent, commit, path)))
         label = f"#{pull.group(1)}" if history == "pulls" and pull else commit[:9]
-        rows.append({"change": label, "when": when, "files": files})
+        rows.append(
+            {"change": label, "when": when, "parent": parent, "commit": commit, "files": files}
+        )
         if len(rows) >= limit:
             break
     return rows

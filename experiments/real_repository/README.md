@@ -13,6 +13,7 @@ commits. Pull requests are recognised as GitHub merge commits from `fix/`, `feat
 | Which tests would be picked for each pull request? | `replay_tests.py CLONE --coverage ... --junit ... --reads ...` | Share of suite time picked, how often the whole suite is selected and why, and whether any test that executed or read a changed file was left out |
 | How much of the suite does a change need, and what would lower it? | `reach_report.py CLONE --suite NAME` | Test reach: the share of suite time the typical past change needs, where it comes from, the parts ranked, the files that cost most, and what-ifs, each replayed |
 | Where are the walls between the parts, and does a change add a reach-around? | `walls.py CHECKOUT --scope DIR`, with `--base REVISION` for what a change adds | Per part the names other parts use of it (its doors), uses of private names across parts, and the new ones since a revision; reads a `tach.toml` for declared parts |
+| Would picking by the names that changed, instead of by file, be worth it? | `interface_picking.py CLONE --suite NAME` | A trial rule replayed over the same past changes, strict and lenient, against today's rule and the best case; not in the product |
 | Would the picked tests have caught a fault? | `plant_faults.py CLONE FAULTS.json --run '...' --out DIR` | For each planted fault: the test files that fail in a whole-suite run, and those among them the selection would have left out |
 
 `replay_tests.py` needs one recorded run of the suite at the clone's commit, made with one
