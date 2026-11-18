@@ -106,6 +106,29 @@ into) and 69% (today). Needed tests left out must be 0.
 Limit: one overnight run and one working day. If the single run does not finish, stop and report;
 do not build another way of recording.
 
+*Done on 18 November.* One pytest run recorded the suite in 69 minutes and followed all 2,197
+Python programs its tests started. The build of that morning picked the whole suite for every
+change on that recording. Three causes were found and fixed the same day (`c6b0846`): a module
+that started a program the recording could not see into stood for every test that ran the
+module, and for the whole suite when coverage had not measured it; source that Python opens to
+print a line of a traceback counted as data the test read; and code a test loads from outside
+the suite's folders counted for nothing. With the fixes:
+
+| | 16 November | Morning of 18 November | Now |
+| --- | ---: | ---: | ---: |
+| Picked for every change | 40% | all | 4% |
+| Typical pull request | 69% | 100% | 53% |
+| Mean | 72% | 100% | 56% |
+| Pull requests under 20%, of 70 | 0 | 0 | 17 |
+| Whole suite by rule | 2 | 70 | 12 |
+| A needed test left out | 0 | 0 | 0 |
+| Ten planted faults: a newly failing test file left out | 0 | | 0 |
+| Ten planted faults: share of suite time picked | 50 to 82% | | 13 to 58% |
+
+Of the 12, eight change a CI workflow and two a dependency list. `record-tests` now says what a
+recording is worth when it is saved: the share every change will pick, the reason when that is
+everything, and the code the run loaded without measuring it.
+
 **Phase 2. The scoreboard.** A reach report from a saved record and the repository's history: the
 repository's number, its parts ranked, the files that cost most (how often changed, times what
 they pull in), and the largest what-ifs, each replayed. It starts in
@@ -116,12 +139,24 @@ Number: it reproduces those figures from the same recording.
 Done when one command prints the report for the product and for this repository in under five
 minutes. Limit: three days.
 
+*Done on 18 November:* `experiments/real_repository/reach_report.py`. From the first recording
+and the rule of its build it reproduces the figures above, in 204 seconds. On this repository,
+with the record CI makes and the last 70 commits, it takes 30 seconds and says the typical commit
+needs 97% of the unit suite: nearly every test goes through one application object, and one file
+was changed in 20 of the 70 commits.
+
 **Phase 3. Watch only.** In the product's CI: a nightly recording on the main branch; on each pull
 request the whole suite still runs, and one extra step compares what AnaxiGraph would have picked
 with what failed (`anaxigraph tests --ran`).
 Number: failing tests outside the pick over at least 30 pull requests, 0.
 Needs the maintainer's agreement, because it changes that repository's CI and its cost.
 Limit: two days of work; after that it runs by itself.
+
+*Prepared on 18 November, not pushed.* A nightly workflow records the suite; one step in the
+pull-request job reports the pick and any failing test file outside it, and never fails the job.
+Both were run locally against a real result. That repository's Python job takes 41 minutes
+today, and the step adds about two. It waits for the maintainer's word, because it opens a pull
+request there.
 
 ### Stage B: guard and advise
 
@@ -143,6 +178,23 @@ parts well enough, AnaxiGraph reads its file instead of inventing one.
 Number: new reach-arounds merged per week, 0 once it is switched on, with the known ones falling.
 Limit: one week.
 
+*First step, 18 November:* `experiments/real_repository/walls.py` lists the parts, the names
+other parts use of each (its doors), the uses of private names across parts, and with `--base`
+what a change adds to both. On the product's backend: 10 parts, 3,111 uses of one part by
+another through 1,123 doors, and 25 uses of a private name. Twelve weeks earlier the backend had
+half the source files, 547 doors and 6: about 1.6 new ones a week with nothing watching. On this
+repository: 78 doors, none private.
+
+Tach, tried on the product first: nine modules declared, synced and checked in under a second,
+with JSON output. It declares and checks boundaries well, so `walls.py` reads its file where
+there is one. One of its rules found the 5 private names that are imported by name; the other
+12 are reached through an imported module, and 8 are names a module leaves out of `__all__`.
+Following imports to pick tests, as its dependency map allows, picked 75% for the typical pull
+request there and left out a test that had run or read a changed file in 30 of 70.
+
+In the product, `validate_change` already reports a new use of another file's private name. The
+doors of a part in the brief wait for room under the size ceiling.
+
 **Phase 5. Pick by what changed in the interface.** Today a top-level change to a file picks the
 tests of every file that uses that file. The map knows which names each file uses. So when only
 some names changed, pick the tests of the files that use those names. This is the rule that makes
@@ -151,6 +203,13 @@ Number: mean reach on the replay. The bound is 12 points, from 51% to 39% after 
 only if the replay and the planted faults leave out no needed test and it gains at least 5 points.
 Limit: three days to measure, before any product code is written.
 
+*Measured on 18 November: not built.* `experiments/real_repository/interface_picking.py` replays
+the rule. On the product, mean share of suite time: 56.1% today, 54.2% with the rule in its
+careful form (1.9 points), 52.8% in a form that trusts decorators and base classes (3.3), 45.4%
+in the best case. The bar is 5. The settings class, the core model classes, tables of data and
+the file that wires the application together are used by name almost everywhere, so following
+names changes nothing for them. This rule starts to pay when those are split.
+
 **Phase 6. Advice aimed at the number.** The reach report's findings, said at the moment they
 matter. In `prepare_change`: "this file is changed in one pull request of five, and each time the
 whole suite is needed; put the new setting with the part that uses it." In a review: the three
@@ -158,6 +217,13 @@ changes that would lower this repository's reach most, each with its replayed ef
 cannot name its effect on the number is not given.
 Number: reach of the typical pull request over the last 30 merged, on the product. Falling.
 Limit: one week.
+
+*First step, 18 November:* `prepare_change` carries `test_reach` for the likely owners and
+`assess_plan` for the files a plan names: the share of the suite a change inside a function
+would pick, the share for one at the top level, and the share picked whatever changes. The
+numbers are the selection's own. On the product a brief with it takes 0.5 seconds. It took the
+place of the co-change advice, which had not beaten keyword search. The sentence that names a
+file's history ("changed in one pull request of five") is not written yet.
 
 ### Stage C: prove and switch on
 
@@ -203,7 +269,7 @@ And AnaxiGraph is still under 15,000 production lines and answers a brief in und
 | Decision | Needed for |
 | --- | --- |
 | Freeze new advice, review, workflow and dashboard features until phase 7 (agreed with the plan, 18 November) | Phase 0 |
-| A nightly recording job and a watch-only step in the product's CI | Phase 3 |
+| A nightly recording job and a watch-only step in the product's CI (prepared; waits for the word to push) | Phase 3 |
 | Which product changes to make: settings per part, model imports, walls in the flat folder | The product's own reach |
 | A spending limit for the comparison | Phase 7 |
 | A release | Whenever wanted; `main` is ahead of 1.0.0 |
@@ -231,11 +297,11 @@ verification.
 | Phase | State | Measured |
 | --- | --- | --- |
 | 0 Clear the desk | Done, 18 November | Uncommitted work: 0. The unfinished dashboard fix was committed with its tests (`d40002d`) |
-| 1 A recording that counts | Open | The last recording of the product is from the build of 16 November |
-| 2 The scoreboard | Prototype outside the repository | The figures above |
-| 3 Watch only | Open; needs agreement | |
-| 4 Walls | Open | |
-| 5 Pick by what changed in the interface | Open | Bound replayed: 12 points |
-| 6 Advice aimed at the number | Open | |
+| 1 A recording that counts | Done, 18 November | Typical pull request 53% (69% before), mean 56%, 17 of 70 under 20%, nothing needed left out. A second recording that measures two more folders is not in these figures |
+| 2 The scoreboard | Done, 18 November | `reach_report.py`: the product in 204 seconds, this repository in 30 |
+| 3 Watch only | Prepared, not pushed; waits for the maintainer | Checked locally; the product's Python job takes 41 minutes today |
+| 4 Walls | First step done | `walls.py`. The product: 25 uses of private names across parts, 6 twelve weeks earlier |
+| 5 Pick by what changed in the interface | Measured: not built | 1.9 points careful, 3.3 trusting; the bar is 5 |
+| 6 Advice aimed at the number | First step done | `test_reach` in `prepare_change` and `assess_plan`, 0.5 seconds on the product |
 | 7 With and without the buddy | Open; needs a spending limit | |
 | 8 Switch it on | Open | |

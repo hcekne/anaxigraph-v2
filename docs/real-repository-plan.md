@@ -89,19 +89,17 @@ below, phase 3 the fourth, and phase 7 is step 7. A replay on 18 November split 
 into its causes: 21 points are the tests that start another process, and 12 are top-level changes
 to a file that select the tests of every file using it. The figures are in the roadmap.
 
-- Tests that start another process. Recording inside the Python processes they start would
-  let them be selected like any other test. Replaying the 70 pull requests as if that were
-  done gives a median of 44% of suite time (25th percentile 11%, mean 51%), against 69% now.
-  On the target the heaviest of them run the application's own git client, which starts a
-  Python process on a script of the repository and git on temporary repositories.
-- A recorded run with the git rule as it is now. The rule was widened after the run above
-  (a repository created or copied elsewhere, a question about commit names, no command) and
-  tightened (a path given as the value of an option), so the 39% is from before that.
+- Tests that start another process: done on 18 November. One recorded run with the current
+  recorder followed all 2,197 Python programs the tests started, and the git rule as it is
+  now exempted the rest of the git commands. 21 test files (2% of suite time) still start a
+  program the recording cannot see into, against 86 (39%) before. The typical pull request
+  needs 53% of suite time, against 69%. The table is in [the roadmap](roadmap.md), phase 1.
 - A module that is loaded by path is not attributed to the tests that loaded it. A changed
   migration therefore selects the whole suite; a new one selects the tests that scanned its
   folder.
 - Shadow mode in the target's own CI: a nightly job that records, and `anaxigraph tests --ran`
-  on pull requests. These are changes to that repository and its CI cost.
+  on pull requests. Prepared on 18 November and checked locally; not pushed, because these are
+  changes to that repository and its CI cost.
 - The supplied-evidence audit and gate have moved to `experiments/declared_ci/`. The drift
   runner applies its own qualification without adding that protocol to ordinary product use.
 - A release: these changes are on `main` only.
