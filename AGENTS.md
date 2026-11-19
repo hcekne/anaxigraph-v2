@@ -1,7 +1,8 @@
 # Working in AnaxiGraph V2
 
-This standalone replacement targets the existing `anaxigraph` PyPI project at 1.0. The legacy
-checkout is `~/repos/anaxigraph`; do not import its runtime or change its services for V2 work.
+Develop the 1.x `anaxigraph` PyPI package in this repository. The
+[legacy 0.9.x repository](https://github.com/hcekne/anaxigraph) has its own runtime and services.
+Keep V2 independent of both.
 Build useful capabilities selectively rather than restoring every legacy feature.
 
 Use GPT-6.1 Sol with high reasoning effort as the default coding agent. Record explicit overrides
