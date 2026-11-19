@@ -13,6 +13,7 @@ import pytest
 
 from anaxigraph import recorder
 from anaxigraph.application import Application
+from anaxigraph.application.selection import ci_workflows
 from anaxigraph.interfaces import cli
 
 READ = "import json\nfrom pathlib import Path\n\n"
@@ -249,6 +250,12 @@ ALWAYS = [T("kit"), T("launch"), T("readme"), T("shell_run"), T("tool"), T("trac
 
 def chosen(*names: str) -> list[str]:
     return sorted({*ALWAYS, *(T(name) for name in names)})
+
+
+@pytest.fixture(autouse=True)
+def no_ci_job(monkeypatch):
+    """These checkouts are not the repository whose workflow may be running this suite."""
+    monkeypatch.delenv("GITHUB_WORKFLOW_REF", raising=False)
 
 
 @pytest.fixture(scope="module")
@@ -583,6 +590,39 @@ def test_shared_setup_outside_the_scope_cannot_be_ignored(request, fixture, name
     suite = picked(root)
     assert suite["status"] == "all"
     assert any(name in reason for reason in suite["everything_because"])
+
+
+def test_only_the_workflows_of_the_job_that_runs_the_suite_are_its_setup(checkout, monkeypatch):
+    name = ".github/workflows/deploy.yml"
+    (checkout / name).parent.mkdir(parents=True)
+    (checkout / name).write_text("on: workflow_dispatch\n")
+    # As if the workflow was there when the run was recorded, and one test read it.
+    saved = checkout / ".anaxigraph-v2/test-records/shop.json"
+    known = json.loads(saved.read_text())
+    known["files"][name] = Application(checkout)._live().snapshot.files[name]
+    known["reads"]["opened"][name] = [known["tests"].index(T("routes"))]
+    saved.write_text(json.dumps(known))
+    assert picked(checkout)["status"] == "nothing_to_run"
+
+    (checkout / name).write_text("on: push\n")
+    assert picked(checkout)["status"] == "all"  # Which job runs the suite is not known here.
+    monkeypatch.setenv("GITHUB_WORKFLOW_REF", "o/shop/.github/workflows/ci.yml@refs/pull/1/merge")
+    found = Application(checkout).tests_for_change()
+    # Another workflow cannot change how this job runs its tests: only the test that read it.
+    assert found["suites"][0]["test_files"] == chosen("routes")
+    assert found["ci_workflows"] == [".github/workflows/ci.yml"]
+    # A new workflow that nothing read adds nothing. The job's own, and one it uses, are setup.
+    (checkout / ".github/workflows/steps.yml").write_text("on: workflow_call\n")
+    assert picked(checkout)["test_files"] == chosen("routes")
+    job = "jobs:\n  test:\n    uses: './.github/workflows/steps.yml'\n"
+    (checkout / ".github/workflows/ci.yml").write_text(job)
+    assert ci_workflows(checkout) == {".github/workflows/ci.yml", ".github/workflows/steps.yml"}
+    suite = picked(checkout)
+    assert suite["status"] == "all"
+    assert [reason.partition(":")[0] for reason in suite["everything_because"]] == [
+        ".github/workflows/ci.yml",
+        ".github/workflows/steps.yml",
+    ]
 
 
 def test_an_ancestor_dependency_list_widens_nested_scopes(checkout, run):

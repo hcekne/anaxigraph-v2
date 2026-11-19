@@ -10,7 +10,9 @@ most, and what the largest changes would do to the number.
 The clone must be at the commit the suite was recorded at, with the record saved in it by
 `anaxigraph record-tests`. Past changes are merged fix/feature pull requests, or every commit
 on the main line with `--history commits`. Nothing is executed and nothing is written to the
-clone.
+clone. `--workflow .github/workflows/ci.yml` names the workflow whose job runs the suite, as
+the selection knows it inside that job: a change to another workflow then picks only the tests
+that read it.
 
 A what-if is a best case, not a promise. `--then` replays named ones in order, each on top of
 the last: `attributed` (the recording sees inside the tests that start another program),
@@ -37,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from anaxigraph.analysis import test_selection as selection
+from anaxigraph.application.selection import ci_workflows
 from anaxigraph.indexing import index
 from anaxigraph.indexing.python import _import_fingerprint
 
@@ -110,6 +113,7 @@ class Replay:
         self.scope = tuple(record["scope"])
         self.whole = set(record["ran_at_import"])  # Compared as a whole, not by import code.
         self.reads = record["reads"] or {}
+        self.ci: set[str] | None = None  # The workflows that define the job running the suite.
         base = selection._Selection(record, self.graph)
         self.modules, self.users = base.modules, base.users
         self.sources = sorted(
@@ -200,7 +204,7 @@ class Replay:
             stays = same or all_local or path in local
             if path.endswith(".py") and path in copied["imports"] and not stays:
                 copied["imports"][path] = "changed"
-        return selection.select_tests(copied, self.graph)
+        return selection.select_tests(copied, self.graph, self.ci)
 
     def unchanged_at_import(self, parent: str, commit: str, path: str) -> bool:
         """Whether a change left alone what the record compares for a file: all of it when its
@@ -493,8 +497,11 @@ def named(replay: Replay, spec: str) -> tuple[str, str, Any]:
     return f"{patterns} ({len(paths)} files): {label}", kind, paths
 
 
-def report(repo: Path, record: dict, history: str, limit: int, then: list[str]) -> dict[str, Any]:
+def report(
+    repo: Path, record: dict, history: str, limit: int, then: list[str], workflow: str = ""
+) -> dict[str, Any]:
     replay = Replay(repo, record)
+    replay.ci = ci_workflows(repo, f"/{workflow}@")
     if record.get("revision") != replay.graph.snapshot.revision:
         raise SystemExit("The clone is not at the commit the suite was recorded at")
     unchanged = replay.pick([])
@@ -668,12 +675,14 @@ def main(arguments: list[str] | None = None) -> dict[str, Any]:
     options.add_argument("--limit", type=int, default=70, help="Past changes to replay")
     options.add_argument("--then", action="append", default=[], help="A what-if, in order")
     options.add_argument("--json", type=Path, help="Write every row here")
+    options.add_argument("--workflow", default="", help="The workflow file that runs the suite")
     args = options.parse_args(arguments)
     repo = args.clone.resolve()
     saved = args.record or repo / ".anaxigraph-v2" / "test-records" / f"{args.suite}.json"
     started = time.monotonic()
     with remembered_users():
-        found = report(repo, json.loads(saved.read_text()), args.history, args.limit, args.then)
+        record = json.loads(saved.read_text())
+        found = report(repo, record, args.history, args.limit, args.then, args.workflow)
     found["seconds"] = round(time.monotonic() - started, 1)
     print(render(found))
     print(f"\n{found['seconds']:.0f} seconds", file=sys.stderr)

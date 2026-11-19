@@ -2,12 +2,12 @@
   "version": 1,
   "baseline_commit": "dcc1a68173c794fc37d9e83541fd3bb89b6eef2c",
   "limits": {
-    "production_physical_lines": 15000,
+    "production_physical_lines": 16000,
     "file_physical_lines": 800,
     "package_data_bytes": 200000,
     "new_function_complexity": 15
   },
-  "production_budget_reason": "Maintainer decision of 15 November 2026: a 15,000-line ceiling while the real-repository plan lands (import linking for nested projects, per-file incremental storage, TypeScript/JavaScript reading and evidence-based test selection). This is headroom, not a target: every step reports its measured size, and the declared-input CI planner is removed when evidence-based selection replaces it. File and function ceilings are unchanged.",
+  "production_budget_reason": "Maintainer decision of 18 November 2026: a 16,000-line ceiling, to be used only where it is needed; the 15,000 lines of 15 November were all in use. This is headroom, not a target: every step reports its measured size, new work still starts in experiments/, and what moves into the product should replace something where it can. First use: a workflow that does not define the job running a suite no longer selects that whole suite (29 lines, production at 15,029). File and function ceilings are unchanged.",
   "existing_complexity": {
     "src/anaxigraph/analysis/guidance.py:_module_edges": 17,
     "src/anaxigraph/analysis/guidance.py:neighborhood": 18,

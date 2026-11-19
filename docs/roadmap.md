@@ -131,6 +131,26 @@ Of the 10, nine change a CI workflow or another shared setup file and one a depe
 `record-tests` now says what a recording is worth when it is saved: the share every change will
 pick, the reason when that is everything, and the code the run loaded without measuring it.
 
+*Later that day.* Four of the nine changed only a workflow that does not run the suite: one
+that deploys, one that updates tools, one that builds another program. Such a workflow cannot
+change how the job that runs the tests runs them. Inside a GitHub Actions job the selection now
+asks which workflow the job belongs to (`GITHUB_WORKFLOW_REF`); only that workflow and the local
+workflows it uses count as its setup, and any other workflow picks the tests that read it.
+Anywhere else every workflow still counts. Same 70 pull requests, same recording:
+
+| | Before | With the rule |
+| --- | ---: | ---: |
+| Typical pull request | 47.2% | 42.8% |
+| Mean | 52.2% | 50.4% |
+| Pull requests under 20%, of 70 | 19 | 20 |
+| Whole suite by rule | 10 | 6 |
+| A needed test left out | 0 | 0 |
+
+Two of the four came down, one from the whole suite to 2%; the other two need everything for
+the code they change. One fault was planted in such a workflow, a setting that a test of the
+suite forbids there, and the whole suite run: one test file newly fails, the rule picks 2.4% of
+the suite's time where every test was picked before, and that file is in the pick.
+
 **Phase 2. The scoreboard.** A reach report from a saved record and the repository's history: the
 repository's number, its parts ranked, the files that cost most (how often changed, times what
 they pull in), and the largest what-ifs, each replayed. It starts in
@@ -160,6 +180,13 @@ test file outside it, and never fails the job. Both were run locally against a r
 the pull request's own run is their first execution on the product's runners. That repository's
 Python job takes 41 minutes today, and the step adds about two. The count towards 30 starts with
 the first nightly record after it is merged.
+
+*Merged the same evening*, on the maintainer's word. On the product's runner the recording job
+took 58 minutes: 6,832 tests passed, the record was verified, and every change picks 2.2% of the
+suite. The first record on the main branch was made that night, in 61 minutes, and the step's
+lookup was then run by hand against it: an unchanged checkout needs no test, and an edit to one
+function of one file picks 80 of 646 test files, 10% of the suite's time. The step itself first
+runs with a record on the next pull request there.
 
 ### Stage B: guard and advise
 
@@ -213,22 +240,39 @@ in the best case. The bar is 5. The settings class, the core model classes, tabl
 the file that wires the application together are used by name almost everywhere, so following
 names changes nothing for them.
 
-A third form was measured the same day, on the second recording (mean 52.2% today, 50.2% by
-name there). Where a change only adds or alters plain data members of a class, such as a
-settings field with a default, it follows the files that mention those members by name, in code
-or in data, instead of every file that uses the class: mean 45.0%, typical 37% against 47%.
-That is 7.2 points and the first form over the bar. It also drops the tests that merely ran the
-changed file, so the replay's check does not apply to it and it needs evidence of its own.
-Three faults were planted in settings defaults and the whole suite run for each:
+A third form was measured the same day, on the second recording. Where a change only adds or
+alters plain data members of a class, such as a settings field with a default, it follows the
+files that spell those members, in code or in data, instead of every file that uses the class.
+It was first reported together with the form by name, as 7.2 points. Measured by itself that
+evening, and then made careful, on the same 70 pull requests:
+
+| Rule | Typical | Mean |
+| --- | ---: | ---: |
+| Today | 47.2% | 52.2% |
+| By name | 44.1% | 50.2% |
+| By name and by field (the first report) | 37.0% | 45.0% |
+| By field alone | 37.0% | 48.6% |
+| By field alone, careful about where a spelled name runs | 37.0% | 49.2% |
+| By field alone, also following members read by a computed name | 47.2% | 50.9% |
+
+By itself the field form gains 3.6 points, not 7.2, and in 6 of the 70 it no longer picks a test
+that ran the changed file. It is also not safe as first written. The product reads settings
+through `getattr` with a name taken from a table or built from parts in 36 places of 16 files,
+and the tests of those files are a quarter of the suite. A form that follows only spelled names
+cannot see such a read; following them as well leaves 1.3 points and nothing for the typical
+pull request. *Not built.* The bar is 5.
+
+Three faults had been planted in settings defaults, with the whole suite run for each:
 
 | Changed default of a setting that is | Test files that newly fail | Today's rule picks | The field form picks | Left out |
 | --- | ---: | ---: | ---: | ---: |
 | read in one place | 0 | 100% | 4.6% | |
 | named in a table of data | 0 | 100% | 5.4% | |
 | read widely | 23 | 100% | 34.3% | 0 |
+| read in six files and named in no test (planted that evening) | 14 | 100% | 6.0% | 0 |
 
-One fault that makes tests fail is thin evidence. Before it is built it needs more faults whose
-tests fail, and room under the size ceiling.
+Both faults that make tests fail are caught. Neither is read through a computed name; that
+case is known from reading the code and was not planted, since the form is not being built.
 
 **Phase 6. Advice aimed at the number.** The reach report's findings, said at the moment they
 matter. In `prepare_change`: "this file is changed in one pull request of five, and each time the
@@ -272,15 +316,17 @@ On the product repository:
 - the comparison shows the buddy's changes are as correct and have lower reach, at a cost the
   maintainer accepts.
 
-And AnaxiGraph is still under 15,000 production lines and answers a brief in under a second.
+And AnaxiGraph is still under its production ceiling and answers a brief in under a second.
+The ceiling was 15,000 lines; the maintainer set it to 16,000 on 18 November, to be used only
+where it is needed. Production is at 15,029.
 
 ## How the work is run
 
 - One phase at a time, in order. A work order names the phase, its number and its limit, and ends
   with "stop and report".
 - A number is reported as measured on a real repository, together with what was not run.
-- New work starts in `experiments/`. It moves into the product by replacing something, not by
-  raising the ceiling.
+- New work starts in `experiments/`. It moves into the product by replacing something where it
+  can; the ceiling is the maintainer's to move.
 - A selection rule ships only when the replay and the planted faults leave out no needed test.
 - Nothing is added to the product's repository or its CI without the maintainer's agreement.
 
@@ -289,8 +335,9 @@ And AnaxiGraph is still under 15,000 production lines and answers a brief in und
 | Decision | Needed for |
 | --- | --- |
 | Freeze new advice, review, workflow and dashboard features until phase 7 (agreed with the plan, 18 November) | Phase 0 |
-| A nightly recording job and a watch-only step in the product's CI (agreed 18 November; pull request opened, merging is the maintainer's) | Phase 3 |
-| Which product changes to make: settings per part, model imports, walls in the flat folder. The settings split was asked for on 18 November; reading the code first showed most new settings there are named in tables of data and read through one object that 175 functions take, so a split would move little and the field form of phase 5 is the better way to the same effect. No product change was prepared | The product's own reach |
+| A nightly recording job and a watch-only step in the product's CI (agreed, and merged on the maintainer's word, 18 November) | Phase 3 |
+| Which product changes to make: settings per part, model imports, walls in the flat folder. The settings split was asked for on 18 November; reading the code first showed most new settings there are named in tables of data and read through one object that 175 functions take, so a split would move little. The field form of phase 5 was meant to reach the same effect from the tool; measured by itself and made safe it gains 1.3 points, so it was not built either. No product change was prepared | The product's own reach |
+| The production ceiling: 16,000 lines, used only where needed (18 November) | Any product code beyond 15,000 lines |
 | A spending limit for the comparison | Phase 7 |
 | A release | Whenever wanted; `main` is ahead of 1.0.0 |
 
@@ -317,11 +364,11 @@ verification.
 | Phase | State | Measured |
 | --- | --- | --- |
 | 0 Clear the desk | Done, 18 November | Uncommitted work: 0. The unfinished dashboard fix was committed with its tests (`d40002d`) |
-| 1 A recording that counts | Done, 18 November | Typical pull request 47% (69% before), mean 52% (72%), 19 of 70 under 20%, nothing needed left out, ten planted faults none left out |
+| 1 A recording that counts | Done, 18 November | Typical pull request 43% (69% before), mean 50% (72%), 20 of 70 under 20%, nothing needed left out, ten planted faults none left out |
 | 2 The scoreboard | Done, 18 November | `reach_report.py`: the product in 204 seconds, this repository in 30 |
-| 3 Watch only | Pull request opened on the product, 18 November | Checked locally; first run on the product's runners is the pull request's own. 0 of 30 pull requests watched |
+| 3 Watch only | Merged on the product, 18 November | The recording job ran on the product's runner in 58 minutes. 0 of 30 pull requests watched |
 | 4 Walls | First step done | `walls.py`. The product: 25 uses of private names across parts, 6 twelve weeks earlier |
-| 5 Pick by what changed in the interface | Measured: by name not built (2 points); by field 7 points, not built yet | The bar is 5. Three planted settings faults: one fails tests, none left out |
+| 5 Pick by what changed in the interface | Measured, nothing built | The bar is 5 points. By name: 2. By field: 3.6 by itself, 1.3 once it is safe |
 | 6 Advice aimed at the number | First step done | `test_reach` in `prepare_change` and `assess_plan`, 0.5 seconds on the product |
 | 7 With and without the buddy | Open; needs a spending limit | |
 | 8 Switch it on | Open | |

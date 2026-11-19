@@ -369,7 +369,11 @@ The whole suite is selected, with the reason, when a changed input cannot be att
   `pyproject.toml`, `setup.py`, `setup.cfg`, `Pipfile`, `*.lock`): the suite is installed from
   it before any test runs, so a test that reads it does not stand for what depends on it;
 - a GitHub workflow or local action under `.github/workflows/` or `.github/actions/`: it can
-  change the environment and commands before recording starts;
+  change the environment and commands before any test runs. Inside a GitHub Actions job
+  (`GITHUB_WORKFLOW_REF` is set) that holds only for the workflow the job belongs to and the
+  local workflows it uses. Another workflow cannot change how this job runs its tests, so it
+  selects only the tests that read it, and the answer lists the workflows it went by as
+  `ci_workflows`;
 - a Python file that was removed: what still imports it is not in the record;
 - a module that nothing imports and whose folder nothing scanned, when it is new, was not
   measured, or changed what it does at import. Something other than an import statement loads

@@ -195,6 +195,25 @@ def _shadow(
     }
 
 
+def ci_workflows(root: Path, ref: str | None = None) -> set[str] | None:
+    """The workflow file of the GitHub Actions job this is running in, and the local workflows
+    it uses; None anywhere else."""
+    ref = os.environ.get("GITHUB_WORKFLOW_REF", "") if ref is None else ref
+    named = re.search(r"/(\.github/workflows/[^@]+)@", ref)
+    found: set[str] = set()
+    queue = [named.group(1)] if named else []
+    while queue:
+        path = queue.pop()
+        if path not in found:
+            found.add(path)
+            try:
+                text = (root / path).read_text()
+            except (OSError, UnicodeDecodeError):
+                continue  # Removed or unreadable: it still counts as changed setup.
+            queue += re.findall(r"uses:\s*[\"']?\./(\.github/workflows/[^\s\"'@#]+)", text)
+    return found or None
+
+
 def tests_for_snapshot(
     app: Any,
     graph: Graph,
@@ -208,8 +227,9 @@ def tests_for_snapshot(
     which failing test files its selection would have left out.
     """
     suites = []
+    ci = ci_workflows(app.root)
     for record in _records(app):
-        picked = select_tests(record, graph)
+        picked = select_tests(record, graph, ci)
         if ran:
             picked["shadow"] = _shadow(record, picked, graph, ran, reads)
         if not full and len(picked["test_files"]) > _SHOWN:
@@ -223,4 +243,5 @@ def tests_for_snapshot(
             "recorder, then save it with `anaxigraph record-tests`. Until then every test is "
             "needed.",
         }
-    return {"status": "recorded", "snapshot_id": graph.snapshot.id, "suites": suites}
+    found = {"status": "recorded", "snapshot_id": graph.snapshot.id, "suites": suites}
+    return found | {"ci_workflows": sorted(ci)} if ci else found

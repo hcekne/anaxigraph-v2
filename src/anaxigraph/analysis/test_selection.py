@@ -54,7 +54,12 @@ def _installs(path: str) -> bool:
     return listed or named or name.endswith(".lock")
 
 
-def _shared_setup(path: str, ancestors: set[PurePosixPath]) -> bool:
+def _shared_setup(path: str, ancestors: set[PurePosixPath], ci: set[str] | None) -> bool:
+    """What the suite is installed from, or CI setup: every workflow, or when the job that
+    runs the suite is known, only the workflows that define it. Another workflow cannot
+    change how this job runs its tests, so only a test that read it needs it."""
+    if ci is not None and path.startswith(".github/workflows/"):
+        return path in ci
     return path.startswith((".github/workflows/", ".github/actions/")) or (
         _installs(path) and PurePosixPath(path).parent in ancestors
     )
@@ -84,8 +89,8 @@ def _users(graph: Graph, inside: set[str]) -> tuple[dict[str, set[str]], Any]:
 
 
 class _Selection:
-    def __init__(self, record: dict[str, Any], graph: Graph):
-        self.record, self.files = record, graph.snapshot.files
+    def __init__(self, record: dict[str, Any], graph: Graph, ci: set[str] | None = None):
+        self.record, self.files, self.ci = record, graph.snapshot.files, ci
         self.tests: list[str] = record["tests"]
         self.known = set(self.tests)
         self.modules = {node.path: node for node in graph.nodes if node.kind == "module"}
@@ -238,13 +243,13 @@ class _Selection:
         outside = not path.startswith(self.scope) and path not in self.record["imports"]
         if outside and path in self.record.get("unmeasured", ()):
             self.everything.append(f"{path}: loaded by the recorded run, but not measured")
-        return outside
+        return outside or path.startswith(".github/workflows/")  # One of another job.
 
     def change(self, path: str) -> None:
         node = self.modules.get(path)
         read = self.read(path)
         python = path.endswith(".py")
-        if _shared_setup(path, self.ancestors):
+        if _shared_setup(path, self.ancestors, self.ci):
             self.everything.append(f"{path}: shared installation or CI setup changed")
             return
         if self._outside(path):
@@ -311,9 +316,12 @@ def _recording_limit(record: dict[str, Any]) -> str | None:
     return None
 
 
-def select_tests(record: dict[str, Any], graph: Graph) -> dict[str, Any]:
-    """The test files of one recorded suite that the current checkout needs."""
-    selection = _Selection(record, graph)
+def select_tests(
+    record: dict[str, Any], graph: Graph, ci: set[str] | None = None
+) -> dict[str, Any]:
+    """The test files of one recorded suite that the current checkout needs. `ci` names the
+    workflow files that define the job running the suite, when that is known."""
+    selection = _Selection(record, graph, ci)
     changed = _changed(record, graph)
     for path in changed:
         selection.change(path)

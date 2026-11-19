@@ -11,7 +11,7 @@ separately. The production budget counts every physical Python, JavaScript, CSS 
 data is reported separately and has its own byte budget. Tests and experiment code are visible in
 the report rather than folded into the production count or omitted from the accounting.
 
-The explicit limits in `quality-budget.json` are 15,000 production lines, 800 lines per
+The explicit limits in `quality-budget.json` are 16,000 production lines, 800 lines per
 production file and 200,000 bytes of package JSON data. New Python functions have a decision-score
 ceiling of 15. Existing functions above that value have named limits equal to their measured debt,
 so they cannot silently become more complex. The score is one plus branch, boolean and comprehension
@@ -72,6 +72,12 @@ had pushed the total 34 lines over the previous 13,535-line limit, `workflows/en
 lines and its batch loop to a decision score of 19, which left `main` failing this check. The
 repair is now one more attempt in the candidate loop instead of a nested second submission:
 the file is 788 lines, both functions score at most 15 and the total is 13,549.
+
+On 18 November 2026 the maintainer set the ceiling to 16,000 lines, to be used only where it
+is needed: the 15,000 lines were all in use, and a measured improvement had no room. New work
+still starts in `experiments/` and should replace something where it can. The first use is the
+rule that a workflow which does not define the job running a suite selects only the tests that
+read it: 29 lines, with production at 15,029.
 
 When a check fails, simplify the change or deliberately revise the relevant budget with an
 explanation of the required behavior and tradeoff. CI never rewrites the baseline or raises a limit.
