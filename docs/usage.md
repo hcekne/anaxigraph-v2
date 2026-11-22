@@ -7,20 +7,20 @@ then give the findings you accept to the coding agent as concrete work.
 
 ## Install and run
 
-The 1.0 package uses the existing `anaxigraph` PyPI project, with Python 3.11 or newer.
-Check the [release record](releases/1.0.0.md) for publication status. With uv installed:
+The 1.1 package uses the existing `anaxigraph` PyPI project, with Python 3.11 or newer.
+Check the [release record](releases/1.1.0.md) for publication status. With uv installed:
 
 ```bash
-uvx --from anaxigraph==1.0.0 anaxigraph scan --repo /absolute/path/to/your/repo
-uvx --from anaxigraph==1.0.0 anaxigraph status --repo /absolute/path/to/your/repo
-uvx --from anaxigraph==1.0.0 anaxigraph serve --repo /absolute/path/to/your/repo
+uvx --from anaxigraph==1.1.0 anaxigraph scan --repo /absolute/path/to/your/repo
+uvx --from anaxigraph==1.1.0 anaxigraph status --repo /absolute/path/to/your/repo
+uvx --from anaxigraph==1.1.0 anaxigraph serve --repo /absolute/path/to/your/repo
 ```
 
 Open `http://127.0.0.1:8766`. Scanning uses no models; Mapping and other model workflows require an
 authenticated, installed Codex or Claude CLI. For a persistent executable:
 
 ```bash
-uv tool install 'anaxigraph>=1.0.0'
+uv tool install 'anaxigraph>=1.1.0'
 anaxigraph scan --repo /absolute/path/to/your/repo
 uv tool upgrade anaxigraph
 ```
@@ -44,12 +44,20 @@ wheel installations omit it. The evidence ledger remains available through the C
 The raw JSON task debugger also lives there; independent request/submit operations remain
 available through CLI, MCP and HTTP for every project. Normal workflow controls stay in each dashboard.
 
+## Upgrading from 1.0.0
+
+Run `uv tool upgrade anaxigraph`, or change an exact `uvx --from` pin in your CLI or
+MCP configuration to `anaxigraph==1.1.0`. Restart running processes so they load the upgrade.
+If you used `ci-plan` or the `ci_plan` MCP tool, record a full pytest run and switch to
+`anaxigraph tests` or `tests_for_change`. The new selector uses observed test activity.
+[Record a suite and check its predictions](#tests-for-a-change).
+
 ## Upgrading from 0.9.x
 
 1.0 is a replacement implementation with breaking CLI, MCP and state boundaries. Existing scripts,
 plugin commands and client configurations need updating. Commands such as `up`, `understand` and
 `plan` are not 1.0 commands; start with `scan`, `serve`, and the current `--help`. Configure stdio MCP
-with `uvx --from anaxigraph==1.0.0 anaxigraph mcp --repo /absolute/path/to/your/repo` and verify an
+with `uvx --from anaxigraph==1.1.0 anaxigraph mcp --repo /absolute/path/to/your/repo` and verify an
 actual `scan` or `prepare_change` call. The [README](../README.md#connect-a-coding-agent) shows the JSON.
 
 Before trying 1.0 on an existing checkout, stop the old service and back up its local database,
@@ -61,7 +69,7 @@ portable records can be reused when their source and analysis identities match. 
 new structural map, then run Mapping or selected reviews to build new understanding.
 
 After backing up state, upgrade an existing uv tool installation with
-`uv tool upgrade 'anaxigraph>=1.0.0'`. The version constraint also replaces an old 0.9.x pin;
+`uv tool upgrade 'anaxigraph>=1.1.0'`. The version constraint also replaces an old 0.9.x pin;
 reconfigure and restart services separately.
 
 Python/PYI parsing is supported. JavaScript and TypeScript files are read for their imports,
@@ -548,7 +556,7 @@ a random token of at least 32 characters:
 
 ```bash
 export ANAXIGRAPH_HTTP_TOKEN="$(uv run --no-project python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-uvx --from anaxigraph==1.0.0 anaxigraph serve --repo /path/to/repo --host 0.0.0.0 \
+uvx --from anaxigraph==1.1.0 anaxigraph serve --repo /path/to/repo --host 0.0.0.0 \
   --allow-origin https://anaxigraph.example.com
 ```
 

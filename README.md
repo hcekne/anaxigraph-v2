@@ -7,20 +7,18 @@ It combines a compact code graph with concise module explanations, focused archi
 pattern reviews, implementation-blind Fresh Eyes designs, and CI/CD guidance. Use the module table
 and dependency views yourself, or connect an agent through MCP. Both use the same saved understanding.
 
-The 1.0 line replaces the legacy 0.9.x implementation. Release 1.0.0 parses Python/PYI only. The
-current source also reads JavaScript and TypeScript: imports, exports, top-level declarations and
-their uses, without type checking or path aliases. See the
-[upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/usage.md#upgrading-from-09x)
-for CLI, MCP and state changes, and check the
-[release record](https://github.com/hcekne/anaxigraph-v2/releases/tag/v1.0.0).
+Version 1.1 maps Python, JavaScript and TypeScript. It follows local imports and shows how files
+use exported names. When your project records a pytest run, AnaxiGraph can show which tests
+exercised a file and estimate how much testing a proposed change needs.
+[Read the release notes and upgrade instructions](https://github.com/hcekne/anaxigraph-v2/releases/tag/v1.1.0).
 
 ## Start with uv
 
 With [uv](https://docs.astral.sh/uv/) and Python 3.11 or newer, run the PyPI package:
 
 ```bash
-uvx --from anaxigraph==1.0.0 anaxigraph scan --repo /absolute/path/to/your/repo
-uvx --from anaxigraph==1.0.0 anaxigraph serve --repo /absolute/path/to/your/repo
+uvx --from anaxigraph==1.1.0 anaxigraph scan --repo /absolute/path/to/your/repo
+uvx --from anaxigraph==1.1.0 anaxigraph serve --repo /absolute/path/to/your/repo
 ```
 
 Open <http://127.0.0.1:8766>. The structural map is available after scanning. Start **Mapping**
@@ -31,7 +29,7 @@ Always give `--repo` explicitly so the intended checkout is analyzed.
 For a persistent command, install once and upgrade when needed:
 
 ```bash
-uv tool install 'anaxigraph>=1.0.0'
+uv tool install 'anaxigraph>=1.1.0'
 anaxigraph scan --repo /absolute/path/to/your/repo
 uv tool upgrade anaxigraph
 ```
@@ -48,7 +46,7 @@ Replace the repository path in your MCP client's configuration:
     "anaxigraph": {
       "command": "uvx",
       "args": [
-        "--from", "anaxigraph==1.0.0", "anaxigraph",
+        "--from", "anaxigraph==1.1.0", "anaxigraph",
         "mcp", "--repo", "/absolute/path/to/your/repo"
       ]
     }
@@ -58,7 +56,7 @@ Replace the repository path in your MCP client's configuration:
 
 A running dashboard also serves MCP at `http://127.0.0.1:8766/mcp`. Verify that the agent can call
 `scan` and `prepare_change`; some clients require explicit authorization for MCP tools.
-See [connection and remote-access instructions](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/usage.md#connections).
+See [connection and remote-access instructions](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/docs/usage.md#connections).
 
 ## Recommended routine
 
@@ -69,12 +67,12 @@ See [connection and remote-access instructions](https://github.com/hcekne/anaxig
 | After editing | Run appropriate project checks and validate against the original task baseline; the map refreshes automatically. |
 | A completed feature or meaningful refactor | Run Patterns to look for better boundaries, packages, tests and applicable patterns. |
 | A milestone, architectural change, or weekly on an active project | Run Fresh Eyes for three alternative designs based on functionality. |
-| Component, shared-build or pipeline changes | Review CI/CD and update the declared check policy where needed. |
+| Component, shared-build or pipeline changes | Review the pipeline and compare the predicted test selection with a full run. |
 
 Mapping refreshes changed understanding; compatible unchanged analyses are reused. Patterns includes
 architecture scouts and CI/CD review; Fresh Eyes is separate. Recommendations are proposals to
 investigate, while project checks establish whether the implementation works.
-[The usage guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/usage.md) includes an `AGENTS.md` instruction block and details on preparing,
+[The usage guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/docs/usage.md) includes an `AGENTS.md` instruction block and details on preparing,
 assessing and validating changes.
 
 ## Carry the understanding with your code
@@ -85,7 +83,7 @@ Keep the local `.anaxigraph-v2/` cache out of Git. Ordinary structural scans do 
 use `anaxigraph export --repo /absolute/path/to/your/repo` after manual analysis submissions.
 
 Legacy 0.9.x records are not imported automatically. Back up existing state before a new export;
-see the [upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/usage.md#upgrading-from-09x).
+see the [upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/docs/usage.md#upgrading-from-09x).
 
 ## Read further
 
@@ -93,13 +91,13 @@ Maintainer source installations include an **Evals & Benchmarks** dashboard when
 AnaxiGraph itself. It displays task evidence and measured campaign reports. The [prototype integration notes](https://github.com/hcekne/anaxigraph-v2/blob/main/docs/google-prototype-integration.md)
 describe the new scenario catalog, regression tests and their qualification status.
 
-- [Usage and upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/usage.md)
-- [1.0.0 release record](https://github.com/hcekne/anaxigraph-v2/releases/tag/v1.0.0)
-- [Component architecture principles](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/component-architecture-principles.md)
-- [CI policy format and examples](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/change-request-ci-delivery.md#declare-accepted-tasks)
-- [Architecture and component contracts](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/architecture.md)
-- [Measured results and known limits](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/docs/evidence/ci-delivery-qualification.json)
-- [Architectural outcome experiments](https://github.com/hcekne/anaxigraph-v2/blob/v1.0.0/experiments/architecture_quality/README.md)
+- [Usage and upgrade guide](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/docs/usage.md)
+- [1.1.0 release record](https://github.com/hcekne/anaxigraph-v2/releases/tag/v1.1.0)
+- [Component architecture principles](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/docs/component-architecture-principles.md)
+- [Recording tests and checking predictions](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/docs/usage.md#tests-for-a-change)
+- [Architecture and component contracts](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/docs/architecture.md)
+- [Measured results and known limits](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/docs/real-repository-plan.md)
+- [Architectural outcome experiments](https://github.com/hcekne/anaxigraph-v2/blob/v1.1.0/experiments/architecture_quality/README.md)
 
 For source development, clone [this repository](https://github.com/hcekne/anaxigraph-v2), run
 `uv sync --locked --extra dev`, then `uv run pytest`, `uv run ruff check src tests`, `uv run mypy`
