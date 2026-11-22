@@ -66,6 +66,13 @@ def fused(r, k=60):
     return [p for p, _ in sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))]
 
 
+def owner_then_keywords(row):
+    """Keep the first suggested owner, then fill from keyword search without repeats."""
+    first = [path for path, _ in row["ranked"][:1]]
+    keywords = [path for path, _ in row["bm"]]
+    return list(dict.fromkeys(first + keywords))
+
+
 def summarize(name, orders, subset):
     ms = [metrics(orders[i], rows[i]["truth"]) for i in subset]
     n = len(ms)
@@ -77,6 +84,7 @@ tune, judge = everything[0::2], everything[1::2]
 systems = {
     "keyword search (BM25)": [[p for p, _ in r["bm"]] for r in rows],
     "product today": [[p for p, _ in r["ranked"]] for r in rows],
+    "first product owner, then keyword search": [owner_then_keywords(r) for r in rows],
     "product + BM25 fused": [fused(r) for r in rows],
 }
 grid = [

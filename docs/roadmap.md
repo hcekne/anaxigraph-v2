@@ -10,6 +10,38 @@ repository, and this says what that is for.
 In the maintainer's words: "a sidecar coding buddy that will help agents and humans produce
 better code, with better architecture, better CI/CD and more efficient modular development".
 
+## What to do next — 22 November 2026
+
+1. **Check one real prediction.** The nightly backend test recording succeeded on 22 November.
+   There are **0 of 30** saved pull-request comparisons. Both jobs still use `d7cbdb2`;
+   the 42.8% median on 70 historical changes was measured with the later workflow rule in
+   `bdb0ed4`. The pull-request job also supplies JUnit alone. In a local two-file test suite,
+   AnaxiGraph selected the one test file with a new failure. JUnit alone labelled the result
+   `unverified`; adding the candidate reads report tied the same result to the tested checkout.
+   With the trial maintainer's agreement, use the same newer revision in both jobs and record
+   the full pull-request test run. Inspect the first
+   saved result for the share selected, its evidence status and any failure outside the pick.
+   Count each pull request once. [Runnable comparison](usage.md#compare-a-prediction-with-a-full-pull-request-test-run)
+2. **Find the code a developer should edit.** On a fresh map of V2 at `6f94f10`, we asked,
+   “Before editing a file, show how much of the recorded test suite would run if I change a
+   single function or change a top-level declaration.” All three suggestions were experiment
+   files. One relevant owner is `src/anaxigraph/application/selection.py`, where `test_reach`
+   supplies those figures to preparation and plan assessment. The dashboard showed the brief as
+   roughly 6,200 characters of JSON in the original walkthrough.
+
+   We tried keeping the first owner and filling the other places with keyword search. It put
+   that owner second on the example. On 77 saved changes, the top three included a file actually
+   edited on 47 changes, versus 41 for the current tool and 43 for keyword search alone.
+   On the existing 38-change evaluation split the counts were 20, 19 and 19. Leave the rule
+   in the experiment. Try it on fresh changes, and check whether a developer can identify the
+   owner, its public entry point and a relevant test from the brief. That gives us a concrete
+   task for assessing the dashboard too. [Replay procedure](../experiments/real_repository/README.md)
+3. **Measure whether the help pays for itself.** The earlier ChronoWeave trial found fewer
+   files touched per late change, but 46 repair sessions with AnaxiGraph versus four with a plain
+   agent. Phase 7 compares the same model on the same real tasks, scoring correctness,
+   how much testing a change needs, boundary violations, time and cost. The maintainer's
+   spending limit is still open. [Earlier trial](chronoweave-exploratory-results-2026-11-11.md)
+
 ## The idea
 
 A program built from parts that meet in a few declared places is cheap to change. Edit the inside
@@ -366,7 +398,7 @@ verification.
 | 0 Clear the desk | Done, 18 November | Uncommitted work: 0. The unfinished dashboard fix was committed with its tests (`d40002d`) |
 | 1 A recording that counts | Done, 18 November | Typical pull request 43% (69% before), mean 50% (72%), 20 of 70 under 20%, nothing needed left out, ten planted faults none left out |
 | 2 The scoreboard | Done, 18 November | `reach_report.py`: the product in 204 seconds, this repository in 30 |
-| 3 Watch only | Merged on the product, 18 November | The recording job ran on the product's runner in 58 minutes. 0 of 30 pull requests watched |
+| 3 Watch only | Nightly recording active | 22 November: 0 of 30 pull-request comparisons saved. The trial job needs the candidate reads report to verify a comparison |
 | 4 Walls | First step done | `walls.py`. The product: 25 uses of private names across parts, 6 twelve weeks earlier |
 | 5 Pick by what changed in the interface | Measured, nothing built | The bar is 5 points. By name: 2. By field: 3.6 by itself, 1.3 once it is safe |
 | 6 Advice aimed at the number | First step done | `test_reach` in `prepare_change` and `assess_plan`, 0.5 seconds on the product |

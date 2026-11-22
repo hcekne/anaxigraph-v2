@@ -404,20 +404,39 @@ Run the whole suite on your main branch regardless. These are not seen:
 - a file AnaxiGraph does not read at all: one that git ignores, a database file, a file over
   2 MB, or anything inside `dist`, `build` or `node_modules`.
 
-In CI, a nightly job on the main branch records the suite and keeps the record as an artifact
-(`.anaxigraph-v2/` is a hidden folder; artifact steps often skip those unless told otherwise).
-A pull-request job fetches the latest record, runs `anaxigraph tests --paths`, and runs the
-listed files, or everything when nothing is listed. Start in shadow mode: keep running the whole
-suite and pass its JUnit reports to `anaxigraph tests --ran junit.xml --reads candidate-reads.json`.
-Start a new recording for that candidate before testing, but keep the original test record for
-selection; do not replace it with the candidate recording before the comparison. The candidate
-reads report binds JUnit to current source and a completed invocation. Without it the comparison
-is explicitly unverified. Missing previously recorded test files make it incomplete, and an
-unmatched testcase is rejected rather than silently ignored. Each suite then carries a
-`shadow` entry that names, under `missed`, every failing test file the selection would have left
-out. Baseline failures are compared by testcase identity, so a new failure in an already-failing
-file remains visible. A legacy baseline without testcase identities subtracts no failures. Let the selection skip tests
-only after the misses have stayed empty on real pull requests.
+### Compare a prediction with a full pull-request test run
+
+The nightly job saves the main branch's test record. Download it to
+`.anaxigraph-v2/test-records/` in the pull-request checkout. Configure the artifact upload
+to include hidden folders. Use the same AnaxiGraph revision in both jobs.
+
+In the pull request's existing test step, start a recording and run the full suite once.
+This example starts at the repository root. The pytest exit code stays the result of the step.
+
+```bash
+anaxigraph record-tests --start --suite backend --scope backend/
+reports="$PWD/.anaxigraph-v2/recordings"
+export ANAXIGRAPH_RECORDING="$reports/backend.json"
+export ANAXIGRAPH_READS="$reports/pr-reads.json"
+export PYTHONPATH="$(anaxigraph tests --recorder)${PYTHONPATH:+:$PYTHONPATH}"
+(cd backend && python -m pytest tests -p anaxigraph_reads --junitxml="$reports/pr-junit.xml")
+```
+
+Run the comparison from the repository root in a separate step that also runs when pytest
+finds a failure. The saved nightly record still supplies the prediction.
+
+```bash
+reports="$PWD/.anaxigraph-v2/recordings"
+anaxigraph tests --ran "$reports/pr-junit.xml" --reads "$reports/pr-reads.json"
+```
+
+Read each suite's `shadow.evidence_status` alongside `shadow.missed`. A `source-bound`
+comparison ties the test results to a completed run on the code being checked. `missed` names
+test files with new failures outside the selection, including new failures in a previously
+failing file. A legacy record without testcase identities subtracts no failures. JUnit alone
+gives an unverified comparison, missing recorded test files make it incomplete, and an
+unmatched testcase raises an error. Count verified comparisons on distinct pull requests
+before using the selection to skip tests.
 
 ## CI/CD and portable records
 
