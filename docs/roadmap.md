@@ -22,6 +22,19 @@ better code, with better architecture, better CI/CD and more efficient modular d
    the full pull-request test run. Inspect the first
    saved result for the share selected, its evidence status and any failure outside the pick.
    Count each pull request once. [Runnable comparison](usage.md#compare-a-prediction-with-a-full-pull-request-test-run)
+
+   **23 November: the first two saved results.** Both are `unverified`, because the
+   pull-request job still supplies JUnit alone. Verified comparisons: still **0 of 30**.
+
+   - A pull request that changed the test job's own workflow file. The whole suite was picked,
+     which is the rule for that file.
+   - A feature pull request that edited ten production files. 277 of 647 test files were
+     picked, 57% of the suite's time. The full run had two failing test files. Both were
+     already failing when the record was made, and no failing file lay outside the pick.
+
+   The first of these moves both jobs to 1.1.0 and compares pushes to the main branch as
+   well. It is open and waits for the trial maintainer. Recording the pull request's own test
+   run, which a verified comparison needs, has not been proposed there yet.
 2. **Find the code a developer should edit.** On a fresh map of V2 at `6f94f10`, we asked,
    “Before editing a file, show how much of the recorded test suite would run if I change a
    single function or change a top-level declaration.” All three suggestions were experiment
@@ -36,6 +49,12 @@ better code, with better architecture, better CI/CD and more efficient modular d
    in the experiment. Try it on fresh changes, and check whether a developer can identify the
    owner, its public entry point and a relevant test from the brief. That gives us a concrete
    task for assessing the dashboard too. [Replay procedure](../experiments/real_repository/README.md)
+
+   **23 November: one fresh change.** The feature pull request above changed how a page shows
+   a count. The three suggestions included one of the ten files it edited, a hook that fetches
+   the count. The file that computes the count and the view that shows it were not among them.
+   A text search for the words on the page found the view, and the request path from the hook
+   led to the rest.
 3. **Measure whether the help pays for itself.** The earlier ChronoWeave trial found fewer
    files touched per late change, but 46 repair sessions with AnaxiGraph versus four with a plain
    agent. Phase 7 compares the same model on the same real tasks, scoring correctness,
