@@ -35,6 +35,27 @@ better code, with better architecture, better CI/CD and more efficient modular d
    The first of these moves both jobs to 1.1.0 and compares pushes to the main branch as
    well. It is open and waits for the trial maintainer. Recording the pull request's own test
    run, which a verified comparison needs, has not been proposed there yet.
+
+   **24 November: the first verified results.** The trial maintainer asked for the recording,
+   and it was merged the same day. The pull-request job, and the same job on pushes to the
+   main branch, now run the backend tests under the reads recorder and hand its report to
+   the comparison. Both jobs use 1.1.0.
+
+   - Three comparisons are `source-bound`: two pull requests and the push that merged them.
+     All three picked the whole suite, because each carried the change to the test job's own
+     workflow file. A whole-suite pick cannot leave a failure out, so these show that the
+     wiring works and nothing about the picking. Counting only picks narrower than the whole
+     suite: still **0 of 30**. The first can come with the first change after the next
+     nightly record.
+   - The recorder cost no time that could be measured. Four recorded runs of the suite,
+     6,832 to 6,835 tests, took 27 to 29 minutes. Two runs without it on the same day took
+     43 and 48 minutes on slower machines: a second suite, which is never recorded, sped up
+     by the same share. Thirteen earlier runs without it took 31 to 45 minutes.
+   - One of the four recorded runs had a failing test, a check that a heartbeat answers
+     within one second. A re-run of the same commit passed. Locally the check takes 0.01
+     seconds with and without the recorder, and other tests in its file had failed on and
+     off in six earlier runs without it. One failure in four runs is too few to rule the
+     recorder out. If that file fails more often from now on, look at the recorder first.
 2. **Find the code a developer should edit.** On a fresh map of V2 at `6f94f10`, we asked,
    “Before editing a file, show how much of the recorded test suite would run if I change a
    single function or change a top-level declaration.” All three suggestions were experiment
@@ -417,7 +438,7 @@ verification.
 | 0 Clear the desk | Done, 18 November | Uncommitted work: 0. The unfinished dashboard fix was committed with its tests (`d40002d`) |
 | 1 A recording that counts | Done, 18 November | Typical pull request 43% (69% before), mean 50% (72%), 20 of 70 under 20%, nothing needed left out, ten planted faults none left out |
 | 2 The scoreboard | Done, 18 November | `reach_report.py`: the product in 204 seconds, this repository in 30 |
-| 3 Watch only | Nightly recording active | 22 November: 0 of 30 pull-request comparisons saved. The trial job needs the candidate reads report to verify a comparison |
+| 3 Watch only | Nightly recording active; pull requests and main-branch pushes record their own run since 24 November | 24 November: three verified comparisons, all whole-suite picks. With a narrower pick: 0 of 30 |
 | 4 Walls | First step done | `walls.py`. The product: 25 uses of private names across parts, 6 twelve weeks earlier |
 | 5 Pick by what changed in the interface | Measured, nothing built | The bar is 5 points. By name: 2. By field: 3.6 by itself, 1.3 once it is safe |
 | 6 Advice aimed at the number | First step done | `test_reach` in `prepare_change` and `assess_plan`, 0.5 seconds on the product |
